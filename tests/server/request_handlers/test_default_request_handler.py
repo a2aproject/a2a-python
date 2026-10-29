@@ -1098,11 +1098,10 @@ async def test_on_message_send_non_blocking(agent_card):
 
     assert task is not None
     assert task.status.state == TaskState.TASK_STATE_COMPLETED
-    assert (
-        result.history
-        and task.history
-        and len(result.history) == len(task.history)
-    )
+    # The result is the task as it was returned, with its whole history; the
+    # agent's later status messages are added to the stored task only.
+    assert result.history
+    assert list(task.history[: len(result.history)]) == list(result.history)
 
 
 @pytest.mark.asyncio
@@ -2941,6 +2940,7 @@ async def test_on_message_send_error_does_not_hang(agent_card):
     """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
     agent = HelloWorldAgentExecutor()
     task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = None
     task_store.save.side_effect = RuntimeError('This is an Error!')
 
     request_handler = DefaultRequestHandler(

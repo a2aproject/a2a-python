@@ -190,6 +190,78 @@ async def test_status_validation_failure_returns_failed_task() -> None:
         await handler.aclose()
 
 
+class _CompletingAgent(AgentExecutor):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.message is not None
+        await event_queue.enqueue_event(
+            new_task_from_user_message(context.message)
+        )
+        updater = TaskUpdater(
+            event_queue,
+            str(context.task_id or ''),
+            str(context.context_id or ''),
+        )
+        await updater.start_work()
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+class _FailCompletedSaveTaskStore(InMemoryTaskStore):
+    """Rejects the first COMPLETED write, as a lost database connection would."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failed_save = False
+
+    async def save(self, task: Task, context: ServerCallContext) -> None:
+        if (
+            task.status.state == TaskState.TASK_STATE_COMPLETED
+            and not self.failed_save
+        ):
+            self.failed_save = True
+            raise ConnectionError('database connection lost')
+        await super().save(task, context)
+
+
+@pytest.mark.asyncio
+async def test_failed_terminal_save_records_failed_task() -> None:
+    store = _FailCompletedSaveTaskStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_CompletingAgent(),
+        task_store=store,
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    try:
+        with pytest.raises(ConnectionError, match='database connection lost'):
+            await asyncio.wait_for(
+                handler.on_message_send(
+                    SendMessageRequest(
+                        message=Message(
+                            role=Role.ROLE_USER,
+                            message_id='failed-terminal-save',
+                            parts=[Part(text='test failed save')],
+                        )
+                    ),
+                    context,
+                ),
+                timeout=5,
+            )
+        assert store.failed_save
+        listed = await store.list(ListTasksRequest(), context)
+        assert len(listed.tasks) == 1
+        # The COMPLETED write never landed, so the task must not stay WORKING.
+        assert listed.tasks[0].status.state == TaskState.TASK_STATE_FAILED
+    finally:
+        await handler.aclose()
+
+
 def test_init_default_dependencies():
     """Test that default dependencies are created if not provided."""
     agent_executor = MockAgentExecutor()
