@@ -29,6 +29,7 @@ from a2a.server.cluster.event_stream import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base
+from a2a.server.owner_resolver import resolve_user_scope
 from a2a.types.a2a_pb2 import (
     Message,
     Part,
@@ -323,7 +324,9 @@ async def test_owner_context_succeeds_on_all_methods(db_url: str) -> None:
             engine=store_engine, create_table=False
         )
         stream = DatabaseTaskEventStream(
-            engine=stream_engine, create_table=False
+            engine=stream_engine,
+            create_table=False,
+            owner_resolver=resolve_user_scope,
         )
         await store.initialize()
         await stream.initialize()
@@ -373,7 +376,9 @@ async def test_other_owner_context_does_not_receive_events(db_url: str) -> None:
             engine=store_engine, create_table=False
         )
         stream = DatabaseTaskEventStream(
-            engine=stream_engine, create_table=False, poll_interval_s=0.05
+            engine=stream_engine,
+            create_table=False,
+            owner_resolver=resolve_user_scope,
         )
         await store.initialize()
         await stream.initialize()

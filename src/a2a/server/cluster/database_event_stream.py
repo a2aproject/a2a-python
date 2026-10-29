@@ -32,7 +32,7 @@ from a2a.server.models import (
     TaskEventModel,
     create_task_event_model,
 )
-from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
+from a2a.server.owner_resolver import OwnerResolver
 from a2a.types.a2a_pb2 import StreamResponse
 
 
@@ -70,7 +70,7 @@ class DatabaseTaskEventStream(TaskEventStream):
     """`TaskEventStream` backed by polling the shared ``task_events`` table."""
 
     _event_model: type[TaskEventModel]
-    owner_resolver: OwnerResolver
+    owner_resolver: OwnerResolver | None
 
     def __init__(
         self,
@@ -78,7 +78,7 @@ class DatabaseTaskEventStream(TaskEventStream):
         create_table: bool = True,
         table_name: str = 'task_events',
         poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
-        owner_resolver: OwnerResolver = resolve_user_scope,
+        owner_resolver: OwnerResolver | None = None,
     ) -> None:
         """Initializes the stream over an existing SQLAlchemy AsyncEngine."""
         self._engine = engine
@@ -151,7 +151,11 @@ class DatabaseTaskEventStream(TaskEventStream):
     ) -> AsyncGenerator[VersionedEvent, None]:
         """Polls the log for events of `task_id` newer than `after`."""
         await self._ensure_initialized()
-        owner = self.owner_resolver(context) if context is not None else None
+        owner = (
+            self.owner_resolver(context or ServerCallContext())
+            if self.owner_resolver is not None
+            else None
+        )
         async with self._session_maker() as session:
             cursor = await self._seq_at_or_before_version(
                 session, task_id, after, owner
