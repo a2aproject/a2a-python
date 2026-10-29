@@ -7,6 +7,8 @@ import pytest
 
 from a2a.client.errors import A2AClientError
 from a2a.compat.v0_3.rest_transport import CompatRestTransport
+from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -27,7 +29,13 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskStatus,
 )
-from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
+from a2a.utils.errors import (
+    InvalidParamsError,
+    MethodNotFoundError,
+    TaskNotCancelableError,
+    TaskNotFoundError,
+)
+from starlette.applications import Starlette
 
 
 @pytest.fixture
@@ -631,6 +639,105 @@ def test_compat_rest_transport_handle_http_error_unknown_error_type(transport):
 
     with pytest.raises(A2AClientError):
         transport._handle_http_error(error)
+
+
+@pytest.mark.parametrize(
+    ('status_code', 'status', 'reason', 'message', 'expected_error'),
+    [
+        (
+            404,
+            'NOT_FOUND',
+            'TASK_NOT_FOUND',
+            'Task not found',
+            TaskNotFoundError,
+        ),
+        (
+            400,
+            'FAILED_PRECONDITION',
+            'TASK_NOT_CANCELABLE',
+            'Task cannot be canceled',
+            TaskNotCancelableError,
+        ),
+    ],
+)
+def test_compat_rest_transport_handle_http_error_google_rpc_status(
+    transport, status_code, status, reason, message, expected_error
+):
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = status_code
+    mock_response.json.return_value = {
+        'error': {
+            'code': status_code,
+            'status': status,
+            'message': message,
+            'details': [
+                {
+                    '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                    'reason': reason,
+                    'domain': 'a2a-protocol.org',
+                    'metadata': {},
+                }
+            ],
+        }
+    }
+
+    mock_request = MagicMock(spec=httpx.Request)
+    mock_request.url = 'http://example.com'
+
+    error = httpx.HTTPStatusError(
+        'Error', request=mock_request, response=mock_response
+    )
+
+    with pytest.raises(expected_error) as exc_info:
+        transport._handle_http_error(error)
+
+    assert str(exc_info.value) == message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('handler_method', 'handler_error', 'call'),
+    [
+        (
+            'on_get_task',
+            TaskNotFoundError,
+            lambda t: t.get_task(GetTaskRequest(id='missing')),
+        ),
+        (
+            'on_cancel_task',
+            TaskNotFoundError,
+            lambda t: t.cancel_task(CancelTaskRequest(id='missing')),
+        ),
+        (
+            'on_cancel_task',
+            TaskNotCancelableError,
+            lambda t: t.cancel_task(CancelTaskRequest(id='done')),
+        ),
+    ],
+    ids=['get_missing', 'cancel_missing', 'cancel_completed'],
+)
+async def test_compat_rest_transport_maps_errors_from_v03_compat_server(
+    agent_card, handler_method, handler_error, call
+):
+    request_handler = MagicMock(spec=RequestHandler)
+    getattr(request_handler, handler_method).side_effect = handler_error()
+    app = Starlette(
+        routes=create_rest_routes(
+            request_handler=request_handler, enable_v0_3_compat=True
+        )
+    )
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    ) as httpx_client:
+        transport = CompatRestTransport(
+            httpx_client=httpx_client,
+            agent_card=agent_card,
+            url='http://testserver',
+        )
+
+        with pytest.raises(handler_error):
+            await call(transport)
 
 
 @pytest.mark.asyncio
