@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import pytest_asyncio
 
-from a2a.server.agent_execution.active_task import ActiveTask
+from a2a.server.agent_execution.active_task import ActiveTask, EventConsumer
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.context import ServerCallContext
@@ -233,6 +233,115 @@ class TestActiveTask:
         assert result is not shared
         assert shared.status.state == TaskState.TASK_STATE_WORKING
         stop_event.set()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('final_state', 'cancel_error_message', 'expected_failed_count'),
+        [
+            (TaskState.TASK_STATE_COMPLETED, 'cancel lost the race', 0),
+            (TaskState.TASK_STATE_WORKING, 'agent cancel blew up', 1),
+        ],
+        ids=['terminal-task-not-overwritten', 'active-task-still-marks-failed'],
+    )
+    async def test_active_task_cancel_exception_marks_failed_only_when_not_terminal(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+        final_state: TaskState,
+        cancel_error_message: str,
+        expected_failed_count: int,
+    ) -> None:
+        """Regression test: FAILED is enqueued only if the task was not already terminal when cancel() failed."""
+        stop_event = asyncio.Event()
+
+        async def execute_mock(req: RequestContext, q: EventQueue) -> None:
+            await stop_event.wait()
+
+        get_task_calls = 0
+
+        async def get_task_side_effect() -> Task | None:
+            nonlocal get_task_calls
+            get_task_calls += 1
+            # start()'s existence check needs a non-terminal task so it sets _task_created.
+            if get_task_calls == 1:
+                return Task(
+                    id='test-task-id',
+                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                )
+            return Task(id='test-task-id', status=TaskStatus(state=final_state))
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock(
+            side_effect=RuntimeError(cancel_error_message)
+        )
+        task_manager.get_task = AsyncMock(side_effect=get_task_side_effect)
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.sleep(0.1)
+        # Precondition: the guard under test only applies once this is set.
+        assert active_task._task_created.is_set()
+
+        with patch.object(
+            active_task._event_queue_agent,
+            'enqueue_event',
+            wraps=active_task._event_queue_agent.enqueue_event,
+        ) as enqueue_spy:
+            with pytest.raises(RuntimeError, match=cancel_error_message):
+                await active_task.cancel(request_context)
+
+        failed_writes = [
+            call.args[0]
+            for call in enqueue_spy.await_args_list
+            if isinstance(call.args[0], TaskStatusUpdateEvent)
+            and call.args[0].status.state == TaskState.TASK_STATE_FAILED
+        ]
+        assert len(failed_writes) == expected_failed_count
+        assert all(write.task_id == 'test-task-id' for write in failed_writes)
+
+        stop_event.set()
+        await active_task.aclose()
+
+    @pytest.mark.asyncio
+    async def test_event_consumer_drops_status_update_for_terminal_task(
+        self,
+        active_task: ActiveTask,
+        task_manager: Mock,
+    ) -> None:
+        """Regression test: FAILED update enqueued before the task turned terminal must be dropped at apply-time too."""
+        task_manager.get_task = AsyncMock(
+            return_value=Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+            )
+        )
+
+        stale_failed_event = TaskStatusUpdateEvent(
+            task_id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_FAILED),
+        )
+        await active_task._event_queue_agent.enqueue_event(stale_failed_event)
+        # Round-trip through the queue so task_done() below has a matching get().
+        dequeued = await active_task._event_queue_agent.dequeue_event()
+
+        # Not started: exercising the consumer's guard directly needs no
+        # producer/consumer loop.
+        consumer = EventConsumer(active_task)
+        with patch.object(
+            active_task._event_queue_subscribers,
+            'enqueue_event',
+            wraps=active_task._event_queue_subscribers.enqueue_event,
+        ) as subscriber_spy:
+            await consumer._process_event(dequeued)
+
+        # Dropped event must reach neither TaskManager nor subscribers.
+        task_manager.ensure_task_id.assert_not_awaited()
+        task_manager.process.assert_not_awaited()
+        subscriber_spy.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_active_task_interrupted_auth(
