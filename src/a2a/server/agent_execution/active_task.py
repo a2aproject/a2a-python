@@ -57,7 +57,10 @@ if TYPE_CHECKING:
     )
     from a2a.server.tasks.task_manager import TaskManager
 
-from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.event_stream import (
+    VersionedEvent,
+    _stream_accepts_context,
+)
 from a2a.server.cluster.task_store import ConcurrentTaskModificationError
 from a2a.server.events.event_queue_v2 import (
     AsyncQueue,
@@ -75,6 +78,10 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import (
+    INTERRUPTED_TASK_STATES,
+    TERMINAL_TASK_STATES,
+)
 from a2a.utils.errors import (
     InternalError,
     InvalidAgentResponseError,
@@ -84,18 +91,6 @@ from a2a.utils.errors import (
 
 
 logger = logging.getLogger(__name__)
-
-
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
-INTERRUPTED_TASK_STATES = {
-    TaskState.TASK_STATE_AUTH_REQUIRED,
-    TaskState.TASK_STATE_INPUT_REQUIRED,
-}
 
 
 class _RequestStarted:
@@ -246,6 +241,7 @@ class EventConsumer:
                 'Consumer[%s]: Request completed', self.active_task._task_id
             )
             self.active_task._request_lock.release()
+            self.active_task.schedule_idle_release()
         elif isinstance(event, _RequestStarted):
             logger.debug(
                 'Consumer[%s]: Request started', self.active_task._task_id
@@ -264,6 +260,22 @@ class EventConsumer:
             | PushNotificationEvent
             | Task,
         ):
+            if isinstance(
+                event, TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+            ):
+                current = await self.active_task._task_manager.get_task()
+                if (
+                    current is not None
+                    and current.status.state in TERMINAL_TASK_STATES
+                ):
+                    # A terminal task's status is final. New status updates should be dropped
+                    logger.debug(
+                        'Consumer[%s]: dropping %s for an already-terminal task',
+                        self.active_task._task_id,
+                        type(event).__name__,
+                    )
+                    self.active_task._event_queue_agent.task_done()
+                    return
             updated_task = await self._handle_task_event(event)
             handled_event = updated_task if isinstance(event, Task) else event
 
@@ -442,10 +454,17 @@ class EventConsumer:
         stream = self.active_task._event_stream
         if stream is not None and isinstance(event, Event):
             version = self.active_task._task_manager.current_version
-            await stream.publish(
-                self.active_task._task_id,
-                VersionedEvent(event=event, version=version),
-            )
+            versioned_event = VersionedEvent(event=event, version=version)
+            task_id = self.active_task._task_id
+            if _stream_accepts_context(stream, 'publish'):
+                # TODO(ISSUE #1374): remove this check once ServerCallContext is a required parameter on TaskEventStream.
+                await stream.publish(
+                    task_id,
+                    versioned_event,
+                    context=self.active_task._task_manager._call_context,  # ty:ignore[unknown-argument]
+                )
+            else:
+                await stream.publish(task_id, versioned_event)
 
         self.active_task._event_queue_agent.task_done()
 
@@ -476,6 +495,7 @@ class ActiveTask:
         push_sender: PushNotificationSender | None = None,
         on_cleanup: Callable[[ActiveTask], None] | None = None,
         event_stream: TaskEventStream | None = None,
+        interrupted_task_timeout: float | None = None,
     ) -> None:
         """Initializes the ActiveTask.
 
@@ -489,6 +509,8 @@ class ActiveTask:
                         the task from the ActiveTaskRegistry.
             event_stream: Optional cross-replica stream; applied events are
                         published to it so other replicas can observe them.
+            interrupted_task_timeout: Optional seconds after which an idle
+                        interrupted task is finished; ``None`` disables it.
         """
         # --- Core Dependencies ---
         self._agent_executor = agent_executor
@@ -501,6 +523,9 @@ class ActiveTask:
         self._push_sender = push_sender
         self._on_cleanup = on_cleanup
         self._event_stream = event_stream
+        self._interrupted_task_timeout = interrupted_task_timeout
+        # Pending timer that releases a task parked in an interrupted state.
+        self._idle_release_task: asyncio.Task[None] | None = None
 
         # --- Synchronization Primitives ---
         # `_lock` protects structural lifecycle changes: start(), subscribe() counting,
@@ -536,6 +561,11 @@ class ActiveTask:
     def task_id(self) -> str:
         """The ID of the task."""
         return self._task_id
+
+    @property
+    def is_finished(self) -> bool:
+        """Whether the task's active lifecycle has ended."""
+        return self._is_finished.is_set()
 
     async def enqueue_request(
         self, request_context: RequestContext
@@ -717,6 +747,7 @@ class ActiveTask:
             await EventConsumer(self).run()
         finally:
             self._is_finished.set()
+            self.cancel_idle_release()
             self._request_queue.shutdown(immediate=True)
             await self._event_queue_agent.close(immediate=True)
 
@@ -737,7 +768,7 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
-    async def subscribe(
+    async def subscribe(  # noqa: PLR0915
         self,
         *,
         request: RequestContext | None = None,
@@ -753,6 +784,7 @@ class ActiveTask:
         """
         logger.debug('Subscribe[%s]: New subscriber', self._task_id)
 
+        self.cancel_idle_release()
         async with self._lock:
             if self._is_finished.is_set():
                 raise UnsupportedOperationError(
@@ -843,6 +875,7 @@ class ActiveTask:
                 self._reference_count -= 1
             # Evaluate if this was the last subscriber on a finished task.
             await self._maybe_cleanup()
+            self.schedule_idle_release()
 
     async def cancel(self, call_context: ServerCallContext) -> Task:
         """Cancels the running active task.
@@ -931,10 +964,10 @@ class ActiveTask:
             # Write a copy rather than mutating the task in place: get_task()
             # returns the shared _task_manager._current_task, which may already
             # have been yielded to a subscriber. Copying keeps THIS terminal
-            # write off the yielded reference. It is not a file-wide guarantee:
-            # ordinary status writes (save_task_event -> ensure_task -> CopyFrom)
-            # still update the shared object in place. Making every write
-            # copy-on-yield is the general property tracked in #1175 and #1191.
+            # write off the yielded reference. Status and artifact events are
+            # applied to a copy too (TaskManager.save_task_event), but a Task
+            # event or update_with_message still writes the object it is given.
+            # Making every write copy-on-yield is tracked in #1175 and #1191.
             updated = Task()
             updated.CopyFrom(task)
             updated.status.state = TaskState.TASK_STATE_CANCELED
@@ -968,6 +1001,7 @@ class ActiveTask:
         # tasks, because their teardown re-acquires it.
         async with self._lock:
             self._is_finished.set()
+            self.cancel_idle_release()
             background_tasks = [
                 task
                 for task in (self._producer_task, self._consumer_task)
@@ -983,6 +1017,54 @@ class ActiveTask:
                 # CancelledError is a BaseException, so it is excluded here.
                 if isinstance(result, Exception):
                     logger.error('Error during aclose', exc_info=result)
+
+    def schedule_idle_release(self) -> None:
+        """(Re)starts the timer that releases a parked interrupted task."""
+        if self._interrupted_task_timeout is None or self._is_finished.is_set():
+            return
+        self.cancel_idle_release()
+        self._idle_release_task = asyncio.create_task(
+            self._release_when_idle(self._interrupted_task_timeout),
+            name=f'idle-release:{self._task_id}',
+        )
+
+    def cancel_idle_release(self) -> None:
+        """Stops the timer that releases a parked interrupted task, if any."""
+        if self._idle_release_task is not None:
+            self._idle_release_task.cancel()
+            self._idle_release_task = None
+
+    async def _release_when_idle(self, timeout: float) -> None:
+        """Finishes the task if it is still parked after `timeout` seconds."""
+        try:
+            await asyncio.sleep(timeout)
+            # Read before `_lock` so the checks and release below cannot suspend.
+            task = await self._task_manager.get_task()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                'ActiveTask[%s]: Idle release check failed', self._task_id
+            )
+            return
+        async with self._lock:
+            if (
+                task is None
+                or task.status.state not in INTERRUPTED_TASK_STATES
+                or self._is_finished.is_set()
+                # The consumer holds one reference; more means subscribers.
+                or self._reference_count != 1
+                or self._request_lock.locked()
+                or not self._request_queue.empty()
+            ):
+                return
+            logger.debug(
+                'ActiveTask[%s]: Releasing task parked in %s',
+                self._task_id,
+                TaskState.Name(task.status.state),
+            )
+            self._is_finished.set()
+            self._request_queue.shutdown(immediate=True)
 
     async def _maybe_cleanup(self) -> None:
         """Triggers cleanup if task is finished and has no subscribers.
@@ -1013,7 +1095,10 @@ class ActiveTask:
         if self._task_created.is_set():
             try:
                 task = await self._task_manager.get_task()
-                if task is not None:
+                if (
+                    task is not None
+                    and task.status.state not in TERMINAL_TASK_STATES
+                ):
                     await self._event_queue_agent.enqueue_event(
                         TaskStatusUpdateEvent(
                             task_id=task.id,

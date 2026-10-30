@@ -79,6 +79,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.push_url_validator import (
     validate_push_notification_url,
 )
@@ -1097,11 +1098,10 @@ async def test_on_message_send_non_blocking(agent_card):
 
     assert task is not None
     assert task.status.state == TaskState.TASK_STATE_COMPLETED
-    assert (
-        result.history
-        and task.history
-        and len(result.history) == len(task.history)
-    )
+    # The result is the task as it was returned, with its whole history; the
+    # agent's later status messages are added to the stored task only.
+    assert result.history
+    assert list(task.history[: len(result.history)]) == list(result.history)
 
 
 @pytest.mark.asyncio
@@ -2700,14 +2700,6 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id(
     assert len(result2.configs) == 0
 
 
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
 async def test_on_message_send_task_in_terminal_state(
@@ -2948,6 +2940,7 @@ async def test_on_message_send_error_does_not_hang(agent_card):
     """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
     agent = HelloWorldAgentExecutor()
     task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = None
     task_store.save.side_effect = RuntimeError('This is an Error!')
 
     request_handler = DefaultRequestHandler(

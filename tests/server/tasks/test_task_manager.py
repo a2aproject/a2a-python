@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from a2a.auth.user import User
+from a2a.server.cluster import VersionedTaskStore
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks import TaskManager
 from a2a.server.tasks.task_manager import append_artifact_to_task
@@ -194,6 +195,70 @@ async def test_save_task_event_metadata_update(
 
     updated_task = mock_task_store.save.call_args.args[0]
     assert updated_task.metadata == new_metadata
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'event',
+    [
+        TaskStatusUpdateEvent(
+            task_id=MINIMAL_TASK_ID,
+            context_id=MINIMAL_CONTEXT_ID,
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+        ),
+        TaskArtifactUpdateEvent(
+            task_id=MINIMAL_TASK_ID,
+            context_id=MINIMAL_CONTEXT_ID,
+            artifact=Artifact(
+                artifact_id='artifact-id', parts=[Part(text='chunk')]
+            ),
+        ),
+    ],
+    ids=['status', 'artifact'],
+)
+async def test_save_task_event_failed_save_keeps_cached_task(
+    task_manager: TaskManager,
+    mock_task_store: AsyncMock,
+    event: TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
+) -> None:
+    """A rejected write leaves the cached task as it was last persisted."""
+    mock_task_store.get.return_value = create_minimal_task()
+    await task_manager.get_task()
+    mock_task_store.save.side_effect = ConnectionError('connection lost')
+
+    with pytest.raises(ConnectionError):
+        await task_manager.save_task_event(event)
+
+    task = await task_manager.get_task()
+    assert task is not None
+    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert not task.artifacts
+
+
+@pytest.mark.asyncio
+async def test_save_task_event_passes_previous_task_as_prev() -> None:
+    """A versioned store receives the task as it was before the event."""
+    store = AsyncMock(spec=VersionedTaskStore)
+    task_manager = TaskManager(
+        task_id=MINIMAL_TASK_ID,
+        context_id=MINIMAL_CONTEXT_ID,
+        task_store=store,
+        initial_message=None,
+        context=TEST_CONTEXT,
+    )
+    await task_manager.save_task_event(create_minimal_task())
+
+    await task_manager.save_task_event(
+        TaskStatusUpdateEvent(
+            task_id=MINIMAL_TASK_ID,
+            context_id=MINIMAL_CONTEXT_ID,
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+
+    call = store.save.call_args
+    assert call.args[0].status.state == TaskState.TASK_STATE_WORKING
+    assert call.kwargs['prev'].status.state == TaskState.TASK_STATE_SUBMITTED
 
 
 @pytest.mark.asyncio

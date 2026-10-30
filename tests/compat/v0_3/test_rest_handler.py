@@ -9,6 +9,7 @@ from a2a.compat.v0_3.rest_handler import REST03Handler
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import AgentCard
+from a2a.utils.errors import InvalidParamsError
 
 
 @pytest.fixture
@@ -313,6 +314,19 @@ async def test_on_get_task(rest_handler, mock_request, mock_context):
     called_req = rest_handler.handler03.on_get_task.call_args[0][0]
     assert called_req.params.id == 'task-1'
     assert called_req.params.history_length == 5
+
+
+@pytest.mark.anyio
+async def test_on_get_task_non_integer_history_length(
+    rest_handler, mock_request, mock_context
+):
+    mock_request.path_params = {'id': 'task-1'}
+    mock_request.query_params = {'historyLength': 'abc'}
+
+    with pytest.raises(InvalidParamsError):
+        await rest_handler.on_get_task(mock_request, mock_context)
+
+    rest_handler.handler03.on_get_task.assert_not_called()
 
 
 @pytest.mark.anyio

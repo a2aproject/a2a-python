@@ -200,6 +200,33 @@ async def test_get_task_v03(
 
 
 @pytest.mark.anyio
+async def test_get_task_v03_non_integer_history_length(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    response = await client.get('/v1/tasks/test_task_id?historyLength=abc')
+
+    assert response.status_code == 400
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+    request_handler.on_get_task.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    'path',
+    ['/v1/message:send', '/v1/tasks/test_task_id/pushNotificationConfigs'],
+)
+async def test_invalid_utf8_body_v03_is_bad_request(
+    client: AsyncClient, path: str
+) -> None:
+    response = await client.post(
+        path, content=b'{"message": {"messageId": "\xff"}}'
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+
+
+@pytest.mark.anyio
 async def test_list_tasks_not_in_v03_adapter_routes(
     request_handler: RequestHandler,
 ) -> None:
