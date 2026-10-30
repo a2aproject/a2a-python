@@ -477,3 +477,8 @@ class TestParseLenient:
         """Leniency covers unknown names, not a known field of the wrong type."""
         with pytest.raises(ParseError):
             proto_utils.parse_lenient({'messageId': 5}, Message())
+
+    def test_invalid_utf8_bytes_raise_parse_error(self) -> None:
+        """Bytes that are not UTF-8 are malformed JSON, not an internal error."""
+        with pytest.raises(ParseError):
+            proto_utils.parse_lenient(b'{"messageId": "\xff"}', Message())
