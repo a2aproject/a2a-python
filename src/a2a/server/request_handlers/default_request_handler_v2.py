@@ -19,7 +19,10 @@ from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.agent_execution.plugin_agent_executor import (
     PluginAgentExecutor,
 )
-from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.event_stream import (
+    VersionedEvent,
+    _stream_accepts_context,
+)
 from a2a.server.cluster.task_store import (
     ConcurrentTaskModificationError,
     LegacyTaskStoreAdapter,
@@ -375,9 +378,16 @@ class DefaultRequestHandlerV2(RequestHandler):
                 )
             )
         if self._event_stream is not None:
-            await self._event_stream.publish(
-                task_id, VersionedEvent(event=event, version=new_version)
-            )
+            versioned_event = VersionedEvent(event=event, version=new_version)
+            if _stream_accepts_context(self._event_stream, 'publish'):
+                # TODO(ISSUE #1374): remove this check once ServerCallContext is a required parameter on TaskEventStream.
+                await self._event_stream.publish(
+                    task_id,
+                    versioned_event,
+                    context=context,  # ty:ignore[unknown-argument]
+                )
+            else:
+                await self._event_stream.publish(task_id, versioned_event)
         return cancelled
 
     def _validate_task_id_match(self, task_id: str, event_task_id: str) -> None:
@@ -657,7 +667,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         # Not running here: serve the snapshot and tail the remote stream.
         async for event in self._subscribe_remote(
-            task_id, task, snapshot_version, stream
+            task_id, task, snapshot_version, stream, context
         ):
             yield event
 
@@ -667,13 +677,22 @@ class DefaultRequestHandlerV2(RequestHandler):
         task: Task,
         snapshot_version: TaskVersion,
         stream: TaskEventStream,
+        context: ServerCallContext,
     ) -> AsyncGenerator[Event, None]:
         """Serves a resubscription for a task running on another replica."""
         yield task
 
-        async with aclosing(
-            stream.subscribe(task_id, after=snapshot_version)
-        ) as subscription:
+        if _stream_accepts_context(stream, 'subscribe'):
+            # TODO(ISSUE #1374): remove this check once ServerCallContext is a required parameter on TaskEventStream.
+            subscription_gen = stream.subscribe(
+                task_id,
+                after=snapshot_version,
+                context=context,  # ty:ignore[unknown-argument]
+            )
+        else:
+            subscription_gen = stream.subscribe(task_id, after=snapshot_version)
+
+        async with aclosing(subscription_gen) as subscription:
             async for versioned in subscription:
                 if not versioned.version.is_after(snapshot_version):
                     continue

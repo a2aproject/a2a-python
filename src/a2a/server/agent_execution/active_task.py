@@ -57,7 +57,10 @@ if TYPE_CHECKING:
     )
     from a2a.server.tasks.task_manager import TaskManager
 
-from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.event_stream import (
+    VersionedEvent,
+    _stream_accepts_context,
+)
 from a2a.server.cluster.task_store import ConcurrentTaskModificationError
 from a2a.server.events.event_queue_v2 import (
     AsyncQueue,
@@ -257,6 +260,22 @@ class EventConsumer:
             | PushNotificationEvent
             | Task,
         ):
+            if isinstance(
+                event, TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+            ):
+                current = await self.active_task._task_manager.get_task()
+                if (
+                    current is not None
+                    and current.status.state in TERMINAL_TASK_STATES
+                ):
+                    # A terminal task's status is final. New status updates should be dropped
+                    logger.debug(
+                        'Consumer[%s]: dropping %s for an already-terminal task',
+                        self.active_task._task_id,
+                        type(event).__name__,
+                    )
+                    self.active_task._event_queue_agent.task_done()
+                    return
             updated_task = await self._handle_task_event(event)
             handled_event = updated_task if isinstance(event, Task) else event
 
@@ -435,10 +454,17 @@ class EventConsumer:
         stream = self.active_task._event_stream
         if stream is not None and isinstance(event, Event):
             version = self.active_task._task_manager.current_version
-            await stream.publish(
-                self.active_task._task_id,
-                VersionedEvent(event=event, version=version),
-            )
+            versioned_event = VersionedEvent(event=event, version=version)
+            task_id = self.active_task._task_id
+            if _stream_accepts_context(stream, 'publish'):
+                # TODO(ISSUE #1374): remove this check once ServerCallContext is a required parameter on TaskEventStream.
+                await stream.publish(
+                    task_id,
+                    versioned_event,
+                    context=self.active_task._task_manager._call_context,  # ty:ignore[unknown-argument]
+                )
+            else:
+                await stream.publish(task_id, versioned_event)
 
         self.active_task._event_queue_agent.task_done()
 
@@ -1069,7 +1095,10 @@ class ActiveTask:
         if self._task_created.is_set():
             try:
                 task = await self._task_manager.get_task()
-                if task is not None:
+                if (
+                    task is not None
+                    and task.status.state not in TERMINAL_TASK_STATES
+                ):
                     await self._event_queue_agent.enqueue_event(
                         TaskStatusUpdateEvent(
                             task_id=task.id,

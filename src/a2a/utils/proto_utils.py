@@ -67,8 +67,17 @@ def parse_lenient(
 
     Returns:
         The parsed message.
+
+    Raises:
+        ParseError: If the data is not valid ProtoJSON, including bytes that
+            are not valid UTF-8.
     """
-    if isinstance(data, str | bytes):
+    if isinstance(data, bytes):
+        try:
+            data = data.decode('utf-8')
+        except UnicodeDecodeError as e:
+            raise ParseError(f'Failed to load JSON: {e}.') from e
+    if isinstance(data, str):
         return Parse(data, message, ignore_unknown_fields=True)
     return ParseDict(data, message, ignore_unknown_fields=True)
 
