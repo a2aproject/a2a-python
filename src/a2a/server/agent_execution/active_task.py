@@ -964,10 +964,10 @@ class ActiveTask:
             # Write a copy rather than mutating the task in place: get_task()
             # returns the shared _task_manager._current_task, which may already
             # have been yielded to a subscriber. Copying keeps THIS terminal
-            # write off the yielded reference. It is not a file-wide guarantee:
-            # ordinary status writes (save_task_event -> ensure_task -> CopyFrom)
-            # still update the shared object in place. Making every write
-            # copy-on-yield is the general property tracked in #1175 and #1191.
+            # write off the yielded reference. Status and artifact events are
+            # applied to a copy too (TaskManager.save_task_event), but a Task
+            # event or update_with_message still writes the object it is given.
+            # Making every write copy-on-yield is tracked in #1175 and #1191.
             updated = Task()
             updated.CopyFrom(task)
             updated.status.state = TaskState.TASK_STATE_CANCELED
