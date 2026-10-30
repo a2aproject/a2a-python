@@ -59,6 +59,25 @@ def test_rest_endpoints_routing(agent_card, mock_handler):
     assert mock_handler.on_message_send.called
 
 
+@pytest.mark.parametrize(
+    'path',
+    ['/message:send', '/message:stream', '/tasks/t1/pushNotificationConfigs'],
+)
+def test_rest_invalid_utf8_body_is_bad_request(mock_handler, path):
+    """A body that is not UTF-8 is malformed JSON, so 400 rather than 500."""
+    app = Starlette(routes=create_rest_routes(request_handler=mock_handler))
+    client = TestClient(app)
+
+    response = client.post(
+        path,
+        content=b'{"message": {"messageId": "\xff"}}',
+        headers={'A2A-Version': '1.0'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+
+
 def test_rest_endpoints_routing_tenant(agent_card, mock_handler):
     """Tests that mounted routes with {tenant} route to the handler endpoints."""
     mock_handler.on_message_send.return_value = Task(id='123')
