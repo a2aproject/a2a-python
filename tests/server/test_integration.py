@@ -682,10 +682,6 @@ async def test_task_resubscription(app, handler: mock.AsyncMock) -> None:
                 # A more robust check would be to parse each SSE event
                 if b'data:' in chunk:  # Naive check for SSE data lines
                     event_count += 1
-                if (
-                    event_count >= 1 and len(content) > 20
-                ):  # Ensure we've processed at least one event
-                    break
 
             # Check content has event data (e.g., part of the first event)
             assert b'artifact-0' in content  # Check for the actual JSON payload
