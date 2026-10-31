@@ -334,13 +334,32 @@ class EventConsumer:
     async def _handle_initial_task(self, event: Task) -> None:
         existing_task = await self.active_task._task_manager.get_task()
         if existing_task:
-            logger.error(
-                'Task %s already exists. Ignoring task replacement.',
-                self.active_task._task_id,
-            )
+            if self.message_to_save is None:
+                logger.error(
+                    'Task %s already exists. Ignoring task replacement.',
+                    self.active_task._task_id,
+                )
+            else:
+                await self._add_message_to_history(
+                    self.message_to_save, existing_task
+                )
         else:
             await self.active_task._task_manager.save_task_event(event)
         self.message_to_save = None
+
+    async def _add_message_to_history(
+        self, message_to_save: Message, task: Task
+    ) -> None:
+        message_already_saved = any(
+            message.message_id == message_to_save.message_id
+            for message in task.history
+        )
+        if not message_already_saved:
+            await self.active_task._task_manager.save_task_event(
+                self.active_task._task_manager.update_with_message(
+                    message_to_save, task
+                )
+            )
 
     async def _handle_task_modification_event(
         self,
@@ -364,20 +383,9 @@ class EventConsumer:
         )
 
         if self.message_to_save is not None:
-            message_already_saved = any(
-                message.message_id == self.message_to_save.message_id
-                for message in updated_task.history
+            await self._add_message_to_history(
+                self.message_to_save, updated_task
             )
-            if not message_already_saved:
-                updated_task = (
-                    self.active_task._task_manager.update_with_message(
-                        self.message_to_save,
-                        updated_task,
-                    )
-                )
-                await self.active_task._task_manager.save_task_event(
-                    updated_task
-                )
             self.message_to_save = None
 
         self.active_task._task_manager.context_id = event.context_id
