@@ -260,6 +260,22 @@ class EventConsumer:
             | PushNotificationEvent
             | Task,
         ):
+            if isinstance(
+                event, TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+            ):
+                current = await self.active_task._task_manager.get_task()
+                if (
+                    current is not None
+                    and current.status.state in TERMINAL_TASK_STATES
+                ):
+                    # A terminal task's status is final. New status updates should be dropped
+                    logger.debug(
+                        'Consumer[%s]: dropping %s for an already-terminal task',
+                        self.active_task._task_id,
+                        type(event).__name__,
+                    )
+                    self.active_task._event_queue_agent.task_done()
+                    return
             updated_task = await self._handle_task_event(event)
             handled_event = updated_task if isinstance(event, Task) else event
 
@@ -948,10 +964,10 @@ class ActiveTask:
             # Write a copy rather than mutating the task in place: get_task()
             # returns the shared _task_manager._current_task, which may already
             # have been yielded to a subscriber. Copying keeps THIS terminal
-            # write off the yielded reference. It is not a file-wide guarantee:
-            # ordinary status writes (save_task_event -> ensure_task -> CopyFrom)
-            # still update the shared object in place. Making every write
-            # copy-on-yield is the general property tracked in #1175 and #1191.
+            # write off the yielded reference. Status and artifact events are
+            # applied to a copy too (TaskManager.save_task_event), but a Task
+            # event or update_with_message still writes the object it is given.
+            # Making every write copy-on-yield is tracked in #1175 and #1191.
             updated = Task()
             updated.CopyFrom(task)
             updated.status.state = TaskState.TASK_STATE_CANCELED
@@ -1079,7 +1095,10 @@ class ActiveTask:
         if self._task_created.is_set():
             try:
                 task = await self._task_manager.get_task()
-                if task is not None:
+                if (
+                    task is not None
+                    and task.status.state not in TERMINAL_TASK_STATES
+                ):
                     await self._event_queue_agent.enqueue_event(
                         TaskStatusUpdateEvent(
                             task_id=task.id,
