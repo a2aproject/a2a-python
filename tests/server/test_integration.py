@@ -677,10 +677,6 @@ async def test_task_resubscription(app, handler: mock.AsyncMock) -> None:
             # Read some content to verify streaming works
             content = b''
             event_count = 0
-            # Read the whole stream before asserting. Breaking out after the
-            # first chunk made the test depend on how SSE events were packed
-            # into TCP reads: on platforms where the first read returned only
-            # the first event, the later artifact assertions failed.
             for chunk in response.iter_bytes():
                 content += chunk
                 # A more robust check would be to parse each SSE event
