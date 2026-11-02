@@ -76,8 +76,10 @@ Each claim is anchored to current `main`. Re-read the file before quoting.
 7. **v0.3 compat has two independent mappers.** `compat/v0_3/proto_utils.py`
    serves the gRPC surface and `compat/v0_3/conversions.py` serves JSON-RPC
    and REST. A field mapped in one and not the other appears and disappears
-   by transport — see #1276 (status timestamp dropped on gRPC only) and
-   #1403. Any compat field change must touch and test both.
+   by transport — see #1276 (status timestamp mapped for JSON-RPC/REST but
+   dropped on gRPC). The same split bites error handling rather than fields:
+   early failures on v0.3 REST streams had to be fixed separately in #1403.
+   Any compat change must touch and test both mappers.
 8. **Continuation identity is inferred, not invented.** With only
    `message.task_id`, the SDK must reuse the task's `context_id`
    (A2A v1.0 §3.4.3); generating a fresh one makes events disagree with the
