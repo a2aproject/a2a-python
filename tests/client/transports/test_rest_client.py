@@ -220,7 +220,7 @@ class TestRestTransport:
         mock_build_request.assert_called_once()
         _, kwargs = mock_build_request.call_args
         assert 'timeout' in kwargs
-        assert kwargs['timeout'] == httpx.Timeout(10.0)
+        assert kwargs['timeout'] == 10.0
 
     @pytest.mark.asyncio
     async def test_url_serialization(
