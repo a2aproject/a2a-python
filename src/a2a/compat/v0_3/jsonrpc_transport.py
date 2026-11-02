@@ -144,6 +144,10 @@ class CompatJsonRpcTransport(ClientTransport):
             dict(rpc_request.data),
             context,
         ):
+            if event.HasField('task'):
+                event.task.CopyFrom(
+                    apply_history_length(event.task, request.configuration)
+                )
             yield event
 
     async def get_task(

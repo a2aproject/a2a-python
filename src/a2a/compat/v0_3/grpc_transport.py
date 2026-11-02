@@ -173,11 +173,16 @@ class CompatGrpcTransport(ClientTransport):
             response = await stream.read()
             if response == grpc.aio.EOF:  # type: ignore[attr-defined]
                 break
-            yield conversions.to_core_stream_response(
+            event = conversions.to_core_stream_response(
                 types_v03.SendStreamingMessageSuccessResponse(
                     result=proto_utils.FromProto.stream_response(response)
                 )
             )
+            if event.HasField('task'):
+                event.task.CopyFrom(
+                    apply_history_length(event.task, request.configuration)
+                )
+            yield event
 
     @_handle_grpc_stream_exception
     async def subscribe(

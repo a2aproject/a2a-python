@@ -147,6 +147,10 @@ class CompatRestTransport(ClientTransport):
             context=context,
             json=MessageToDict(req_proto, preserving_proto_field_name=True),
         ):
+            if event.HasField('task'):
+                event.task.CopyFrom(
+                    apply_history_length(event.task, request.configuration)
+                )
             yield event
 
     async def get_task(
