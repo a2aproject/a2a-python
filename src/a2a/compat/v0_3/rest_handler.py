@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.json_format import MessageToDict
 
 
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
 from a2a.utils import constants
 from a2a.utils.errors import InvalidParamsError
+from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
 from a2a.utils.version_validator import validate_version
 
@@ -68,7 +69,7 @@ class REST03Handler:
         """
         body = await request.body()
         v03_pb_msg = pb2_v03.SendMessageRequest()
-        Parse(body, v03_pb_msg, ignore_unknown_fields=True)
+        parse_lenient(body, v03_pb_msg)
         v03_params_msg = proto_utils.FromProto.message_send_params(v03_pb_msg)
         rpc_req = types_v03.SendMessageRequest(id='', params=v03_params_msg)
 
@@ -94,7 +95,7 @@ class REST03Handler:
         """
         body = await request.body()
         v03_pb_msg = pb2_v03.SendMessageRequest()
-        Parse(body, v03_pb_msg, ignore_unknown_fields=True)
+        parse_lenient(body, v03_pb_msg)
         v03_params_msg = proto_utils.FromProto.message_send_params(v03_pb_msg)
         rpc_req = types_v03.SendMessageRequest(id='', params=v03_params_msg)
 
@@ -212,7 +213,7 @@ class REST03Handler:
         body = await request.body()
 
         v03_pb_push = pb2_v03.CreateTaskPushNotificationConfigRequest()
-        Parse(body, v03_pb_push, ignore_unknown_fields=True)
+        parse_lenient(body, v03_pb_push)
 
         v03_params_push = (
             proto_utils.FromProto.task_push_notification_config_request(

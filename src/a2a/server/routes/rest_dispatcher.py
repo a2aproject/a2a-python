@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.json_format import MessageToDict
 
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -180,7 +180,7 @@ class RestDispatcher:
         ) -> a2a_pb2.SendMessageResponse:
             body = await request.body()
             params = a2a_pb2.SendMessageRequest()
-            Parse(body, params, ignore_unknown_fields=True)
+            proto_utils.parse_lenient(body, params)
             task_or_message = await self.request_handler.on_message_send(
                 params, context
             )
@@ -203,7 +203,7 @@ class RestDispatcher:
         ) -> AsyncIterator[dict[str, Any]]:
             body = await request.body()
             params = a2a_pb2.SendMessageRequest()
-            Parse(body, params, ignore_unknown_fields=True)
+            proto_utils.parse_lenient(body, params)
             async for event in self.request_handler.on_message_send_stream(
                 params, context
             ):
@@ -315,7 +315,7 @@ class RestDispatcher:
         ) -> a2a_pb2.TaskPushNotificationConfig:
             body = await request.body()
             params = a2a_pb2.TaskPushNotificationConfig()
-            Parse(body, params, ignore_unknown_fields=True)
+            proto_utils.parse_lenient(body, params)
             params.task_id = request.path_params['id']
             return await self.request_handler.on_create_task_push_notification_config(
                 params, context

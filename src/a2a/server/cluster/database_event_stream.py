@@ -25,8 +25,14 @@ except ImportError as e:
 
 from a2a.server.cluster.event_stream import TaskEventStream, VersionedEvent
 from a2a.server.cluster.version import TaskVersion
+from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
-from a2a.server.models import Base, TaskEventModel, create_task_event_model
+from a2a.server.models import (
+    Base,
+    TaskEventModel,
+    create_task_event_model,
+)
+from a2a.server.owner_resolver import OwnerResolver
 from a2a.types.a2a_pb2 import StreamResponse
 
 
@@ -64,6 +70,7 @@ class DatabaseTaskEventStream(TaskEventStream):
     """`TaskEventStream` backed by polling the shared ``task_events`` table."""
 
     _event_model: type[TaskEventModel]
+    owner_resolver: OwnerResolver | None
 
     def __init__(
         self,
@@ -71,6 +78,7 @@ class DatabaseTaskEventStream(TaskEventStream):
         create_table: bool = True,
         table_name: str = 'task_events',
         poll_interval_s: float = _DEFAULT_POLL_INTERVAL_S,
+        owner_resolver: OwnerResolver | None = None,
     ) -> None:
         """Initializes the stream over an existing SQLAlchemy AsyncEngine."""
         self._engine = engine
@@ -78,6 +86,7 @@ class DatabaseTaskEventStream(TaskEventStream):
         self._create_table = create_table
         self._poll_interval_s = poll_interval_s
         self._initialized = False
+        self.owner_resolver = owner_resolver
         self._event_model = (  # ty:ignore[invalid-assignment]
             TaskEventModel
             if table_name == 'task_events'
@@ -99,24 +108,34 @@ class DatabaseTaskEventStream(TaskEventStream):
         if not self._initialized:
             await self.initialize()
 
-    async def publish(self, task_id: str, event: VersionedEvent) -> None:
+    async def publish(
+        self,
+        task_id: str,
+        event: VersionedEvent,
+        context: ServerCallContext | None = None,
+    ) -> None:
         """No-op: events are persisted transactionally by the task store."""
-        del task_id, event
+        del task_id, event, context
 
     async def _seq_at_or_before_version(
-        self, session: AsyncSession, task_id: str, after: TaskVersion
+        self,
+        session: AsyncSession,
+        task_id: str,
+        after: TaskVersion,
+        owner: str | None,
     ) -> int:
         """Seq to start polling from so nothing after `after` is missed."""
         if after.is_missing:
             return 0
+        conditions = [
+            self._event_model.task_id == task_id,
+            self._event_model.task_version <= _as_int(after),
+        ]
+        if owner is not None:
+            conditions.append(self._event_model.owner == owner)
         stmt = (
             select(self._event_model.seq)
-            .where(
-                and_(
-                    self._event_model.task_id == task_id,
-                    self._event_model.task_version <= _as_int(after),
-                )
-            )
+            .where(and_(*conditions))
             .order_by(self._event_model.seq.desc())
             .limit(1)
         )
@@ -124,30 +143,40 @@ class DatabaseTaskEventStream(TaskEventStream):
         return result or 0
 
     async def subscribe(  # type: ignore[override]
-        self, task_id: str, *, after: TaskVersion
+        self,
+        task_id: str,
+        *,
+        after: TaskVersion,
+        context: ServerCallContext | None = None,
     ) -> AsyncGenerator[VersionedEvent, None]:
         """Polls the log for events of `task_id` newer than `after`."""
         await self._ensure_initialized()
+        owner = (
+            self.owner_resolver(context or ServerCallContext())
+            if self.owner_resolver is not None
+            else None
+        )
         async with self._session_maker() as session:
             cursor = await self._seq_at_or_before_version(
-                session, task_id, after
+                session, task_id, after, owner
             )
 
         while True:
             try:
                 async with self._session_maker() as session:
+                    conditions = [
+                        self._event_model.task_id == task_id,
+                        self._event_model.seq > cursor,
+                    ]
+                    if owner is not None:
+                        conditions.append(self._event_model.owner == owner)
                     stmt = (
                         select(
                             self._event_model.seq,
                             self._event_model.task_version,
                             self._event_model.event_data,
                         )
-                        .where(
-                            and_(
-                                self._event_model.task_id == task_id,
-                                self._event_model.seq > cursor,
-                            )
-                        )
+                        .where(and_(*conditions))
                         .order_by(self._event_model.seq.asc())
                     )
                     rows = (await session.execute(stmt)).all()
@@ -176,6 +205,8 @@ class DatabaseTaskEventStream(TaskEventStream):
             if not rows:
                 await asyncio.sleep(self._poll_interval_s)
 
-    async def destroy(self, task_id: str) -> None:
+    async def destroy(
+        self, task_id: str, context: ServerCallContext | None = None
+    ) -> None:
         """No-op: the append-only log is retained; subscribers stop on their own."""
-        del task_id
+        del task_id, context
