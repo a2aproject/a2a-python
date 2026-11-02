@@ -34,6 +34,13 @@ You MUST do all of the following:
    When unsure: load the skill. False positives are free; false
    negatives are how the same mistake recurs.
 
+4. **When changing task state** (or reviewing such a change), load the
+   `task-state-invariants` skill at
+   `.agents/skills/task-state-invariants/SKILL.md` before editing. It lists
+   the sibling surfaces a status change must reach (persisted store,
+   streaming subscribers, push notification, cluster event table, both v0.3
+   compat mappers) so a correct value does not land on some of them only.
+
 
 ## Optional extras
 
