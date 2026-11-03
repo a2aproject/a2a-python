@@ -331,11 +331,8 @@ class CompatRestTransport(ClientTransport):
         response_data = await self._execute_request(
             'GET', '/v1/card', context=context
         )
-        resp_proto = ParseDict(
-            response_data, a2a_v0_3_pb2.AgentCard(), ignore_unknown_fields=True
-        )
         card = conversions.to_core_agent_card(
-            proto_utils.FromProto.agent_card(resp_proto)
+            types_v03.AgentCard.model_validate(response_data)
         )
         self.agent_card = card
         return card
