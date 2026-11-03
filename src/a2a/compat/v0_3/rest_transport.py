@@ -17,6 +17,7 @@ from a2a.client.transports.http_helpers import (
     send_http_request,
     send_http_stream_request,
 )
+from a2a.client.transports.rest import _parse_rest_error
 from a2a.compat.v0_3 import (
     a2a_v0_3_pb2,
     conversions,
@@ -367,6 +368,12 @@ class CompatRestTransport(ClientTransport):
                 error_data = {}
             if not isinstance(error_data, dict):
                 error_data = {}
+
+            # Servers built on this SDK answer v0.3 REST requests with a
+            # google.rpc.Status body, the same as the v1.0 REST binding.
+            mapped = _parse_rest_error(error_data, str(e))
+            if mapped:
+                raise mapped from e
 
             error_type = error_data.get('type')
             message = error_data.get('message', str(e))
