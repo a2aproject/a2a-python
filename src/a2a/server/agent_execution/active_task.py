@@ -71,6 +71,7 @@ from a2a.server.events.event_queue_v2 import (
 )
 from a2a.server.tasks import PushNotificationEvent
 from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
     Message,
     Task,
     TaskArtifactUpdateEvent,
@@ -877,7 +878,11 @@ class ActiveTask:
             await self._maybe_cleanup()
             self.schedule_idle_release()
 
-    async def cancel(self, call_context: ServerCallContext) -> Task:
+    async def cancel(
+        self,
+        call_context: ServerCallContext,
+        request: CancelTaskRequest | None = None,
+    ) -> Task:
         """Cancels the running active task.
 
         The returned task carries a terminal state, which is written to the
@@ -899,6 +904,7 @@ class ActiveTask:
         task = await self._task_manager.get_task()
         request_context = RequestContext(
             call_context=call_context,
+            request=request,
             task_id=self._task_id,
             context_id=task.context_id if task else None,
             task=task,

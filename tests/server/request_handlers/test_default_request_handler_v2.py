@@ -2506,6 +2506,7 @@ class _HangingAgent(AgentExecutor):
         self.working = asyncio.Event()
         self.release = asyncio.Event()
         self.cancel_called = asyncio.Event()
+        self.cancel_metadata: dict[str, Any] | None = None
 
     async def execute(
         self, context: RequestContext, event_queue: EventQueue
@@ -2520,6 +2521,7 @@ class _HangingAgent(AgentExecutor):
     async def cancel(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
+        self.cancel_metadata = context.metadata
         self.cancel_called.set()
         updater = TaskUpdater(event_queue, context.task_id, context.context_id)
         await updater.cancel()
@@ -2593,6 +2595,39 @@ async def test_on_cancel_task_is_owner_scoped_for_live_task():
     result = await handler.on_cancel_task(CancelTaskRequest(id=task_id), alice)
     assert result.status.state == TaskState.TASK_STATE_CANCELED
     assert agent.cancel_called.is_set()
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_cancel_task_forwards_metadata_to_executor() -> None:
+    """Issue #1415: CancelTaskRequest.metadata reaches AgentExecutor.cancel."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    alice = _ctx('alice')
+
+    task_id = await _start_live_task(handler, alice, 'work')
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+
+    result = await handler.on_cancel_task(
+        CancelTaskRequest(
+            id=task_id,
+            metadata={'reason': 'user_aborted', 'actor': 'alice'},
+        ),
+        alice,
+    )
+    assert result is not None
+    assert result.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.cancel_metadata == {
+        'reason': 'user_aborted',
+        'actor': 'alice',
+    }
 
     agent.release.set()
     await handler.aclose()

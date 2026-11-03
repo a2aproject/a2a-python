@@ -295,21 +295,21 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         # This replica holds the task, running or waiting for input.
         if await self._active_task_registry.get(task_id) is not None:
-            return await self._cancel_local(task_id, context)
+            return await self._cancel_local(params, context)
 
         # Running on another replica (or nowhere): record CANCELED in shared
         # state; the owner sees the version bump on its next save and aborts.
         return await self._cancel_remote(task_id, task, version, context)
 
     async def _cancel_local(
-        self, task_id: str, context: ServerCallContext
+        self, params: CancelTaskRequest, context: ServerCallContext
     ) -> Task:
         try:
             active_task = await self._active_task_registry.get_or_create(
-                task_id, call_context=context, create_task_if_missing=False
+                params.id, call_context=context, create_task_if_missing=False
             )
             try:
-                result = await active_task.cancel(context)
+                result = await active_task.cancel(context, request=params)
             finally:
                 # get_or_create stopped the timer; a failed cancel leaves the task parked.
                 active_task.schedule_idle_release()
