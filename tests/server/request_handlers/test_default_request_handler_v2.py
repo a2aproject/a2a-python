@@ -3598,8 +3598,7 @@ class SilentExecutor(AgentExecutor):
 
 @pytest.mark.asyncio
 async def test_on_message_send_raises_when_agent_produces_no_events():
-    """A silent executor must fail fast with InternalError instead of
-    hanging forever on the uninitialized-task wait (#1330)."""
+    """A silent executor must fail fast instead of hanging forever (#1330)."""
     request_handler = DefaultRequestHandlerV2(
         agent_executor=SilentExecutor(),
         task_store=InMemoryTaskStore(),
@@ -3616,7 +3615,7 @@ async def test_on_message_send_raises_when_agent_produces_no_events():
         ),
     )
 
-    with pytest.raises(InternalError, match='no events'):
+    with pytest.raises(InvalidAgentResponseError, match='no events'):
         await request_handler.on_message_send(
             params, create_server_call_context()
         )

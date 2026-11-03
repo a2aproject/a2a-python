@@ -1120,13 +1120,9 @@ class ActiveTask:
                 pass
         return task
 
-    def task_created_is_set(self) -> bool:
-        """Whether the initial task is available.
-
-        True once a task event has been processed, the task pre-existed at
-        start(), or the producer failed — i.e. exactly when ``get_task()``
-        is guaranteed not to block on ``_task_created``.
-        """
+    @property
+    def task_created(self) -> bool:
+        """Whether a task exists, so ``get_task()`` will not block."""
         return self._task_created.is_set()
 
     async def get_task(self) -> Task:
