@@ -21,10 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 def validate_version(expected_version: str) -> Callable[[F], F]:
-    """Decorator that validates the A2A-Version header in the request context.
+    """Decorator that validates the A2A-Version in the request context.
 
     The header name is defined by `constants.VERSION_HEADER` ('A2A-Version').
-    If the header is missing or empty, it is interpreted as `constants.PROTOCOL_VERSION_0_3` ('0.3').
+    The version is read from the header first, then the query parameters.
+    If both are missing or empty, it is interpreted as
+    `constants.PROTOCOL_VERSION_0_3` ('0.3').
     If the version in the header does not match the `expected_version` (major and minor parts),
     a `VersionNotSupportedError` is raised. Patch version is ignored.
 
@@ -71,6 +73,9 @@ def validate_version(expected_version: str) -> Callable[[F], F]:
             actual_version = headers.get(
                 constants.VERSION_HEADER
             ) or headers.get(constants.VERSION_HEADER.lower())
+            if not actual_version:
+                query_params = context.state.get('query_params', {})
+                actual_version = query_params.get(constants.VERSION_HEADER)
 
             if not actual_version:
                 return constants.PROTOCOL_VERSION_0_3
@@ -87,7 +92,10 @@ def validate_version(expected_version: str) -> Callable[[F], F]:
             except InvalidVersion:
                 return False
             else:
-                return actual_v.major == expected_v.major
+                return (
+                    actual_v.major == expected_v.major
+                    and actual_v.minor == expected_v.minor
+                )
 
         if inspect.isasyncgenfunction(inspect.unwrap(func)):
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from sse_starlette.sse import EventSourceResponse
-from starlette.datastructures import Headers
+from starlette.datastructures import Headers, QueryParams
 
 
 try:
@@ -20,6 +20,7 @@ from a2a.server.routes.common import (
     StarletteUser,
     create_event_source_response,
 )
+from a2a.utils import constants
 
 
 class LegacyEventSourceResponse:
@@ -115,10 +116,11 @@ class TestStarletteUser:
 # --- default_user_builder Tests ---
 
 
-def _make_mock_request(scope=None, headers=None):
+def _make_mock_request(scope=None, headers=None, query_params=None):
     request = MagicMock()
     request.scope = scope or {}
     request.headers = Headers(headers or {})
+    request.query_params = QueryParams(query_params or {})
     return request
 
 
@@ -190,6 +192,13 @@ class TestBuildServerCallContext:
         ctx = DefaultServerCallContextBuilder().build(request)
         assert ctx.state['headers']['x-custom'] == 'value'
         assert ctx.state['headers']['authorization'] == 'Bearer tok'
+
+    def test_query_params_captured_in_state(self):
+        request = _make_mock_request(
+            query_params={constants.VERSION_HEADER: '1.0'}
+        )
+        ctx = DefaultServerCallContextBuilder().build(request)
+        assert ctx.state['query_params'][constants.VERSION_HEADER] == '1.0'
 
     def test_requested_extensions_single(self):
         request = _make_mock_request(headers={HTTP_EXTENSION_HEADER: 'foo'})
