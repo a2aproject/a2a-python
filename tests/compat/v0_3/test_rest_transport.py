@@ -179,13 +179,7 @@ async def test_compat_rest_transport_get_extended_agent_card(transport):
     async def mock_send_request(*args, **kwargs):
         return {
             'name': 'ExtendedAgent',
-            'description': 'Extended',
-            'version': '1.0.0',
-            'url': 'http://example.com',
             'capabilities': {},
-            'defaultInputModes': ['text/plain'],
-            'defaultOutputModes': ['text/plain'],
-            'skills': [],
             'supportsAuthenticatedExtendedCard': True,
         }
 
