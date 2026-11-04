@@ -244,7 +244,7 @@ class LegacyRequestHandler(RequestHandler):
         await self.agent_executor.cancel(
             RequestContext(
                 call_context=context,
-                request=None,
+                request=params,
                 task_id=task.id,
                 context_id=task.context_id,
                 task=task,

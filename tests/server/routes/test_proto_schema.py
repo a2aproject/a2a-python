@@ -170,9 +170,10 @@ def test_field_schema_map_entry():
     assert schema == {'type': 'object'}
 
 
-def test_rest_body_types_coverage():
+def test_rest_body_types_coverage() -> None:
     assert ('/message:send', 'POST') in REST_BODY_TYPES
     assert ('/message:stream', 'POST') in REST_BODY_TYPES
+    assert ('/tasks/{id}:cancel', 'POST') in REST_BODY_TYPES
     assert ('/tasks/{id}/pushNotificationConfigs', 'POST') in REST_BODY_TYPES
 
 
