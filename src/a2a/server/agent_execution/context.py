@@ -10,6 +10,7 @@ from a2a.server.id_generator import (
     UUIDGenerator,
 )
 from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
     Message,
     SendMessageConfiguration,
     SendMessageRequest,
@@ -29,19 +30,19 @@ class RequestContext:
     def __init__(  # noqa: PLR0913
         self,
         call_context: ServerCallContext,
-        request: SendMessageRequest | None = None,
+        request: SendMessageRequest | CancelTaskRequest | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         task: Task | None = None,
         related_tasks: list[Task] | None = None,
         task_id_generator: IDGenerator | None = None,
         context_id_generator: IDGenerator | None = None,
-    ):
+    ) -> None:
         """Initializes the RequestContext.
 
         Args:
             call_context: The server call context associated with this request.
-            request: The incoming `SendMessageRequest` request payload.
+            request: The incoming `SendMessageRequest` or `CancelTaskRequest` payload.
             task_id: The ID of the task explicitly provided in the request or path.
             context_id: The ID of the context explicitly provided in the request or path.
             task: The existing `Task` object retrieved from the store, if any.
@@ -52,7 +53,10 @@ class RequestContext:
         if related_tasks is None:
             related_tasks = []
         self._call_context = call_context
-        self._params = request
+        self._request: SendMessageRequest | CancelTaskRequest | None = request
+        self._params: SendMessageRequest | None = (
+            None if isinstance(request, CancelTaskRequest) else request
+        )
         self._task_id = task_id
         self._context_id = context_id
         self._current_task = task
@@ -149,10 +153,10 @@ class RequestContext:
     @property
     def metadata(self) -> dict[str, Any]:
         """Metadata associated with the request, if available."""
-        if self._params:
+        if self._request:
             # MessageToDict recurses into nested Struct/ListValue fields;
             # dict would leak raw protobuf objects to callers.
-            return json_format.MessageToDict(self._params.metadata)
+            return json_format.MessageToDict(self._request.metadata)
         return {}
 
     @property
