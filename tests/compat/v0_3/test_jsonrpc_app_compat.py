@@ -208,6 +208,8 @@ def test_get_task_not_found_v03_compat(
 def test_invalid_params_v03_compat(
     client: TestClient, mock_handler: AsyncMock
 ) -> None:
+    # The JSON-RPC envelope is valid but the params are not: a v0.3 Message
+    # requires `parts`, so validating params fails and must return -32602.
     request_payload = {
         'jsonrpc': '2.0',
         'id': '7',
