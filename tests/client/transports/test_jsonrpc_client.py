@@ -245,7 +245,7 @@ class TestSendMessage:
         mock_httpx_client.build_request.assert_called_once()
         _, kwargs = mock_httpx_client.build_request.call_args
         assert 'timeout' in kwargs
-        assert kwargs['timeout'] == httpx.Timeout(15.0)
+        assert kwargs['timeout'] == 15.0
 
 
 class TestGetTask:

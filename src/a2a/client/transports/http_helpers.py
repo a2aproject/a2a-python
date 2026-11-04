@@ -46,7 +46,7 @@ def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
     if context and context.service_parameters:
         http_kwargs['headers'] = context.service_parameters.copy()
     if context and context.timeout is not None:
-        http_kwargs['timeout'] = httpx.Timeout(context.timeout)
+        http_kwargs['timeout'] = context.timeout
     return http_kwargs
 
 
@@ -179,9 +179,12 @@ class _SSEEventSource:
         url: str,
         **kwargs: Any,
     ) -> None:
-        headers = httpx.Headers(kwargs.pop('headers', None))
-        headers.setdefault('Accept', 'text/event-stream')
-        headers.setdefault('Cache-Control', 'no-store')
+        headers: dict[str, str] = dict(kwargs.pop('headers', None) or {})
+        present = {key.lower() for key in headers}
+        if 'accept' not in present:
+            headers['Accept'] = 'text/event-stream'
+        if 'cache-control' not in present:
+            headers['Cache-Control'] = 'no-store'
         self._request = client.build_request(
             method, url, headers=headers, **kwargs
         )
