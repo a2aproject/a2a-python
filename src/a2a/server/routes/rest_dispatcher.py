@@ -218,10 +218,12 @@ class RestDispatcher:
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
         async def _handler(context: ServerCallContext) -> a2a_pb2.Task:
-            task_id = request.path_params['id']
-            task = await self.request_handler.on_cancel_task(
-                CancelTaskRequest(id=task_id), context
-            )
+            params = CancelTaskRequest()
+            body = await request.body()
+            if body.strip():
+                proto_utils.parse_lenient(body, params)
+            params.id = request.path_params['id']
+            task = await self.request_handler.on_cancel_task(params, context)
             if task:
                 return task
             raise TaskNotFoundError

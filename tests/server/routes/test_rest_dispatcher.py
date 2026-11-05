@@ -17,6 +17,7 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     Artifact,
+    CancelTaskRequest,
     ListTaskPushNotificationConfigsResponse,
     ListTasksResponse,
     Message,
@@ -193,6 +194,61 @@ class TestRestDispatcherEndpoints:
 
         response = await rest_dispatcher_instance.on_cancel_task(req)
         assert response.status_code == 404  # TaskNotFoundError maps to 404
+
+    async def test_on_cancel_task_forwards_metadata_and_keeps_path_id(
+        self,
+        rest_dispatcher_instance: RestDispatcher,
+        mock_handler: AsyncMock,
+    ) -> None:
+        body = json.dumps(
+            {
+                'id': 'body_id_ignored',
+                'metadata': {'reason': 'user_aborted', 'nested': {'step': 3}},
+            }
+        ).encode('utf-8')
+        req = make_mock_request(
+            method='POST', path_params={'id': 'test_task'}, body=body
+        )
+
+        response = await rest_dispatcher_instance.on_cancel_task(req)
+        assert response.status_code == 200
+        mock_handler.on_cancel_task.assert_awaited_once()
+        cancel_params = mock_handler.on_cancel_task.call_args.args[0]
+        assert cancel_params == CancelTaskRequest(
+            id='test_task',
+            metadata={'reason': 'user_aborted', 'nested': {'step': 3}},
+        )
+
+    @pytest.mark.parametrize('body', [b'', b'   \n\t '])
+    async def test_on_cancel_task_accepts_empty_body(
+        self,
+        rest_dispatcher_instance: RestDispatcher,
+        mock_handler: AsyncMock,
+        body: bytes,
+    ) -> None:
+        req = make_mock_request(
+            method='POST', path_params={'id': 'test_task'}, body=body
+        )
+
+        response = await rest_dispatcher_instance.on_cancel_task(req)
+        assert response.status_code == 200
+        mock_handler.on_cancel_task.assert_awaited_once()
+        cancel_params = mock_handler.on_cancel_task.call_args.args[0]
+        assert cancel_params == CancelTaskRequest(id='test_task')
+        assert not cancel_params.HasField('metadata')
+
+    async def test_on_cancel_task_invalid_json_body_returns_400(
+        self,
+        rest_dispatcher_instance: RestDispatcher,
+        mock_handler: AsyncMock,
+    ) -> None:
+        req = make_mock_request(
+            method='POST', path_params={'id': 'test_task'}, body=b'{not-json'
+        )
+
+        response = await rest_dispatcher_instance.on_cancel_task(req)
+        assert response.status_code == 400
+        mock_handler.on_cancel_task.assert_not_awaited()
 
     async def test_on_get_task_success(
         self, rest_dispatcher_instance, mock_handler
