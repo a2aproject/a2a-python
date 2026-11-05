@@ -555,8 +555,8 @@ def test_task_status_update_event_conversion():
 
 
 def test_task_status_update_event_conversion_terminal_states():
-    # Test all terminal states result in final=True
-    terminal_states = [
+    # Terminal and interrupted states end the stream, so final=True
+    final_states = [
         (
             pb2_v10.TaskState.TASK_STATE_COMPLETED,
             types_v03.TaskState.completed,
@@ -564,23 +564,6 @@ def test_task_status_update_event_conversion_terminal_states():
         (pb2_v10.TaskState.TASK_STATE_CANCELED, types_v03.TaskState.canceled),
         (pb2_v10.TaskState.TASK_STATE_FAILED, types_v03.TaskState.failed),
         (pb2_v10.TaskState.TASK_STATE_REJECTED, types_v03.TaskState.rejected),
-    ]
-
-    for core_st, compat_st in terminal_states:
-        v10_event = pb2_v10.TaskStatusUpdateEvent(
-            status=pb2_v10.TaskStatus(state=core_st)
-        )
-        v03_restored = to_compat_task_status_update_event(v10_event)
-        assert v03_restored.final is True
-        assert v03_restored.status.state == compat_st
-
-    # Test non-terminal states result in final=False
-    non_terminal_states = [
-        (
-            pb2_v10.TaskState.TASK_STATE_SUBMITTED,
-            types_v03.TaskState.submitted,
-        ),
-        (pb2_v10.TaskState.TASK_STATE_WORKING, types_v03.TaskState.working),
         (
             pb2_v10.TaskState.TASK_STATE_INPUT_REQUIRED,
             types_v03.TaskState.input_required,
@@ -589,13 +572,30 @@ def test_task_status_update_event_conversion_terminal_states():
             pb2_v10.TaskState.TASK_STATE_AUTH_REQUIRED,
             types_v03.TaskState.auth_required,
         ),
+    ]
+
+    for core_st, compat_st in final_states:
+        v10_event = pb2_v10.TaskStatusUpdateEvent(
+            status=pb2_v10.TaskStatus(state=core_st)
+        )
+        v03_restored = to_compat_task_status_update_event(v10_event)
+        assert v03_restored.final is True
+        assert v03_restored.status.state == compat_st
+
+    # Test non-final states result in final=False
+    non_final_states = [
+        (
+            pb2_v10.TaskState.TASK_STATE_SUBMITTED,
+            types_v03.TaskState.submitted,
+        ),
+        (pb2_v10.TaskState.TASK_STATE_WORKING, types_v03.TaskState.working),
         (
             pb2_v10.TaskState.TASK_STATE_UNSPECIFIED,
             types_v03.TaskState.unknown,
         ),
     ]
 
-    for core_st, compat_st in non_terminal_states:
+    for core_st, compat_st in non_final_states:
         v10_event = pb2_v10.TaskStatusUpdateEvent(
             status=pb2_v10.TaskStatus(state=core_st)
         )
