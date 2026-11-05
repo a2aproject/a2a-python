@@ -423,11 +423,16 @@ async def test_on_cancel_task_cancels_running_agent(agent_card):
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
-        params = CancelTaskRequest(id=f'{task_id}')
+        params = CancelTaskRequest(
+            id=f'{task_id}',
+            metadata={'reason': 'user_aborted'},
+        )
         await request_handler.on_cancel_task(params, context)
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
+    cancel_ctx: RequestContext = mock_agent_executor.cancel.call_args.args[0]
+    assert cancel_ctx.metadata == {'reason': 'user_aborted'}
 
 
 @pytest.mark.asyncio
