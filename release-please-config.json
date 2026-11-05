@@ -3,8 +3,7 @@
   "include-component-in-tag": false,
   "packages": {
     ".": {
-      "versioning": "always-bump-patch",
-      "release-as": "2.0.0"
+      "versioning": "always-bump-patch"
     }
   }
 }

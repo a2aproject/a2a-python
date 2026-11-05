@@ -70,12 +70,11 @@ does not close either discussion by itself.
 
 ## Release boundary
 
-`release-please-config.json` proposes `release-as: 2.0.0` for this breaking
-change. The existing `always-bump-patch` strategy otherwise chooses a patch
-even for a breaking commit, so a `fix!` title alone is insufficient.
+The existing `always-bump-patch` strategy chooses a patch even for a breaking
+commit, so a `fix!` title alone is insufficient. As for 1.3.0 (#1389), the
+release owner sets the version with an empty commit that ends with
+`Release-As: 2.0.0`, which leaves no override to remove afterwards.
 
-Merge this change only as part of the agreed major-release plan. The release
-owner must remove the one-release `release-as` override after the 2.0.0 release
-and before preparing subsequent releases. The existing patch strategy then
-resumes. This proposal does not manually advance the release manifest, create
-a tag, or publish a package.
+Merge this change only as part of the agreed major-release plan. This proposal
+does not manually advance the release manifest, create a tag, or publish a
+package.
