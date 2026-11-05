@@ -23,7 +23,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils._async_queue_compat import QueueShutDown, create_async_queue
-from a2a.utils.errors import UnsupportedOperationError
+from a2a.utils.errors import TaskNotFoundError, UnsupportedOperationError
 
 
 logger = logging.getLogger(__name__)
@@ -1503,3 +1503,46 @@ async def test_subscriber_taps_are_evict_on_full():
     for t in background:
         t.cancel()
     await asyncio.gather(*background, return_exceptions=True)
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('stored_task', 'expected_error'),
+    [
+        (
+            Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+            ),
+            UnsupportedOperationError,
+        ),
+        (None, TaskNotFoundError),
+    ],
+)
+async def test_active_task_start_setup_failure_closes_event_queues(
+    stored_task, expected_error
+):
+    """A failed start() closes both event queues.
+
+    Each EventQueueSource starts its dispatcher task when it is created, so
+    without this the dispatchers stay pending until garbage collection and
+    surface as ``Task was destroyed but it is pending!``.
+    """
+    task_manager = Mock()
+    task_manager.get_task = AsyncMock(return_value=stored_task)
+
+    active_task = ActiveTask(
+        agent_executor=Mock(),
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=Mock(),
+    )
+
+    with pytest.raises(expected_error):
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=False
+        )
+
+    assert active_task._event_queue_agent._dispatcher_task.done()
+    assert active_task._event_queue_subscribers._dispatcher_task.done()
