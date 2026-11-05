@@ -1,9 +1,12 @@
 import httpx
 import pytest
 
+from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.http_helpers import (
+    _SSEEventSource,
     _default_sse_error_handler,
+    get_http_args,
     parse_sse_stream,
     send_http_stream_request,
 )
@@ -62,3 +65,49 @@ async def test_send_http_stream_request_non_sse(mocker):
         c async for c in send_http_stream_request(client, 'GET', 'http://test')
     ]
     assert chunks == ['plain error response']
+
+
+def test_get_http_args_passes_timeout_through_unwrapped():
+    """The timeout stays a bare float, for the client itself to wrap."""
+    http_kwargs = get_http_args(ClientCallContext(timeout=5.0))
+
+    assert http_kwargs['timeout'] == 5.0
+    assert not isinstance(http_kwargs['timeout'], httpx.Timeout)
+
+    request = httpx.AsyncClient().build_request(
+        'GET', 'http://test', **http_kwargs
+    )
+    assert request.extensions['timeout'] == {
+        'connect': 5.0,
+        'read': 5.0,
+        'write': 5.0,
+        'pool': 5.0,
+    }
+
+
+def test_sse_event_source_sets_default_stream_headers():
+    source = _SSEEventSource(httpx.AsyncClient(), 'GET', 'http://test')
+
+    assert source._request.headers['Accept'] == 'text/event-stream'
+    assert source._request.headers['Cache-Control'] == 'no-store'
+
+
+@pytest.mark.parametrize(
+    'caller_spelling', ['accept', 'Accept', 'ACCEPT', 'AcCePt']
+)
+def test_sse_event_source_keeps_caller_accept_whatever_its_case(
+    caller_spelling: str,
+):
+    """A caller's own Accept wins, and is never joined by a second one.
+
+    HTTP header names are case-insensitive, so matching the caller's
+    spelling exactly is not enough to detect that they already set one.
+    """
+    source = _SSEEventSource(
+        httpx.AsyncClient(),
+        'GET',
+        'http://test',
+        headers={caller_spelling: 'application/json'},
+    )
+
+    assert source._request.headers.get_list('accept') == ['application/json']

@@ -1,3 +1,5 @@
+import json
+
 from collections.abc import AsyncGenerator
 from typing import NamedTuple
 
@@ -156,8 +158,19 @@ class MockAgentExecutor(AgentExecutor):
                 message=task_updater.new_agent_message([Part(text='done')]),
             )
 
-    async def cancel(self, context: RequestContext, event_queue: EventQueue):
-        raise NotImplementedError('Cancellation is not supported')
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.task_id is not None
+        assert context.context_id is not None
+        task_updater = TaskUpdater(
+            event_queue, context.task_id, context.context_id
+        )
+        await task_updater.cancel(
+            message=task_updater.new_agent_message(
+                [Part(text=json.dumps(context.metadata, sort_keys=True))]
+            )
+        )
 
 
 @pytest.fixture
@@ -831,3 +844,52 @@ async def test_end_to_end_extensions_propagation(transport_setups, streaming):
         response.message, Role.ROLE_AGENT, 'extensions echoed'
     )
     assert set(response.message.extensions) == set(SUPPORTED_EXTENSION_URIS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'cancel_metadata',
+    [
+        pytest.param(
+            {'reason': 'user_aborted', 'nested': {'retryable': False}},
+            id='with_metadata',
+        ),
+        pytest.param({}, id='without_metadata'),
+    ],
+)
+async def test_end_to_end_cancel_task_metadata_propagation(
+    transport_setups: ClientSetup,
+    cancel_metadata: dict[str, object],
+) -> None:
+    """Test CancelTaskRequest.metadata reaches AgentExecutor.cancel on all bindings."""
+    client = transport_setups.client
+    client._config.streaming = False
+
+    events = [
+        event
+        async for event in client.send_message(
+            request=SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='msg-cancel-metadata',
+                    parts=[Part(text='Need input')],
+                )
+            )
+        )
+    ]
+    assert len(events) == 1
+    parked_task = events[0].task
+    assert parked_task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    cancel_req = (
+        CancelTaskRequest(id=parked_task.id, metadata=cancel_metadata)
+        if cancel_metadata
+        else CancelTaskRequest(id=parked_task.id)
+    )
+    cancelled_task = await client.cancel_task(request=cancel_req)
+
+    assert cancelled_task.id == parked_task.id
+    assert cancelled_task.status.state == TaskState.TASK_STATE_CANCELED
+    assert json.loads(cancelled_task.status.message.parts[0].text) == (
+        cancel_metadata
+    )

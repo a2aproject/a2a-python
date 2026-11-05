@@ -190,6 +190,78 @@ async def test_status_validation_failure_returns_failed_task() -> None:
         await handler.aclose()
 
 
+class _CompletingAgent(AgentExecutor):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.message is not None
+        await event_queue.enqueue_event(
+            new_task_from_user_message(context.message)
+        )
+        updater = TaskUpdater(
+            event_queue,
+            str(context.task_id or ''),
+            str(context.context_id or ''),
+        )
+        await updater.start_work()
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+class _FailCompletedSaveTaskStore(InMemoryTaskStore):
+    """Rejects the first COMPLETED write, as a lost database connection would."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failed_save = False
+
+    async def save(self, task: Task, context: ServerCallContext) -> None:
+        if (
+            task.status.state == TaskState.TASK_STATE_COMPLETED
+            and not self.failed_save
+        ):
+            self.failed_save = True
+            raise ConnectionError('database connection lost')
+        await super().save(task, context)
+
+
+@pytest.mark.asyncio
+async def test_failed_terminal_save_records_failed_task() -> None:
+    store = _FailCompletedSaveTaskStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_CompletingAgent(),
+        task_store=store,
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    try:
+        with pytest.raises(ConnectionError, match='database connection lost'):
+            await asyncio.wait_for(
+                handler.on_message_send(
+                    SendMessageRequest(
+                        message=Message(
+                            role=Role.ROLE_USER,
+                            message_id='failed-terminal-save',
+                            parts=[Part(text='test failed save')],
+                        )
+                    ),
+                    context,
+                ),
+                timeout=5,
+            )
+        assert store.failed_save
+        listed = await store.list(ListTasksRequest(), context)
+        assert len(listed.tasks) == 1
+        # The COMPLETED write never landed, so the task must not stay WORKING.
+        assert listed.tasks[0].status.state == TaskState.TASK_STATE_FAILED
+    finally:
+        await handler.aclose()
+
+
 def test_init_default_dependencies():
     """Test that default dependencies are created if not provided."""
     agent_executor = MockAgentExecutor()
@@ -2434,6 +2506,7 @@ class _HangingAgent(AgentExecutor):
         self.working = asyncio.Event()
         self.release = asyncio.Event()
         self.cancel_called = asyncio.Event()
+        self.cancel_metadata: dict[str, Any] | None = None
 
     async def execute(
         self, context: RequestContext, event_queue: EventQueue
@@ -2448,6 +2521,7 @@ class _HangingAgent(AgentExecutor):
     async def cancel(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
+        self.cancel_metadata = context.metadata
         self.cancel_called.set()
         updater = TaskUpdater(event_queue, context.task_id, context.context_id)
         await updater.cancel()
@@ -2521,6 +2595,39 @@ async def test_on_cancel_task_is_owner_scoped_for_live_task():
     result = await handler.on_cancel_task(CancelTaskRequest(id=task_id), alice)
     assert result.status.state == TaskState.TASK_STATE_CANCELED
     assert agent.cancel_called.is_set()
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_cancel_task_forwards_metadata_to_executor() -> None:
+    """Issue #1415: CancelTaskRequest.metadata reaches AgentExecutor.cancel."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    alice = _ctx('alice')
+
+    task_id = await _start_live_task(handler, alice, 'work')
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+
+    result = await handler.on_cancel_task(
+        CancelTaskRequest(
+            id=task_id,
+            metadata={'reason': 'user_aborted', 'actor': 'alice'},
+        ),
+        alice,
+    )
+    assert result is not None
+    assert result.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.cancel_metadata == {
+        'reason': 'user_aborted',
+        'actor': 'alice',
+    }
 
     agent.release.set()
     await handler.aclose()

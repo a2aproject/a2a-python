@@ -423,11 +423,16 @@ async def test_on_cancel_task_cancels_running_agent(agent_card):
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
-        params = CancelTaskRequest(id=f'{task_id}')
+        params = CancelTaskRequest(
+            id=f'{task_id}',
+            metadata={'reason': 'user_aborted'},
+        )
         await request_handler.on_cancel_task(params, context)
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
+    cancel_ctx: RequestContext = mock_agent_executor.cancel.call_args.args[0]
+    assert cancel_ctx.metadata == {'reason': 'user_aborted'}
 
 
 @pytest.mark.asyncio
@@ -1098,11 +1103,10 @@ async def test_on_message_send_non_blocking(agent_card):
 
     assert task is not None
     assert task.status.state == TaskState.TASK_STATE_COMPLETED
-    assert (
-        result.history
-        and task.history
-        and len(result.history) == len(task.history)
-    )
+    # The result is the task as it was returned, with its whole history; the
+    # agent's later status messages are added to the stored task only.
+    assert result.history
+    assert list(task.history[: len(result.history)]) == list(result.history)
 
 
 @pytest.mark.asyncio
@@ -2941,6 +2945,7 @@ async def test_on_message_send_error_does_not_hang(agent_card):
     """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
     agent = HelloWorldAgentExecutor()
     task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = None
     task_store.save.side_effect = RuntimeError('This is an Error!')
 
     request_handler = DefaultRequestHandler(

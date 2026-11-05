@@ -6,13 +6,18 @@ from google.api import field_behavior_pb2 as fb
 from google.protobuf.descriptor import Descriptor, FieldDescriptor
 from google.protobuf.message import Message
 
-from a2a.types.a2a_pb2 import SendMessageRequest, TaskPushNotificationConfig
+from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
+    SendMessageRequest,
+    TaskPushNotificationConfig,
+)
 from a2a.utils.proto_utils import _field_is_repeated
 
 
 REST_BODY_TYPES: dict[tuple[str, str], type[Message]] = {
     ('/message:send', 'POST'): SendMessageRequest,
     ('/message:stream', 'POST'): SendMessageRequest,
+    ('/tasks/{id}:cancel', 'POST'): CancelTaskRequest,
     ('/tasks/{id}/pushNotificationConfigs', 'POST'): TaskPushNotificationConfig,
 }
 

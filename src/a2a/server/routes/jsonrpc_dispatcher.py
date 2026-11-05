@@ -340,7 +340,7 @@ class JsonRpcDispatcher:
                 except A2AError as e:
                     handler_result = build_error_response(request_id, e)
             return self._create_response(call_context, handler_result)
-        except json.decoder.JSONDecodeError as e:
+        except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
             return self._generate_error_response(
                 None, JSONParseError(message=str(e))
             )

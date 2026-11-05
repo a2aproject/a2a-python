@@ -267,7 +267,12 @@ class TaskManager:
                 self._pending_event = None
             return event
 
-        task: Task = await self.ensure_task(event)
+        # Apply the event to a copy; _save_task caches it only once the store
+        # accepts it. If the save raises, the cached task still matches the
+        # store, so the failure path does not take an unsaved terminal state
+        # for a saved one, and `prev` is the task as last read.
+        task = Task()
+        task.CopyFrom(await self.ensure_task(event))
 
         if isinstance(event, TaskStatusUpdateEvent):
             logger.debug(
