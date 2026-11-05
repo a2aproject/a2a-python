@@ -213,6 +213,7 @@ class TestRestTransport:
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
+        mock_response.json = MagicMock(return_value={})
         mock_httpx_client.send.return_value = mock_response
 
         await client.send_message(request=params, context=context)
@@ -286,6 +287,7 @@ class TestRestTransportExtensions:
         # Mock the send method
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
+        mock_response.json = MagicMock(return_value={})
         mock_httpx_client.send.return_value = mock_response
 
         context = ClientCallContext(
@@ -829,3 +831,56 @@ class TestRestUnrecognizedResponseFields:
         assert len(events) == 1
         assert events[0].message.message_id == 'r1'
         assert events[0].message.parts[0].text == 'hello'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('body', [[], 'task-1', None])
+    async def test_get_task_rejects_body_that_is_not_an_object(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        body: object,
+    ):
+        """A 200 body that is not an object is not read as an empty Task."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_httpx_client.build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json = MagicMock(return_value=body)
+        mock_httpx_client.send.return_value = mock_response
+
+        with pytest.raises(json_format.ParseError, match='JSON object'):
+            await client.get_task(GetTaskRequest(id='task-1'))
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_send_message_streaming_rejects_event_that_is_not_an_object(
+        self,
+        mock_sse_source: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        """An SSE event whose data is a JSON array is not an empty event."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.return_value = async_iterable_from_list(
+            ['data: []', '']
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        with pytest.raises(json_format.ParseError, match='JSON object'):
+            async for _ in client.send_message_streaming(
+                SendMessageRequest(message=new_text_message(text='Hello'))
+            ):
+                pass
