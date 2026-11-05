@@ -402,11 +402,10 @@ def to_compat_task_status_update_event(
         if core_event.HasField('status')
         else types_v03.TaskStatus(state=types_v03.TaskState.unknown)
     )
-    final = status.state in (
-        types_v03.TaskState.completed,
-        types_v03.TaskState.canceled,
-        types_v03.TaskState.failed,
-        types_v03.TaskState.rejected,
+    # Interrupted states (input-required, auth-required) end the stream for
+    # this interaction just like terminal ones, so both are final in v0.3.
+    final = core_event.status.state in (
+        constants.TERMINAL_TASK_STATES | constants.INTERRUPTED_TASK_STATES
     )
     return types_v03.TaskStatusUpdateEvent(
         task_id=core_event.task_id,
