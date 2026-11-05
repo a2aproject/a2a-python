@@ -15,6 +15,7 @@ from a2a.server.events.event_queue_v2 import EventQueueSource as EventQueue
 from a2a.server.tasks.push_notification_sender import PushNotificationSender
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
     Message,
     Task,
     TaskState,
@@ -129,6 +130,63 @@ class TestActiveTask:
         await active_task.cancel(request_context)
 
         agent_executor.cancel.assert_called_once()
+        stop_event.set()
+
+    @pytest.mark.asyncio
+    async def test_active_task_cancel_forwards_request_metadata(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """Test ActiveTask.cancel passes CancelTaskRequest metadata to AgentExecutor.cancel."""
+        started = asyncio.Event()
+        stop_event = asyncio.Event()
+
+        async def execute_mock(
+            _ctx: RequestContext, _queue: EventQueue
+        ) -> None:
+            started.set()
+            await stop_event.wait()
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock()
+        task_manager.get_task.side_effect = [
+            Task(
+                id='test-task-id',
+                context_id='ctx-1',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        ] * 5 + [
+            Task(
+                id='test-task-id',
+                context_id='ctx-1',
+                status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
+            )
+        ] * 5
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.wait_for(started.wait(), timeout=5)
+
+        cancel_req = CancelTaskRequest(
+            id='test-task-id',
+            metadata={'reason': 'user_aborted', 'actor': 'alice'},
+        )
+        await active_task.cancel(ServerCallContext(), request=cancel_req)
+
+        agent_executor.cancel.assert_awaited_once()
+        cancel_ctx: RequestContext = agent_executor.cancel.call_args.args[0]
+        assert cancel_ctx.metadata == {
+            'reason': 'user_aborted',
+            'actor': 'alice',
+        }
+        assert cancel_ctx.message is None
+        assert cancel_ctx.task_id == 'test-task-id'
+        assert cancel_ctx.context_id == 'ctx-1'
         stop_event.set()
 
     @pytest.mark.asyncio
