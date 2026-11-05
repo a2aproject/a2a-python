@@ -229,6 +229,37 @@ def test_trace_class_dunder_not_traced(mock_span: mock.MagicMock) -> None:
     assert hasattr(obj, 'x')
 
 
+def test_trace_class_keeps_staticmethod_static(
+    mock_tracer: mock.MagicMock,
+) -> None:
+    class Base:
+        @staticmethod
+        def inherited(x: int) -> int:
+            return x + 1
+
+    @trace_class()
+    class MyClass(Base):
+        @staticmethod
+        def double(x: int) -> int:
+            return x * 2
+
+        def run(self) -> int:
+            return self.double(21)
+
+    obj = MyClass()
+    assert obj.run() == 42
+    assert obj.double(2) == 4
+    assert MyClass.double(3) == 6
+    assert obj.inherited(1) == 2
+    assert isinstance(MyClass.__dict__['double'], staticmethod)
+    assert isinstance(MyClass.__dict__['inherited'], staticmethod)
+    span_names = [
+        c.args[0] for c in mock_tracer.start_as_current_span.call_args_list
+    ]
+    assert span_names.count(f'{__name__}.MyClass.double') == 3
+    assert span_names.count(f'{__name__}.MyClass.inherited') == 1
+
+
 @pytest.mark.xdist_group(name='telemetry_isolation')
 @pytest.mark.parametrize(
     'env_value,expected_tracing',
