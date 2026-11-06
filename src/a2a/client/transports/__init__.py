@@ -3,6 +3,12 @@
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
+from a2a.client.transports.retry import (
+    OnRetryCallback,
+    RetryPredicate,
+    RetryTransport,
+    default_retry_predicate,
+)
 
 
 try:
@@ -15,5 +21,9 @@ __all__ = [
     'ClientTransport',
     'GrpcTransport',
     'JsonRpcTransport',
+    'OnRetryCallback',
     'RestTransport',
+    'RetryPredicate',
+    'RetryTransport',
+    'default_retry_predicate',
 ]
