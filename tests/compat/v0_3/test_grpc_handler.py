@@ -496,3 +496,42 @@ async def test_extract_task_and_config_id_invalid(
 ):
     with pytest.raises(InvalidParamsError):
         handler._extract_task_and_config_id('invalid-name')
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_with_device_code_oauth_flow(
+    handler: compat_grpc_handler.CompatGrpcHandler,
+    mock_request_handler: AsyncMock,
+    mock_grpc_context: AsyncMock,
+    sample_agent_card: a2a_pb2.AgentCard,
+) -> None:
+    """A v1.0 device code flow, which v0.3 lacks, is sent with no flows."""
+    sample_agent_card.security_schemes['device'].CopyFrom(
+        a2a_pb2.SecurityScheme(
+            oauth2_security_scheme=a2a_pb2.OAuth2SecurityScheme(
+                description='Device code',
+                flows=a2a_pb2.OAuthFlows(
+                    device_code=a2a_pb2.DeviceCodeOAuthFlow(
+                        device_authorization_url='https://auth.example.com/device',
+                        token_url='https://auth.example.com/token',
+                        scopes={'read': 'Read access'},
+                    )
+                ),
+            )
+        )
+    )
+    mock_request_handler.on_get_extended_agent_card.return_value = (
+        sample_agent_card
+    )
+
+    response = await handler.GetAgentCard(
+        a2a_v0_3_pb2.GetAgentCardRequest(), mock_grpc_context
+    )
+
+    mock_grpc_context.abort.assert_not_called()
+    assert response.security_schemes['device'] == a2a_v0_3_pb2.SecurityScheme(
+        oauth2_security_scheme=a2a_v0_3_pb2.OAuth2SecurityScheme(
+            description='Device code',
+            flows=a2a_v0_3_pb2.OAuthFlows(),
+        )
+    )
