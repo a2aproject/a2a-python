@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -10,6 +12,7 @@ from a2a.client.transports.http_helpers import (
     parse_sse_stream,
     send_http_stream_request,
 )
+from a2a.utils import json_utils
 
 
 def test_default_sse_error_handler():
@@ -111,3 +114,33 @@ def test_sse_event_source_keeps_caller_accept_whatever_its_case(
     )
 
     assert source._request.headers.get_list('accept') == ['application/json']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('separator', ['\u2028', '\u2029', '\u0085'])
+@pytest.mark.parametrize('chunk_size', [1, 7, 4096])
+async def test_parse_sse_stream_keeps_unicode_line_separators(
+    separator: str, chunk_size: int
+) -> None:
+    """Regression test for #1432.
+
+    A streamed event whose text contains U+2028, U+2029 or U+0085 must arrive
+    as one ``data:`` line, because SSE only ends lines on CR, LF and CRLF.
+    """
+    payload = json_utils.dumps({'text': f'before{separator}after'})
+    frame = f'data: {payload}\n\n'.encode()
+
+    async def body():
+        for i in range(0, len(frame), chunk_size):
+            yield frame[i : i + chunk_size]
+
+    response = httpx.Response(
+        200,
+        headers={'content-type': 'text/event-stream'},
+        content=body(),
+    )
+
+    events = [event async for event in parse_sse_stream(response)]
+
+    assert events == [('message', payload)]
+    assert json.loads(events[0][1]) == {'text': f'before{separator}after'}

@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from a2a.utils import json_utils
 
 
@@ -22,3 +24,28 @@ def test_dumps_round_trips_through_json_loads() -> None:
     """Wrapper output must remain a valid JSON document."""
     payload = {'msg': '你好', 'list': ['a', 'é', '日本語'], 'n': 1}
     assert json.loads(json_utils.dumps(payload)) == payload
+
+
+@pytest.mark.parametrize('separator', ['\u2028', '\u2029', '\u0085'])
+def test_dumps_escapes_sse_line_separators(separator: str) -> None:
+    """These characters are legal JSON content but split SSE ``data:`` lines."""
+    payload = {'text': f'before{separator}after'}
+    out = json_utils.dumps(payload)
+
+    assert len(out.splitlines()) == 1
+    assert json.loads(out) == payload
+
+
+def test_dumps_escapes_line_separators_in_keys_and_nested_values() -> None:
+    payload = {'key\u2028name': ['a\u2029b', {'nested': 'x\u0085y'}]}
+    out = json_utils.dumps(payload)
+
+    assert len(out.splitlines()) == 1
+    assert json.loads(out) == payload
+
+
+def test_dumps_keeps_other_non_ascii_raw() -> None:
+    """Only the three SSE-unsafe characters should be escaped."""
+    out = json_utils.dumps({'text': '你好 🎉'})
+    assert '你好 🎉' in out
+    assert '\\u4f60' not in out
