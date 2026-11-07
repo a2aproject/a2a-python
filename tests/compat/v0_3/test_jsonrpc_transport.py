@@ -26,7 +26,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskState,
 )
-from a2a.utils.errors import InvalidParamsError
+from a2a.utils.errors import InvalidParamsError, TaskNotFoundError
 
 
 @pytest.fixture
@@ -567,3 +567,48 @@ async def test_compat_jsonrpc_transport_mirrors_extension_header(
     headers = kwargs['headers']
     assert headers['A2A-Extensions'] == 'foo,bar'
     assert headers['X-A2A-Extensions'] == 'foo,bar'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('response_data', 'expected_error'),
+    [
+        (
+            {
+                'jsonrpc': '2.0',
+                'id': '1',
+                'error': {'code': -32001, 'message': 'No task', 'reason': 'x'},
+            },
+            TaskNotFoundError,
+        ),
+        (
+            {'jsonrpc': '2.0', 'id': '1', 'error': {'code': -32001}},
+            TaskNotFoundError,
+        ),
+        ({'jsonrpc': '2.0', 'id': '1', 'error': 'boom'}, A2AClientError),
+        ({'jsonrpc': '2.0', 'id': '1'}, A2AClientError),
+        (['not', 'a', 'response'], A2AClientError),
+    ],
+)
+@patch('a2a.compat.v0_3.jsonrpc_transport.send_http_request')
+async def test_compat_jsonrpc_transport_malformed_response(
+    mock_send_http_request, transport, response_data, expected_error
+):
+    """Bodies the json-rpc package rejects raise A2A errors, not TypeError."""
+    mock_send_http_request.return_value = response_data
+
+    with pytest.raises(expected_error):
+        await transport.get_task(GetTaskRequest(id='task-123'))
+
+
+@pytest.mark.asyncio
+@patch('a2a.compat.v0_3.jsonrpc_transport.send_http_request')
+async def test_compat_jsonrpc_transport_delete_push_config_without_result(
+    mock_send_http_request, transport
+):
+    mock_send_http_request.return_value = {'jsonrpc': '2.0', 'id': '1'}
+
+    req = DeleteTaskPushNotificationConfigRequest(
+        task_id='task-123', id='push-123'
+    )
+    assert await transport.delete_task_push_notification_config(req) is None
