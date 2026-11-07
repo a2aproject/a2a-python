@@ -752,6 +752,97 @@ class TestRestTransportTenant:
         assert args[2] == f'http://agent.example.com/api{expected_path}'
 
 
+class TestRestTransportPathEncoding:
+    """Ids are percent-encoded so they stay one URL path segment."""
+
+    @pytest.mark.parametrize(
+        'method_name, request_obj, expected_path',
+        [
+            (
+                'get_task',
+                GetTaskRequest(id='a?b#c'),
+                '/tasks/a%3Fb%23c',
+            ),
+            (
+                'cancel_task',
+                CancelTaskRequest(id='a/b%2F'),
+                '/tasks/a%2Fb%252F:cancel',
+            ),
+            (
+                'create_task_push_notification_config',
+                TaskPushNotificationConfig(task_id='a?b'),
+                '/tasks/a%3Fb/pushNotificationConfigs',
+            ),
+            (
+                'get_task_push_notification_config',
+                GetTaskPushNotificationConfigRequest(
+                    task_id='task 1', id='alerts#ops'
+                ),
+                '/tasks/task%201/pushNotificationConfigs/alerts%23ops',
+            ),
+            (
+                'list_task_push_notification_configs',
+                ListTaskPushNotificationConfigsRequest(task_id='a#b'),
+                '/tasks/a%23b/pushNotificationConfigs',
+            ),
+            (
+                'delete_task_push_notification_config',
+                DeleteTaskPushNotificationConfigRequest(
+                    task_id='t1', id='alerts#ops'
+                ),
+                '/tasks/t1/pushNotificationConfigs/alerts%23ops',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_rest_methods_encode_ids_in_path(
+        self,
+        method_name,
+        request_obj,
+        expected_path,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        await getattr(client, method_name)(request=request_obj)
+
+        args, _ = mock_httpx_client.build_request.call_args
+        assert args[1] == f'http://agent.example.com/api{expected_path}'
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_subscribe_encodes_id_in_path(
+        self, mock_aconnect_sse, mock_httpx_client, mock_agent_card
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
+
+        async for _ in client.subscribe(
+            request=SubscribeToTaskRequest(id='a?b')
+        ):
+            pass
+
+        args, _ = mock_aconnect_sse.call_args
+        assert args[2] == 'http://agent.example.com/api/tasks/a%3Fb:subscribe'
+
+
 class TestRestUnrecognizedResponseFields:
     """Spec 5.7: unrecognized response fields are ignored (issue #1341)."""
 
