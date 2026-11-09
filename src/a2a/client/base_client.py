@@ -38,7 +38,9 @@ class BaseClient(Client):
     """Base implementation of the A2A client, containing transport-independent logic.
 
     Client plugin hooks run around every call: ``before_client_request`` before
-    the interceptors, ``after_client_request`` after them.
+    the interceptors, ``after_client_request`` after them, and
+    ``run_client_call`` around each call into the interceptors and the
+    transport (the unary call, each stream read, and the stream close).
     """
 
     def __init__(
@@ -435,8 +437,13 @@ class BaseClient(Client):
         request = self._client_request(input_data, method, context)
         await plugins.before_client_request(request)
         try:
-            result = await self._call_through_interceptors(
-                request.payload, method, request.context, transport_call
+            # Reads request fields at call time, so a plugin can change them
+            # before calling, and each retry makes a fresh call.
+            result = await plugins.run_client_call(
+                request,
+                lambda: self._call_through_interceptors(
+                    request.payload, method, request.context, transport_call
+                ),
             )
         except Exception as e:
             await plugins.after_client_request(
@@ -516,14 +523,23 @@ class BaseClient(Client):
 
         request = self._client_request(input_data, method, context)
         await plugins.before_client_request(request)
+        events = self._stream_through_interceptors(
+            request.payload, method, request.context, transport_call
+        )
         error: BaseException | None = None
         try:
-            async with aclosing(
-                self._stream_through_interceptors(
-                    request.payload, method, request.context, transport_call
-                )
-            ) as events:
-                async for event in events:
+            # Each read and the close run inside run_client_call; the yield
+            # runs outside it, so plugin context never stays set while the
+            # caller handles an event.
+            try:
+                while True:
+                    # None marks the end of the stream, so StopAsyncIteration
+                    # never passes through plugin code.
+                    event = await plugins.run_client_call(
+                        request, lambda: anext(events, None)
+                    )
+                    if event is None:
+                        break
                     await plugins.after_client_request(
                         ClientResponse(
                             request.method,
@@ -534,6 +550,8 @@ class BaseClient(Client):
                         )
                     )
                     yield event
+            finally:
+                await plugins.run_client_call(request, events.aclose)
         except Exception as e:
             error = e
             raise
