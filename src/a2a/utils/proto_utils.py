@@ -73,22 +73,18 @@ def parse_lenient(
 
     Raises:
         ParseError: If the data is not valid ProtoJSON, including bytes that
-            are not valid UTF-8 and JSON values that are not objects.
+            are not valid UTF-8 and decoded values that are not objects.
     """
     if isinstance(data, bytes):
         try:
             data = data.decode('utf-8')
         except UnicodeDecodeError as e:
             raise ParseError(f'Failed to load JSON: {e}.') from e
-    # A message is a JSON object. With ignore_unknown_fields, ParseDict reads
-    # an array or a string as an empty message (it iterates the value as if
-    # it were the object's keys), and raises TypeError for null or a number.
     if isinstance(data, str):
-        if not data.lstrip(_JSON_WHITESPACE).startswith('{'):
-            raise ParseError(
-                f'Expected a JSON object for {message.DESCRIPTOR.name}.'
-            )
         return Parse(data, message, ignore_unknown_fields=True)
+    # A message is a JSON object. With ignore_unknown_fields, ParseDict reads
+    # an empty list as an empty message (it iterates the value as if it were
+    # the object's keys), and raises TypeError for null or a number.
     if not isinstance(data, dict):
         raise ParseError(
             f'Expected a JSON object for {message.DESCRIPTOR.name}, '

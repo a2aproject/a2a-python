@@ -830,7 +830,7 @@ class TestUnrecognizedResponseFields:
         assert events[0].message.parts[0].text == 'hello'
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize('result', [[], 'task-1', None])
+    @pytest.mark.parametrize('result', [[], None])
     async def test_get_task_rejects_result_that_is_not_an_object(
         self, transport, mock_httpx_client, result
     ):

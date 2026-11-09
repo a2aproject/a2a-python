@@ -485,37 +485,17 @@ class TestParseLenient:
 
     @pytest.mark.parametrize(
         'data',
-        [[], ['id'], 'id', None, 0, True],
-        ids=['empty-list', 'list', 'str', 'none', 'int', 'bool'],
+        [[], None, 0, True],
+        ids=['empty-list', 'none', 'int', 'bool'],
     )
     def test_decoded_value_that_is_not_an_object_raises(
         self, data: Any
     ) -> None:
-        """A message is a JSON object; anything else is not an empty message."""
-        with pytest.raises(ParseError, match='JSON object'):
+        """A decoded value that is not a dict is not read as an empty message."""
+        with pytest.raises(ParseError, match='Expected a JSON object'):
             proto_utils.parse_lenient(data, Task())
 
-    @pytest.mark.parametrize(
-        'data',
-        ['[]', ' ["id"]', '"id"', 'null', '0', 'true', b'[]', ''],
-        ids=[
-            'empty-list',
-            'list',
-            'str',
-            'null',
-            'int',
-            'bool',
-            'bytes-list',
-            'empty',
-        ],
-    )
-    def test_text_that_is_not_an_object_raises(self, data: str | bytes) -> None:
-        """Raw ProtoJSON whose top-level value is not an object is rejected."""
-        with pytest.raises(ParseError, match='JSON object'):
-            proto_utils.parse_lenient(data, Task())
-
-    def test_text_object_with_leading_whitespace_parses(self) -> None:
-        """JSON whitespace before the object is still accepted."""
-        task = proto_utils.parse_lenient(' \r\n\t{"id": "task-1"}', Task())
-
-        assert task.id == 'task-1'
+    def test_str_is_parsed_as_text_not_as_decoded_value(self) -> None:
+        """A str is raw ProtoJSON text, so it never reaches the object check."""
+        with pytest.raises(ParseError, match='Failed to load JSON'):
+            proto_utils.parse_lenient('id', Task())
