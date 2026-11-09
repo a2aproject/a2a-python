@@ -637,6 +637,8 @@ class ActiveTask:
                     self._task_id,
                 )
                 self._is_finished.set()
+                await self._event_queue_agent.close(immediate=True)
+                await self._event_queue_subscribers.close(immediate=True)
                 if self._reference_count == 0 and self._on_cleanup:
                     self._on_cleanup(self)
                 raise
@@ -867,7 +869,7 @@ class ActiveTask:
                         yield event
                     finally:
                         tapped_queue.task_done()
-                except (QueueShutDown, asyncio.CancelledError):
+                except QueueShutDown:
                     break
         finally:
             logger.debug('Subscribe[%s]: Unsubscribing', self._task_id)

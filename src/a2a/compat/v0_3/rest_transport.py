@@ -262,8 +262,20 @@ class CompatRestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
-        raise NotImplementedError(
-            'list_task_push_notification_configs not supported in v0.3 REST'
+        response_data = await self._execute_request(
+            'GET',
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            context=context,
+        )
+        resp_proto = ParseDict(
+            response_data,
+            a2a_v0_3_pb2.ListTaskPushNotificationConfigResponse(),
+            ignore_unknown_fields=True,
+        )
+        return conversions.to_core_list_task_push_notification_config_response(
+            proto_utils.FromProto.list_task_push_notification_config_response(
+                resp_proto
+            )
         )
 
     async def delete_task_push_notification_config(

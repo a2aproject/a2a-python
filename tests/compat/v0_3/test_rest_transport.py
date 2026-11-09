@@ -561,10 +561,43 @@ async def test_compat_rest_transport_list_tasks(transport):
 async def test_compat_rest_transport_list_task_push_notification_configs(
     transport,
 ):
-    with pytest.raises(NotImplementedError):
-        await transport.list_task_push_notification_configs(
-            ListTaskPushNotificationConfigsRequest()
-        )
+    mock_execute_request = AsyncMock(
+        return_value={
+            'configs': [
+                {
+                    'name': 'tasks/task-123/pushNotificationConfigs/push-1',
+                    'pushNotificationConfig': {
+                        'url': 'http://push-1',
+                        'id': 'push-1',
+                    },
+                },
+                {
+                    'name': 'tasks/task-123/pushNotificationConfigs/push-2',
+                    'pushNotificationConfig': {
+                        'url': 'http://push-2',
+                        'id': 'push-2',
+                    },
+                },
+            ]
+        }
+    )
+    transport._execute_request = mock_execute_request
+
+    response = await transport.list_task_push_notification_configs(
+        ListTaskPushNotificationConfigsRequest(task_id='task-123')
+    )
+
+    mock_execute_request.assert_awaited_once_with(
+        'GET', '/v1/tasks/task-123/pushNotificationConfigs', context=None
+    )
+    assert list(response.configs) == [
+        TaskPushNotificationConfig(
+            id='push-1', task_id='task-123', url='http://push-1'
+        ),
+        TaskPushNotificationConfig(
+            id='push-2', task_id='task-123', url='http://push-2'
+        ),
+    ]
 
 
 @pytest.mark.asyncio

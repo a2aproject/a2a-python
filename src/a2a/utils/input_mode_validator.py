@@ -20,18 +20,28 @@ def validate_input_modes(message: Message, agent_card: AgentCard) -> None:
     a proto3 string, so a part that omits it arrives as `''` and is likewise
     not checked -- only a media type the client actually stated can
     contradict the card.
+
+    Media types are compared on type and subtype alone, ignoring case
+    (RFC 2045 section 5.1) and parameters, so `Text/Plain; charset=utf-8`
+    matches a card that declares `text/plain`.
     """
-    declared = set(agent_card.default_input_modes)
+    modes = set(agent_card.default_input_modes)
     for skill in agent_card.skills:
-        declared.update(skill.input_modes)
+        modes.update(skill.input_modes)
+    declared = {_essence(mode) for mode in modes}
     if not declared:
         return
 
     for part in message.parts:
-        if part.media_type and part.media_type not in declared:
+        if part.media_type and _essence(part.media_type) not in declared:
             raise ContentTypeNotSupportedError(
                 message=(
                     f'Media type {part.media_type} is not supported. '
-                    f'Supported input modes: {", ".join(sorted(declared))}'
+                    f'Supported input modes: {", ".join(sorted(modes))}'
                 )
             )
+
+
+def _essence(media_type: str) -> str:
+    """Returns `type/subtype` in lower case, without parameters."""
+    return media_type.split(';', 1)[0].strip().lower()
