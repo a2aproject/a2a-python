@@ -5,7 +5,6 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-import httpx
 import pytest
 
 from a2a import plugins
@@ -54,6 +53,10 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
+)
+from a2a.utils._httpx_compat import (
+    HTTP_STATUS_ERROR,
+    httpx_lib,
 )
 
 
@@ -514,17 +517,17 @@ def push_setup(
 ) -> tuple[
     InMemoryPushNotificationConfigStore,
     BasePushNotificationSender,
-    list[httpx.Request],
+    list[httpx_lib.Request],
 ]:
-    received: list[httpx.Request] = []
+    received: list[httpx_lib.Request] = []
 
-    def handle(request: httpx.Request) -> httpx.Response:
+    def handle(request: httpx_lib.Request) -> httpx_lib.Response:
         received.append(request)
-        return httpx.Response(responses.get(str(request.url), 200))
+        return httpx_lib.Response(responses.get(str(request.url), 200))
 
     config_store = InMemoryPushNotificationConfigStore()
     sender = BasePushNotificationSender(
-        httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+        httpx_lib.AsyncClient(transport=httpx_lib.MockTransport(handle)),
         config_store,
         plugins=manager,
     )
@@ -571,7 +574,7 @@ async def test_push_hooks_run_for_v2_deliveries():
     await wait_for(lambda: len(recorder.hooks('on_push_sent')) >= 1)
     failed = recorder.hooks('on_push_sent')[0]
     assert failed.status_code == 500
-    assert isinstance(failed.error, httpx.HTTPStatusError)
+    assert isinstance(failed.error, HTTP_STATUS_ERROR)
 
 
 @pytest.mark.asyncio
@@ -618,13 +621,13 @@ async def test_push_url_validator_rejection_runs_no_hooks():
     async def reject(url: str) -> bool:
         return False
 
-    received: list[httpx.Request] = []
+    received: list[httpx_lib.Request] = []
     recorder = Recorder()
     config_store = InMemoryPushNotificationConfigStore()
     sender = BasePushNotificationSender(
-        httpx.AsyncClient(
-            transport=httpx.MockTransport(
-                lambda r: received.append(r) or httpx.Response(200)
+        httpx_lib.AsyncClient(
+            transport=httpx_lib.MockTransport(
+                lambda r: received.append(r) or httpx_lib.Response(200)
             )
         ),
         config_store,
@@ -676,10 +679,10 @@ def test_push_sender_uses_global_manager_unless_given_one():
     other = plugins.sequential()
 
     default = BasePushNotificationSender(
-        httpx.AsyncClient(), InMemoryPushNotificationConfigStore()
+        httpx_lib.AsyncClient(), InMemoryPushNotificationConfigStore()
     )
     explicit = BasePushNotificationSender(
-        httpx.AsyncClient(),
+        httpx_lib.AsyncClient(),
         InMemoryPushNotificationConfigStore(),
         plugins=other,
     )

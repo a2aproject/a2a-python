@@ -7,7 +7,6 @@ from contextlib import AsyncExitStack
 from typing import Any, NamedTuple
 
 import grpc
-import httpx
 import pytest
 import pytest_asyncio
 
@@ -54,6 +53,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.errors import (
     InvalidAgentResponseError,
@@ -184,14 +184,14 @@ def validate_state(event, expected_state):
 
 class RestSetup(NamedTuple):
     app: Starlette
-    httpx_client: httpx.AsyncClient
+    httpx_client: httpx_lib.AsyncClient
 
 
 @pytest_asyncio.fixture(scope='module')
 async def rest_setup() -> AsyncIterator[RestSetup]:
     app = Starlette()
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app), base_url='http://testserver'
     ) as httpx_client:
         yield RestSetup(app, httpx_client)
 

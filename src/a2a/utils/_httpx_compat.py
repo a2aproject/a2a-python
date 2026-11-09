@@ -19,6 +19,8 @@ RESPONSE_NOT_READ: tuple[type[httpx.ResponseNotRead], ...]
 try:
     import httpx2  # ty: ignore[unresolved-import]
 
+    httpx_lib = httpx2
+
     HTTP_STATUS_ERROR = (
         httpx.HTTPStatusError,
         httpx2.HTTPStatusError,
@@ -45,6 +47,8 @@ try:
     Response = httpx.Response | httpx2.Response
     HTTPStatusError = httpx.HTTPStatusError | httpx2.HTTPStatusError
 except ImportError:
+    httpx_lib = httpx
+
     HTTP_STATUS_ERROR = (httpx.HTTPStatusError,)
     REQUEST_ERROR = (httpx.RequestError,)
     TIMEOUT_EXCEPTION = (httpx.TimeoutException,)
@@ -67,4 +71,5 @@ __all__ = [
     'HTTPStatusError',
     'Request',
     'Response',
+    'httpx_lib',
 ]

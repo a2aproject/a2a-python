@@ -7,7 +7,6 @@ from collections.abc import AsyncGenerator, Callable
 from typing import Any, NamedTuple
 
 import grpc
-import httpx
 import pytest
 import pytest_asyncio
 
@@ -48,6 +47,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils._httpx_compat import httpx_lib
 from starlette.applications import Starlette
 
 
@@ -214,8 +214,8 @@ async def setup(request) -> AsyncGenerator[Setup, None]:
         )
     else:
         config = ClientConfig(
-            httpx_client=httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=http_app(handler, card)),
+            httpx_client=httpx_lib.AsyncClient(
+                transport=httpx_lib.ASGITransport(app=http_app(handler, card)),
                 base_url='http://testserver',
             ),
             supported_protocol_bindings=[transport],
@@ -291,8 +291,8 @@ async def test_v03_jsonrpc_requests_run_server_hooks():
         agent_card=agent_card(),
         plugins=plugins.sequential(recorder),
     )
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=http_app(handler, agent_card())),
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=http_app(handler, agent_card())),
         base_url='http://testserver',
     ) as http:
         response = await http.post(
@@ -348,8 +348,8 @@ async def test_two_agent_chain_propagates_state_through_execution():
         agent_card=agent_card(),
         plugins=plugins.sequential(downstream),
     )
-    downstream_http = httpx.AsyncClient(
-        transport=httpx.ASGITransport(
+    downstream_http = httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(
             app=http_app(downstream_handler, agent_card())
         ),
         base_url='http://testserver',
@@ -376,8 +376,8 @@ async def test_two_agent_chain_propagates_state_through_execution():
         task_store=InMemoryTaskStore(),
         agent_card=agent_card(),
     )
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(
             app=http_app(upstream_handler, agent_card())
         ),
         base_url='http://testserver',

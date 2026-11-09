@@ -1,7 +1,6 @@
 from typing import Any
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 
 from a2a import plugins
@@ -35,6 +34,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils._httpx_compat import httpx_lib
 
 
 class Recorder(plugins.ClientPlugin):
@@ -312,9 +312,9 @@ def test_factory_clients_use_the_global_manager():
     manager = plugins.sequential(Recorder())
     plugins.set_global(manager)
 
-    c = ClientFactory(ClientConfig(httpx_client=httpx.AsyncClient())).create(
-        card()
-    )
+    c = ClientFactory(
+        ClientConfig(httpx_client=httpx_lib.AsyncClient())
+    ).create(card())
 
     assert isinstance(c, BaseClient)
     assert c._plugins is manager

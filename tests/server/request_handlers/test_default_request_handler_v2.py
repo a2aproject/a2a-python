@@ -8,7 +8,6 @@ import warnings
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from a2a.auth.user import UnauthenticatedUser, User
@@ -73,6 +72,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import TERMINAL_TASK_STATES
 
 
@@ -2974,7 +2974,7 @@ async def test_push_config_store_failure_does_not_fail_task():
         task_store=task_store,
         push_config_store=FlakyPushConfigStore(),
         push_sender=BasePushNotificationSender(
-            httpx_client=AsyncMock(spec=httpx.AsyncClient),
+            httpx_client=AsyncMock(spec=httpx_lib.AsyncClient),
             config_store=FlakyPushConfigStore(),
         ),
         agent_card=create_default_agent_card(),

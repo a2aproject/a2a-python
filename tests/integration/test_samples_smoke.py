@@ -14,9 +14,13 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx
 import pytest
 import pytest_asyncio
+
+from a2a.utils._httpx_compat import (
+    REQUEST_ERROR,
+    httpx_lib,
+)
 
 
 if TYPE_CHECKING:
@@ -41,13 +45,13 @@ def _free_port() -> int:
 
 async def _wait_for_agent_card(url: str) -> None:
     deadline = asyncio.get_running_loop().time() + STARTUP_TIMEOUT_S
-    async with httpx.AsyncClient(timeout=2.0) as client:
+    async with httpx_lib.AsyncClient(timeout=2.0) as client:
         while asyncio.get_running_loop().time() < deadline:
             try:
                 response = await client.get(url)
                 if response.status_code == 200:
                     return
-            except httpx.RequestError:
+            except REQUEST_ERROR:
                 pass
             await asyncio.sleep(0.2)
     raise TimeoutError(f'Agent did not become ready at {url}')
