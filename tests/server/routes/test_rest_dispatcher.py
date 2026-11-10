@@ -81,6 +81,9 @@ def rest_dispatcher_instance(mock_handler):
 from starlette.datastructures import Headers, QueryParams
 
 
+pytestmark = pytest.mark.httpx2
+
+
 def make_mock_request(
     method: str = 'GET',
     path_params: dict | None = None,

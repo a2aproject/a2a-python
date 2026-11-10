@@ -32,6 +32,9 @@ from .utils import (
 )
 
 
+pytestmark = pytest.mark.httpx2
+
+
 _TEST_USER_HEADER = 'x-test-user'
 
 

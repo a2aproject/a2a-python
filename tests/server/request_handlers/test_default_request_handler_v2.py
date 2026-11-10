@@ -76,6 +76,9 @@ from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import TERMINAL_TASK_STATES
 
 
+pytestmark = pytest.mark.httpx2
+
+
 def create_default_agent_card():
     """Provides a standard AgentCard with streaming and push notifications enabled for tests."""
     return AgentCard(

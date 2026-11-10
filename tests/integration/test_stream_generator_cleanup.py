@@ -36,6 +36,9 @@ from a2a.utils._httpx_compat import httpx_lib
 from starlette.applications import Starlette
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class _MessageExecutor(AgentExecutor):
     """Responds with a single Message event."""
 

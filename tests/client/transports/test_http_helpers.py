@@ -12,6 +12,9 @@ from a2a.client.transports.http_helpers import (
 from a2a.utils._httpx_compat import httpx_lib
 
 
+pytestmark = pytest.mark.httpx2
+
+
 def test_default_sse_error_handler():
     with pytest.raises(
         A2AClientError, match='SSE stream error event received: error_msg'

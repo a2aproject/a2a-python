@@ -104,6 +104,9 @@ def create_send_message_request(text='Hello'):
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 
 
+pytestmark = pytest.mark.httpx2
+
+
 def _assert_extensions_header(mock_kwargs: dict, expected_extensions: set[str]):
     headers = mock_kwargs.get('headers', {})
     assert HTTP_EXTENSION_HEADER in headers

@@ -60,6 +60,9 @@ from a2a.utils._httpx_compat import (
 )
 
 
+pytestmark = pytest.mark.httpx2
+
+
 CARD = AgentCard(
     name='plugin_test_agent',
     version='1.0',

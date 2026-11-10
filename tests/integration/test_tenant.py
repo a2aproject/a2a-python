@@ -22,6 +22,9 @@ from a2a.utils.constants import TransportProtocol
 from starlette.applications import Starlette
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class TestTenantDecorator:
     @pytest.fixture
     def agent_card(self):

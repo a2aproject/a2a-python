@@ -25,6 +25,9 @@ from a2a.utils.constants import (
 )
 
 
+pytestmark = pytest.mark.httpx2
+
+
 @pytest.fixture
 def base_agent_card() -> AgentCard:
     """Provides a base AgentCard for tests."""

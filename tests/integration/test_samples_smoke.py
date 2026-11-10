@@ -23,6 +23,9 @@ from a2a.utils._httpx_compat import (
 )
 
 
+pytestmark = pytest.mark.httpx2
+
+
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 

@@ -49,6 +49,9 @@ from a2a.utils.errors import InvalidParamsError
 from starlette.applications import Starlette
 
 
+pytestmark = pytest.mark.httpx2
+
+
 SUPPORTED_EXTENSION_URIS = [
     'https://example.com/ext/v1',
     'https://example.com/ext/v2',

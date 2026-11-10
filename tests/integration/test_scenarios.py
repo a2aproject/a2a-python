@@ -65,6 +65,9 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 
 
+pytestmark = pytest.mark.httpx2
+
+
 logger = logging.getLogger(__name__)
 
 

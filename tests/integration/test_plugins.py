@@ -51,6 +51,9 @@ from a2a.utils._httpx_compat import httpx_lib
 from starlette.applications import Starlette
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class Recorder(CompletePlugin, ExecutionPlugin, TaskObserverPlugin):
     """Records hooks and adds an ``x-trace`` header to outgoing calls."""
 

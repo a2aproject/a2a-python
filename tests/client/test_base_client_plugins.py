@@ -37,6 +37,9 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils._httpx_compat import httpx_lib
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class Recorder(plugins.ClientPlugin):
     def __init__(self) -> None:
         self.calls: list[tuple[str, Any]] = []

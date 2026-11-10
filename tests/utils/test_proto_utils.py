@@ -32,6 +32,9 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from starlette.datastructures import QueryParams
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class TestToStreamResponse:
     """Tests for to_stream_response function."""
 

@@ -3,6 +3,8 @@ import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
@@ -19,6 +21,9 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.push_url_validator import validate_push_notification_url
 from google.protobuf.json_format import MessageToDict
+
+
+pytestmark = pytest.mark.httpx2
 
 
 def _create_sample_task(

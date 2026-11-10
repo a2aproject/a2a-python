@@ -97,6 +97,9 @@ EXTENDED_AGENT_CARD_DATA = AgentCard(
 from google.protobuf.struct_pb2 import Struct, Value
 
 
+pytestmark = pytest.mark.httpx2
+
+
 TEXT_PART_DATA = Part(text='Hello')
 
 # For proto, Part.data takes a Value(struct_value=Struct)

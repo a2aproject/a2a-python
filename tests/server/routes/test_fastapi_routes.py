@@ -27,6 +27,9 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 
+pytestmark = pytest.mark.httpx2
+
+
 @pytest.fixture
 def agent_card() -> AgentCard:
     return AgentCard(name='Test Agent', version='1.0.0')

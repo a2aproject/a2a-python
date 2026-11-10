@@ -33,6 +33,9 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 
+pytestmark = pytest.mark.httpx2
+
+
 @pytest.fixture
 def mock_httpx_client() -> AsyncMock:
     client = AsyncMock(spec=httpx_lib.AsyncClient)

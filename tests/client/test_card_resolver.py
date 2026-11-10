@@ -33,6 +33,9 @@ from a2a.utils._httpx_compat import httpx_lib
 from google.protobuf.json_format import ParseError
 
 
+pytestmark = pytest.mark.httpx2
+
+
 @pytest.fixture
 def mock_httpx_client():
     """Fixture providing a mocked async httpx client."""

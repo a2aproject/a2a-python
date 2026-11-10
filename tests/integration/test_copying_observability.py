@@ -29,6 +29,9 @@ from a2a.utils._httpx_compat import httpx_lib
 from starlette.applications import Starlette
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class MockMutatingAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         assert context.task_id is not None

@@ -21,6 +21,9 @@ from fastapi import FastAPI
 from starlette.applications import Starlette
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class DummyAgentExecutor(AgentExecutor):
     """An agent executor that does nothing for integration testing."""
 

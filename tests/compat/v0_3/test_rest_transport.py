@@ -30,6 +30,9 @@ from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
 
 
+pytestmark = pytest.mark.httpx2
+
+
 @pytest.fixture
 def mock_httpx_client():
     client = AsyncMock(spec=httpx_lib.AsyncClient)

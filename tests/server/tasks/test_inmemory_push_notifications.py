@@ -5,6 +5,8 @@ import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from a2a.auth.user import User
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.base_push_notification_sender import (
@@ -22,6 +24,9 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils._httpx_compat import httpx_lib
 from google.protobuf.json_format import MessageToDict
+
+
+pytestmark = pytest.mark.httpx2
 
 
 # Suppress logging for cleaner test output, can be enabled for debugging
