@@ -5,15 +5,18 @@ it uses; every base method is a no-op.
 
 Interceptor hooks (``before_*``) may modify their argument or reject the call
 by raising. Exceptions from ``after_*`` and observer hooks (``on_*``) are
-logged and swallowed by the plugin manager.
+logged and swallowed by the plugin manager. ``wrap_*_call`` hooks wrap the
+call itself, so their exceptions propagate to the caller.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from a2a.plugins.types import (
         ClientRequest,
         ClientResponse,
@@ -46,6 +49,14 @@ class ServerPlugin(Plugin):
     async def after_handler_run(self, response: ServerResponse) -> None:
         """Called with the handler result, per stream event, and at the end."""
 
+    async def wrap_server_call(
+        self,
+        request: ServerRequest,
+        call: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        """Runs around each call into the handler.TODO wire."""
+        return await call()
+
 
 class ClientPlugin(Plugin):
     """Hooks around each request made by an A2A `Client`."""
@@ -55,6 +66,14 @@ class ClientPlugin(Plugin):
 
     async def after_client_request(self, response: ClientResponse) -> None:
         """Called with the result, per stream event, and at the end."""
+
+    async def wrap_client_call(
+        self,
+        request: ClientRequest,
+        call: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        """Runs around each call the client makes for a request."""
+        return await call()
 
 
 class ExecutionPlugin(Plugin):
