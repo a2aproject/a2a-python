@@ -9,17 +9,41 @@ from a2a.server.routes.rest_dispatcher import RestDispatcher
 
 
 if TYPE_CHECKING:
-    from starlette.routing import BaseRoute, Mount, Route
+    from starlette.routing import BaseRoute, Route
+    from starlette.routing import Mount as _TenantMount
 
     _package_starlette_installed = True
 else:
     try:
-        from starlette.routing import BaseRoute, Mount, Route
+        from starlette.routing import BaseRoute, Match, Mount, Route
+        from starlette.types import Scope
+
+        class _TenantMount(Mount):
+            """Mount that claims a request only when one of its routes matches.
+
+            A plain ``Mount('/{tenant}')`` claims every path with two or more
+            segments, so a route registered after it, such as the agent card
+            or a user's ``/health/live``, would get a 404 from the mount.
+            """
+
+            def matches(self, scope: Scope) -> tuple[Match, Scope]:
+                match, child_scope = super().matches(scope)
+                if match is not Match.FULL:
+                    return match, child_scope
+                route_scope = {**scope, **child_scope}
+                route_matches = {
+                    route.matches(route_scope)[0] for route in self.routes
+                }
+                if Match.FULL in route_matches:
+                    return Match.FULL, child_scope
+                if Match.PARTIAL in route_matches:
+                    return Match.PARTIAL, child_scope
+                return Match.NONE, {}
 
         _package_starlette_installed = True
     except ImportError:
         Route = Any
-        Mount = Any
+        _TenantMount = Any
         BaseRoute = Any
 
         _package_starlette_installed = False
@@ -120,6 +144,6 @@ def create_rest_routes(
             )
         )
     routes.extend(base_route_objects)
-    routes.append(Mount(path='/{tenant}', routes=base_route_objects))
+    routes.append(_TenantMount(path='/{tenant}', routes=base_route_objects))
 
     return routes

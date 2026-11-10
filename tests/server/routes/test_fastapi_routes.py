@@ -103,6 +103,20 @@ def test_tenant_mount_still_dispatches(mock_handler: AsyncMock) -> None:
     assert context.tenant == 'my-tenant'
 
 
+def test_app_routes_declared_later_stay_reachable(
+    mock_handler: AsyncMock,
+) -> None:
+    """The tenant mount does not hide routes the app declares after it."""
+    app = FastAPI()
+    add_a2a_routes_to_fastapi(app, rest_routes=create_rest_routes(mock_handler))
+
+    @app.get('/health/live')
+    def live() -> str:
+        return 'ok'
+
+    assert TestClient(app).get('/health/live').status_code == 200
+
+
 def test_partial_groups(agent_card: AgentCard, mock_handler: AsyncMock) -> None:
     """Calling with only a subset of groups works and tags only those."""
     app = FastAPI()

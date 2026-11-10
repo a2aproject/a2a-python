@@ -3,10 +3,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types.a2a_pb2 import AgentCard, ListTasksResponse, Task
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from starlette.applications import Starlette
-from starlette.routing import BaseRoute
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
+from starlette.routing import BaseRoute, Route
 from starlette.testclient import TestClient
 
 
@@ -98,6 +102,35 @@ def test_rest_endpoints_routing_tenant(agent_card, mock_handler):
     # call_args[0] is positional args. In on_message_send(params, context):
     context = call_args[0][1]
     assert context.tenant == 'my-tenant'
+
+
+async def _ok(request: Request) -> PlainTextResponse:
+    return PlainTextResponse('ok')
+
+
+def test_routes_after_rest_routes_stay_reachable(mock_handler):
+    """The tenant mount does not answer paths its routes do not serve."""
+    app = Starlette(
+        routes=[
+            *create_rest_routes(request_handler=mock_handler),
+            *create_agent_card_routes(AgentCard(name='Test Agent')),
+            Route('/health/live', _ok),
+        ]
+    )
+    client = TestClient(app)
+
+    assert client.get(AGENT_CARD_WELL_KNOWN_PATH).status_code == 200
+    assert client.get('/health/live').status_code == 200
+    assert client.get('/my-tenant/unknown').status_code == 404
+
+
+def test_rest_tenant_routes_keep_method_not_allowed(mock_handler):
+    """A tenant path served for another method still answers 405."""
+    client = TestClient(Starlette(routes=create_rest_routes(mock_handler)))
+
+    response = client.delete('/my-tenant/tasks', headers={'A2A-Version': '1.0'})
+
+    assert response.status_code == 405
 
 
 def test_rest_list_tasks(agent_card, mock_handler):
