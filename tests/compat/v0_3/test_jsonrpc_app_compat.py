@@ -208,6 +208,27 @@ def test_get_task_not_found_v03_compat(
     assert data['error']['message'] == 'Task not found'
 
 
+def test_invalid_params_v03_compat(
+    client: TestClient, mock_handler: AsyncMock
+) -> None:
+    # The JSON-RPC envelope is valid but the params are not: a v0.3 Message
+    # requires `parts`, so validating params fails and must return -32602.
+    request_payload = {
+        'jsonrpc': '2.0',
+        'id': '7',
+        'method': 'message/send',
+        'params': {'message': {'messageId': 'req', 'role': 'user'}},
+    }
+
+    response = client.post('/', json=request_payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data['id'] == '7'
+    assert data['error']['code'] == -32602
+    mock_handler.on_message_send.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ('error', 'expected_code'),
     [

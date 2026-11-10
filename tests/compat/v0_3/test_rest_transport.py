@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from a2a.client.errors import A2AClientError
+from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.rest_transport import CompatRestTransport
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -192,6 +193,56 @@ async def test_compat_rest_transport_get_extended_agent_card(transport):
 
     assert response.name == 'ExtendedAgent'
     assert response.capabilities.extended_agent_card is True
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_get_extended_agent_card_keeps_security(
+    transport,
+):
+    """v0.3 servers send the card as JSON, not as the v0.3 proto."""
+    card = types_v03.AgentCard(
+        name='ExtendedAgent',
+        description='Extended',
+        version='1.0.0',
+        url='http://example.com',
+        capabilities=types_v03.AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            types_v03.AgentSkill(
+                id='skill-1',
+                name='Skill',
+                description='Skill',
+                tags=['tag'],
+                security=[{'bearer': []}],
+            )
+        ],
+        security_schemes={
+            'bearer': types_v03.SecurityScheme(
+                root=types_v03.HTTPAuthSecurityScheme(scheme='bearer')
+            )
+        },
+        security=[{'bearer': []}],
+        supports_authenticated_extended_card=True,
+    )
+
+    async def mock_send_request(*args, **kwargs):
+        # Same serialization as REST03Handler.on_get_extended_agent_card.
+        return card.model_dump(mode='json', exclude_none=True)
+
+    transport._send_request = mock_send_request
+
+    response = await transport.get_extended_agent_card(
+        GetExtendedAgentCardRequest()
+    )
+
+    scheme = response.security_schemes['bearer']
+    assert scheme.WhichOneof('scheme') == 'http_auth_security_scheme'
+    assert scheme.http_auth_security_scheme.scheme == 'bearer'
+    assert list(response.security_requirements[0].schemes) == ['bearer']
+    assert list(response.skills[0].security_requirements[0].schemes) == [
+        'bearer'
+    ]
 
 
 @pytest.mark.asyncio
@@ -513,10 +564,43 @@ async def test_compat_rest_transport_list_tasks(transport):
 async def test_compat_rest_transport_list_task_push_notification_configs(
     transport,
 ):
-    with pytest.raises(NotImplementedError):
-        await transport.list_task_push_notification_configs(
-            ListTaskPushNotificationConfigsRequest()
-        )
+    mock_execute_request = AsyncMock(
+        return_value={
+            'configs': [
+                {
+                    'name': 'tasks/task-123/pushNotificationConfigs/push-1',
+                    'pushNotificationConfig': {
+                        'url': 'http://push-1',
+                        'id': 'push-1',
+                    },
+                },
+                {
+                    'name': 'tasks/task-123/pushNotificationConfigs/push-2',
+                    'pushNotificationConfig': {
+                        'url': 'http://push-2',
+                        'id': 'push-2',
+                    },
+                },
+            ]
+        }
+    )
+    transport._execute_request = mock_execute_request
+
+    response = await transport.list_task_push_notification_configs(
+        ListTaskPushNotificationConfigsRequest(task_id='task-123')
+    )
+
+    mock_execute_request.assert_awaited_once_with(
+        'GET', '/v1/tasks/task-123/pushNotificationConfigs', context=None
+    )
+    assert list(response.configs) == [
+        TaskPushNotificationConfig(
+            id='push-1', task_id='task-123', url='http://push-1'
+        ),
+        TaskPushNotificationConfig(
+            id='push-2', task_id='task-123', url='http://push-2'
+        ),
+    ]
 
 
 @pytest.mark.asyncio

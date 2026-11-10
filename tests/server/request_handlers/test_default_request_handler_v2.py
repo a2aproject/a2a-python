@@ -23,7 +23,7 @@ from a2a.server.agent_execution import (
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventQueue, InMemoryQueueManager
+from a2a.server.events import Event, EventQueue, InMemoryQueueManager
 from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.request_handlers import DefaultRequestHandlerV2
 from a2a.server.tasks import (
@@ -2721,6 +2721,188 @@ async def test_on_cancel_of_parked_task_is_owner_scoped():
     assert alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
 
     agent.release.set()
+    await handler.aclose()
+
+
+class _ReleaseThenCompleteAgent(_HangingAgent):
+    """Like ``_HangingAgent``, but completes the task once released."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.task_id: str | None = None
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.task_id = context.task_id
+        await super().execute(context, event_queue)
+        updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+        await updater.complete()
+
+
+async def _wait_for_task_state(handler, task_id, ctx, state) -> None:
+    async def poll() -> None:
+        while True:
+            task = await handler.on_get_task(GetTaskRequest(id=task_id), ctx)
+            if task.status.state == state:
+                return
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(poll(), timeout=5)
+
+
+async def _assert_task_survives(handler, agent, ctx) -> None:
+    """The task keeps running after its caller goes away and still finishes."""
+    assert agent.task_id is not None
+    await asyncio.sleep(0.1)
+    assert not agent.cancel_called.is_set()
+    assert await handler._active_task_registry.get(agent.task_id) is not None
+
+    agent.release.set()
+    await _wait_for_task_state(
+        handler, agent.task_id, ctx, TaskState.TASK_STATE_COMPLETED
+    )
+
+
+def _hanging_send_request(text: str) -> SendMessageRequest:
+    return SendMessageRequest(
+        message=Message(
+            message_id=f'msg-{text}',
+            role=Role.ROLE_USER,
+            parts=[Part(text=text)],
+        )
+    )
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_wait_for_times_out_while_task_works():
+    """A caller timeout on a blocking send raises instead of returning the
+    unfinished task."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(
+            handler.on_message_send(
+                _hanging_send_request('timeout'), create_server_call_context()
+            ),
+            timeout=0.5,
+        )
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_propagates_caller_cancellation():
+    """Cancelling the task that awaits a blocking send cancels it, and only
+    it: the agent keeps running."""
+    agent = _ReleaseThenCompleteAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    ctx = create_server_call_context()
+
+    send = asyncio.create_task(
+        handler.on_message_send(_hanging_send_request('cancel'), ctx)
+    )
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+    send.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await send
+    assert send.cancelled()
+
+    await _assert_task_survives(handler, agent, ctx)
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_stream_propagates_consumer_cancellation():
+    """Cancelling a stream consumer cancels it instead of ending the stream
+    as if the task had finished, and leaves the agent running."""
+    agent = _ReleaseThenCompleteAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    ctx = create_server_call_context()
+
+    async def consume() -> None:
+        async for _ in handler.on_message_send_stream(
+            _hanging_send_request('stream'), ctx
+        ):
+            pass
+
+    reader = asyncio.create_task(consume())
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+    reader.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await reader
+    assert reader.cancelled()
+
+    await _assert_task_survives(handler, agent, ctx)
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_subscribe_to_task_propagates_consumer_cancellation():
+    """Cancelling one resubscriber cancels only that consumer. The task and
+    the other subscriber keep going until the task completes."""
+    agent = _ReleaseThenCompleteAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    ctx = create_server_call_context()
+
+    task_id = await _start_live_task(handler, ctx, 'resubscribe')
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+
+    def subscriber() -> tuple[asyncio.Task, list[Event], asyncio.Event]:
+        events: list[Event] = []
+        attached = asyncio.Event()
+
+        async def consume() -> None:
+            async for event in handler.on_subscribe_to_task(
+                SubscribeToTaskRequest(id=task_id), ctx
+            ):
+                events.append(event)
+                attached.set()
+
+        return asyncio.create_task(consume()), events, attached
+
+    cancelled, _, cancelled_attached = subscriber()
+    other, other_events, other_attached = subscriber()
+    await asyncio.wait_for(cancelled_attached.wait(), timeout=5)
+    await asyncio.wait_for(other_attached.wait(), timeout=5)
+
+    cancelled.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled
+    assert cancelled.cancelled()
+    assert not other.done()
+
+    await _assert_task_survives(handler, agent, ctx)
+
+    await asyncio.wait_for(other, timeout=5)
+    last = other_events[-1]
+    assert isinstance(last, TaskStatusUpdateEvent)
+    assert last.status.state == TaskState.TASK_STATE_COMPLETED
+
     await handler.aclose()
 
 
