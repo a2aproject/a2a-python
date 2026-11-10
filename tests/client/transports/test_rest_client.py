@@ -918,3 +918,86 @@ class TestRestUnrecognizedResponseFields:
         assert len(events) == 1
         assert events[0].message.message_id == 'r1'
         assert events[0].message.parts[0].text == 'hello'
+
+
+_TASK_NOT_FOUND_BODY = {
+    'error': {
+        'code': 404,
+        'status': 'NOT_FOUND',
+        'message': 'Task t1 not found',
+        'details': [
+            {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                'reason': 'TASK_NOT_FOUND',
+                'domain': 'a2a-protocol.org',
+            }
+        ],
+    }
+}
+
+
+class TestRestStreamErrors:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'sse_lines',
+        [
+            ['event: error', f'data: {json.dumps(_TASK_NOT_FOUND_BODY)}', ''],
+            [f'data: {json.dumps(_TASK_NOT_FOUND_BODY)}', ''],
+        ],
+        ids=['error_event', 'data_event'],
+    )
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_stream_error_raises_mapped_error(
+        self,
+        mock_sse_source: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        sse_lines: list[str],
+    ):
+        """An error body raises whether or not the event is named `error`."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.return_value = async_iterable_from_list(
+            sse_lines
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        with pytest.raises(TaskNotFoundError, match='Task t1 not found'):
+            async for _ in client.subscribe(SubscribeToTaskRequest(id='t1')):
+                pass
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_stream_event_of_unknown_type_is_still_yielded(
+        self,
+        mock_sse_source: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        """An event with no known payload and no error stays a lenient parse."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.return_value = async_iterable_from_list(
+            [f'data: {json.dumps({"someNewEvent": {"id": "e1"}})}', '']
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        events = [
+            event
+            async for event in client.subscribe(SubscribeToTaskRequest(id='t1'))
+        ]
+
+        assert len(events) == 1
+        assert events[0].WhichOneof('payload') is None
