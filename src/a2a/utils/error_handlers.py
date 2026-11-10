@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 ERROR_INFO_TYPE = 'type.googleapis.com/google.rpc.ErrorInfo'
 BAD_REQUEST_TYPE = 'type.googleapis.com/google.rpc.BadRequest'
 A2A_DOMAIN = 'a2a-protocol.org'
+JSON_MEDIA_TYPE = 'application/json'
 
 
 def _error_info(
@@ -131,7 +132,9 @@ def build_rest_error_payload(error: Exception) -> dict[str, Any]:
     )
 
 
-def _create_error_response(error: Exception) -> Response:
+def _create_error_response(
+    error: Exception, media_type: str = JSON_MEDIA_TYPE
+) -> Response:
     """Helper function to create a JSONResponse for an error."""
     if isinstance(error, A2AError):
         log_level = (
@@ -157,29 +160,43 @@ def _create_error_response(error: Exception) -> Response:
     return JSONResponse(
         content=payload,
         status_code=http_code,
-        media_type='application/json',
+        media_type=media_type,
     )
 
 
 def rest_error_handler(
     func: Callable[..., Awaitable[Response]],
+    *,
+    media_type: str = JSON_MEDIA_TYPE,
 ) -> Callable[..., Awaitable[Response]]:
-    """Decorator to catch A2AError and map it to an appropriate JSONResponse."""
+    """Decorator to catch A2AError and map it to an appropriate JSONResponse.
+
+    Args:
+        func: The handler to wrap.
+        media_type: The Content-Type of the error response.
+    """
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Response:
         try:
             return await func(*args, **kwargs)
         except Exception as error:  # noqa: BLE001
-            return _create_error_response(error)
+            return _create_error_response(error, media_type)
 
     return wrapper
 
 
 def rest_stream_error_handler(
     func: Callable[..., Coroutine[Any, Any, Any]],
+    *,
+    media_type: str = JSON_MEDIA_TYPE,
 ) -> Callable[..., Coroutine[Any, Any, Any]]:
-    """Decorator to catch A2AError for a streaming method. Maps synchronous errors to JSONResponse and logs streaming errors."""
+    """Decorator to catch A2AError for a streaming method. Maps synchronous errors to JSONResponse and logs streaming errors.
+
+    Args:
+        func: The handler to wrap.
+        media_type: The Content-Type of a synchronous error response.
+    """
 
     def _log_error(error: Exception) -> None:
         if isinstance(error, A2AError):
@@ -223,7 +240,7 @@ def rest_stream_error_handler(
                 response.body_iterator = error_catching_iterator()
 
         except Exception as e:  # noqa: BLE001
-            return _create_error_response(e)
+            return _create_error_response(e, media_type)
         else:
             return response
 
