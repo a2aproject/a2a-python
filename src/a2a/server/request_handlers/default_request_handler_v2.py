@@ -476,6 +476,14 @@ class DefaultRequestHandlerV2(RequestHandler):
         task_id = cast('str', request_context.task_id)
 
         result: Message | Task | None = None
+        # A resumed turn starts from an interrupted state (e.g. input
+        # required). If the executor re-emits the inherited task snapshot
+        # at turn start, that replayed event must not end the blocking
+        # wait before the new turn has done any work: ignore the first
+        # event when it is an interrupted task snapshot. The turn's real
+        # outcome is returned once the executor reports it, or via the
+        # get_task() fallback below if the turn ends without one.
+        first_event = True
 
         async for raw_event in active_task.subscribe(
             request=request_context,
@@ -483,6 +491,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             replace_status_update_with_task=True,
         ):
             event = raw_event
+            is_first_event, first_event = first_event, False
             logger.debug(
                 'Processing[%s] event [%s] %s',
                 params.message.task_id,
@@ -494,6 +503,14 @@ class DefaultRequestHandlerV2(RequestHandler):
                 or event.status.state
                 in (TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES)
             ):
+                if (
+                    not params.configuration.return_immediately
+                    and is_first_event
+                    and event.status.state in INTERRUPTED_TASK_STATES
+                ):
+                    # Initial replayed snapshot of the inherited
+                    # interrupted state; keep waiting for the new turn.
+                    continue
                 self._validate_task_id_match(task_id, event.id)
                 result = event
                 # A FAILED task may be followed by a producer exception. Keep
