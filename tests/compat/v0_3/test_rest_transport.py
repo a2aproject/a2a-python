@@ -579,13 +579,7 @@ async def test_compat_rest_transport_send_message_empty(transport):
 async def test_compat_rest_transport_send_message_without_configuration(
     transport,
 ):
-    """A request without a configuration must not send one.
-
-    The v0.3 `blocking` field has no presence, so an empty configuration is
-    read by the server as `blocking: false` and the call returns before the
-    task finishes. Without a configuration the server blocks by default, as
-    it does for the v0.3 JSON-RPC transport.
-    """
+    """No configuration is sent, so the server keeps its blocking default."""
     sent: dict = {}
 
     async def mock_execute_request(method, path, context=None, json=None):

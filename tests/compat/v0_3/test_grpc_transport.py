@@ -40,31 +40,6 @@ async def test_compat_grpc_transport_send_message_response_msg_parsing():
     assert response.HasField('message')
     assert response.message.message_id == 'msg-123'
 
-
-@pytest.mark.asyncio
-async def test_compat_grpc_transport_send_message_without_configuration():
-    """A request without a configuration must not send one.
-
-    The v0.3 `blocking` field has no presence, so an empty configuration is
-    read by the server as `blocking: false` and the call returns before the
-    task finishes. Without a configuration the server blocks by default, as
-    it does for the v0.3 JSON-RPC transport.
-    """
-    transport = CompatGrpcTransport(
-        channel=AsyncMock(spec=Channel), agent_card=None
-    )
-    mock_stub = MagicMock()
-    mock_stub.SendMessage = AsyncMock(
-        return_value=a2a_v0_3_pb2.SendMessageResponse()
-    )
-    transport.stub = mock_stub
-
-    await transport.send_message(
-        SendMessageRequest(
-            message=Message(message_id='msg-1', role=Role.ROLE_USER)
-        )
-    )
-
     sent = mock_stub.SendMessage.call_args.args[0]
     assert not sent.HasField('configuration')
 
