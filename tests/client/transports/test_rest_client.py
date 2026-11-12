@@ -36,6 +36,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import (
     PROTOCOL_VERSION_CURRENT,
     VERSION_HEADER,
@@ -46,9 +47,6 @@ from a2a.utils.errors import (
     MethodNotFoundError,
     TaskNotFoundError,
 )
-from a2a.utils._httpx_compat import httpx_lib
-from a2a.utils.constants import TransportProtocol
-from a2a.utils.errors import A2A_ERROR_MAPPING, MethodNotFoundError
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 from starlette.applications import Starlette
@@ -806,8 +804,8 @@ class TestRestTransportPathEncoding:
         app = Starlette(
             routes=create_rest_routes(request_handler=request_handler)
         )
-        httpx_client = httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
+        httpx_client = httpx_lib.AsyncClient(
+            transport=httpx_lib.ASGITransport(app=app),
             headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
         )
         transport = RestTransport(httpx_client, agent_card, 'http://agent')
