@@ -555,10 +555,12 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         task_id = cast('str', request_context.task_id)
 
+        produced_event = False
         async for event in active_task.subscribe(
             request=request_context,
             include_initial_task=False,
         ):
+            produced_event = True
             # Do NOT break here as we rely on AgentExecutor to yield control.
             # ActiveTask consumer (see active_task.py) validates the event
             # stream and raises InvalidAgentResponseError on misbehaving agents:
@@ -570,6 +572,13 @@ class DefaultRequestHandlerV2(RequestHandler):
                 yield apply_history_length(event, params.configuration)
             else:
                 yield event
+
+        if not produced_event and not active_task.task_created:
+            # A silent executor would otherwise end the stream without the
+            # Task or Message it must start with.
+            raise InvalidAgentResponseError(
+                message='Agent execution produced no events'
+            )
 
     @server_plugin_hooks('create_task_push_notification_config')
     @validate_request_params
