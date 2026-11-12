@@ -605,10 +605,21 @@ async def test_compat_rest_transport_list_task_push_notification_configs(
 async def test_compat_rest_transport_delete_task_push_notification_config(
     transport,
 ):
-    with pytest.raises(NotImplementedError):
-        await transport.delete_task_push_notification_config(
-            DeleteTaskPushNotificationConfigRequest()
+    mock_execute_request = AsyncMock(return_value={})
+    transport._execute_request = mock_execute_request
+
+    response = await transport.delete_task_push_notification_config(
+        DeleteTaskPushNotificationConfigRequest(
+            task_id='task-123', id='push-123'
         )
+    )
+
+    mock_execute_request.assert_awaited_once_with(
+        'DELETE',
+        '/v1/tasks/task-123/pushNotificationConfigs/push-123',
+        context=None,
+    )
+    assert response is None
 
 
 @pytest.mark.asyncio
