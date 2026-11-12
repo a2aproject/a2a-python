@@ -52,9 +52,18 @@ class ResolvedUrl:
 
 
 def _is_non_public(address: UrlAddress) -> bool:
-    """Whether an address is not a public unicast destination."""
+    """Whether an address is not a public unicast destination.
+
+    RFC 6598 shared address space (100.64.0.0/10) is not public:
+    ``ipaddress`` leaves ``is_private`` false for it and ``is_global``
+    false as well, so ``not is_global`` still rejects it. An IPv4-mapped
+    IPv6 address is judged as the IPv4 address inside it.
+    """
+    mapped = getattr(address, 'ipv4_mapped', None)
+    if mapped is not None:
+        address = mapped
     return (
-        address.is_private
+        not address.is_global
         or address.is_loopback
         or address.is_link_local
         or address.is_multicast
