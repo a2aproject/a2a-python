@@ -49,14 +49,14 @@ Each claim is anchored to current `main`. Re-read the file before quoting.
    the store is fixed and the other three surfaces stay broken.
 3. **`CopyFrom` inherits the previous timestamp.** A copy-then-set-state
    transition (for example the cancel path,
-   `src/a2a/server/agent_execution/active_task.py:971-973`) reuses whatever
+   `src/a2a/server/agent_execution/active_task.py:979-982`) reuses whatever
    timestamp the prior state had, so the terminal write looks like a
    `WORKING` update. Set `status.timestamp` explicitly on every transition
    you introduce.
 4. **Push delivery is best-effort and never task-affecting.**
    `_dispatch_notification` already contains delivery failures and returns
    a bool; `send_notification` is awaited inline from the consumer at
-   `src/a2a/server/agent_execution/active_task.py:409`. Anything that can
+   `src/a2a/server/agent_execution/active_task.py:410`. Anything that can
    raise there (config-store reads, URL validators, custom senders) must not
    escape into the failure path, or a webhook hiccup rewrites a completed
    task to `FAILED`.
@@ -64,13 +64,14 @@ Each claim is anchored to current `main`. Re-read the file before quoting.
    `on_message_send` falls through to `active_task.get_task()`
    (`src/a2a/server/request_handlers/default_request_handler_v2.py:518-520`),
    which awaits `_task_created` with no timeout
-   (`src/a2a/server/agent_execution/active_task.py:1115-1117`) and hangs the
-   request, producer, and consumer forever. Guard before awaiting, or the
-   fallback must be bounded.
+   (`src/a2a/server/agent_execution/active_task.py:1130`) and hangs the
+   request, producer, and consumer forever. Guard before awaiting (the
+   `on_message_send` caller has done so since #1345), or the fallback
+   must be bounded.
 6. **Store and stream must agree.** A blocking call may return a shared
    snapshot while later events land on the store — the copy-on-yield caveat
    is documented in-code at
-   `src/a2a/server/agent_execution/active_task.py:965-970` (tracked in
+   `src/a2a/server/agent_execution/active_task.py:974-981` (tracked in
    #1175 / #1191). After any change here, assert `GetTask` equals what the
    caller received.
 7. **v0.3 compat has two independent mappers.** `compat/v0_3/proto_utils.py`
