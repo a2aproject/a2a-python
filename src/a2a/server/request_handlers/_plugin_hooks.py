@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import inspect
 
@@ -82,7 +83,7 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                                 )
                             )
                             yield event
-                except Exception as e:
+                except (Exception, asyncio.CancelledError) as e:
                     error = e
                     raise
                 finally:
@@ -110,7 +111,8 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
             )
             try:
                 result = await func(self, params, context, *args, **kwargs)
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
+                # A cancelled call still gets its after call, as streams do.
                 await plugins.after_handler_run(
                     ServerResponse(method, None, context, error=e)
                 )
