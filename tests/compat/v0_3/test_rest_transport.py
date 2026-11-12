@@ -20,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     Message,
     Role,
+    SendMessageConfiguration,
     SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
@@ -623,6 +624,50 @@ async def test_compat_rest_transport_send_message_empty(transport):
 
     response = await transport.send_message(req)
     assert response == SendMessageResponse()
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_without_configuration(
+    transport,
+):
+    """No configuration is sent, so the server keeps its blocking default."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER)
+    )
+    await transport.send_message(req)
+
+    assert 'configuration' not in sent
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_with_configuration(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert sent['configuration']['blocking'] is True
 
 
 @pytest.mark.asyncio

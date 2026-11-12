@@ -307,9 +307,11 @@ class ToProto:
     @classmethod
     def message_send_configuration(
         cls, config: types.MessageSendConfiguration | None
-    ) -> a2a_pb2.SendMessageConfiguration:
+    ) -> a2a_pb2.SendMessageConfiguration | None:
+        # An empty configuration reads as blocking=false, so send none and
+        # leave the server on its blocking default.
         if not config:
-            return a2a_pb2.SendMessageConfiguration()
+            return None
         return a2a_pb2.SendMessageConfiguration(
             accepted_output_modes=config.accepted_output_modes,
             push_notification=cls.push_notification_config(

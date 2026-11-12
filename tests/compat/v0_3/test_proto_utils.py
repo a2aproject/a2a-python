@@ -301,6 +301,7 @@ class TestProtoUtils:
         assert proto_utils.ToProto.provider(None) is None
         assert proto_utils.ToProto.security(None) is None
         assert proto_utils.ToProto.security_schemes(None) is None
+        assert proto_utils.ToProto.message_send_configuration(None) is None
 
     def test_metadata_conversion(self):
         """Test metadata conversion with various data types."""
