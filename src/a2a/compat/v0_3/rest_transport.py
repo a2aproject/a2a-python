@@ -4,6 +4,7 @@ import logging
 
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
+from urllib.parse import quote
 
 import httpx
 
@@ -56,6 +57,11 @@ logger = logging.getLogger(__name__)
 _A2A_ERROR_NAME_TO_CLS = {
     error_type.__name__: error_type for error_type in JSON_RPC_ERROR_CODE_MAP
 }
+
+
+def _quote_id(value: str) -> str:
+    """Percent-encodes an id so it stays a single URL path segment."""
+    return quote(value, safe='')
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -163,7 +169,7 @@ class CompatRestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/v1/tasks/{request.id}',
+            f'/v1/tasks/{_quote_id(request.id)}',
             context=context,
             params=params,
         )
@@ -192,7 +198,7 @@ class CompatRestTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/v1/tasks/{request.id}:cancel',
+            f'/v1/tasks/{_quote_id(request.id)}:cancel',
             context=context,
         )
         resp_proto = ParseDict(
@@ -221,7 +227,7 @@ class CompatRestTransport(ClientTransport):
         )
         response_data = await self._execute_request(
             'POST',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/v1/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             context=context,
             json=MessageToDict(req_proto, preserving_proto_field_name=True),
         )
@@ -243,7 +249,8 @@ class CompatRestTransport(ClientTransport):
         """Retrieves the push notification configuration for a specific task."""
         response_data = await self._execute_request(
             'GET',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/v1/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             context=context,
         )
         resp_proto = ParseDict(
@@ -264,7 +271,7 @@ class CompatRestTransport(ClientTransport):
         """Lists push notification configurations for a specific task."""
         response_data = await self._execute_request(
             'GET',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/v1/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             context=context,
         )
         resp_proto = ParseDict(
@@ -308,7 +315,7 @@ class CompatRestTransport(ClientTransport):
         try:
             async for event in self._send_stream_request(
                 subscribe_method,
-                f'/v1/tasks/{request.id}:subscribe',
+                f'/v1/tasks/{_quote_id(request.id)}:subscribe',
                 context=context,
             ):
                 yield event
