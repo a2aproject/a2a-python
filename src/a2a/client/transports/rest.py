@@ -3,6 +3,7 @@ import logging
 
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
+from urllib.parse import quote
 
 import httpx
 
@@ -90,6 +91,11 @@ def _parse_rest_error(
     return None
 
 
+def _quote_id(value: str) -> str:
+    """Percent-encodes an id so it stays a single URL path segment."""
+    return quote(value, safe='')
+
+
 @trace_class(kind=SpanKind.CLIENT)
 class RestTransport(ClientTransport):
     """A REST transport for the A2A client."""
@@ -159,7 +165,7 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.id}',
+            f'/tasks/{_quote_id(request.id)}',
             request.tenant,
             context=context,
             params=params,
@@ -199,7 +205,7 @@ class RestTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/tasks/{request.id}:cancel',
+            f'/tasks/{_quote_id(request.id)}:cancel',
             request.tenant,
             context=context,
             json=MessageToDict(request),
@@ -216,7 +222,7 @@ class RestTransport(ClientTransport):
         """Sets or updates the push notification configuration for a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             request.tenant,
             context=context,
             json=MessageToDict(request),
@@ -243,7 +249,8 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             request.tenant,
             context=context,
             params=params,
@@ -268,7 +275,7 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             request.tenant,
             context=context,
             params=params,
@@ -295,7 +302,8 @@ class RestTransport(ClientTransport):
 
         await self._execute_request(
             'DELETE',
-            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             request.tenant,
             context=context,
             params=params,
@@ -310,7 +318,7 @@ class RestTransport(ClientTransport):
         """Reconnects to get task updates."""
         async for event in self._send_stream_request(
             'POST',
-            f'/tasks/{request.id}:subscribe',
+            f'/tasks/{_quote_id(request.id)}:subscribe',
             request.tenant,
             context=context,
         ):

@@ -40,6 +40,9 @@ async def test_compat_grpc_transport_send_message_response_msg_parsing():
     assert response.HasField('message')
     assert response.message.message_id == 'msg-123'
 
+    sent = mock_stub.SendMessage.call_args.args[0]
+    assert not sent.HasField('configuration')
+
 
 def test_compat_grpc_transport_mirrors_extension_metadata():
     """Compat gRPC client must also emit the legacy x-a2a-extensions metadata
