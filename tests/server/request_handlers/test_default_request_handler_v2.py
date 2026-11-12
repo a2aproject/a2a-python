@@ -3068,6 +3068,75 @@ async def test_follow_up_message_runs_in_sender_contextvars(streaming):
     await handler.aclose()
 
 
+class _ReplayStaleSnapshotThenCompleteAgent(AgentExecutor):
+    """Parks a task in input-required, then replays the stale snapshot.
+
+    Regression test executor for #1409: on the continuation turn it
+    re-emits ``context.current_task`` (the inherited input-required
+    snapshot) before doing the real work of completing the task.
+    """
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        if context.current_task is None:
+            task = new_task_from_user_message(context.message)
+            await event_queue.enqueue_event(task)
+            updater = TaskUpdater(event_queue, task.id, task.context_id)
+            await updater.update_status(TaskState.TASK_STATE_INPUT_REQUIRED)
+            return
+        await event_queue.enqueue_event(context.current_task)
+        updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_ignores_replayed_interrupted_snapshot():
+    """Issue #1409: a blocking continuation must not return the stale
+    input-required snapshot re-emitted by the executor at turn start."""
+    agent = _ReplayStaleSnapshotThenCompleteAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    first = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER,
+                message_id='msg-1',
+                parts=[Part(text='book a flight')],
+            )
+        ),
+        context,
+    )
+    assert isinstance(first, Task)
+    assert first.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    result = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER,
+                message_id='msg-2',
+                parts=[Part(text='Friday')],
+                task_id=first.id,
+                context_id=first.context_id,
+            )
+        ),
+        context,
+    )
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
+
+
 def _complete_agent_card() -> AgentCard:
     """Returns an AgentCard with every field the A2A spec marks REQUIRED."""
     return AgentCard(
