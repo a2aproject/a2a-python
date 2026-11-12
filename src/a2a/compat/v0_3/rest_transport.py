@@ -45,6 +45,14 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils._httpx_compat import (
+    HTTP_STATUS_ERROR,
+    RESPONSE_NOT_READ,
+    STREAM_CLOSED,
+    AsyncClient,
+    HTTPStatusError,
+    Request,
+)
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, MethodNotFoundError
 from a2a.utils.proto_utils import warn_on_missing_required_fields
@@ -64,7 +72,7 @@ class CompatRestTransport(ClientTransport):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: AsyncClient,
         agent_card: AgentCard | None,
         url: str,
         subscribe_method_override: str | None = None,
@@ -313,10 +321,10 @@ class CompatRestTransport(ClientTransport):
             ):
                 yield event
         except A2AClientError as e:
-            # Check for 405 Method Not Allowed in the cause (httpx.HTTPStatusError)
+            # Check for 405 Method Not Allowed in the cause (an HTTP status error)
             cause = e.__cause__
             if (
-                isinstance(cause, httpx.HTTPStatusError)
+                isinstance(cause, HTTP_STATUS_ERROR)
                 and cause.response.status_code == httpx.codes.METHOD_NOT_ALLOWED
             ):
                 if self._subscribe_method_override:
@@ -368,15 +376,15 @@ class CompatRestTransport(ClientTransport):
         except Exception as e:
             raise A2AClientError(f'Failed to close HTTP client: {e}') from e
 
-    def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
+    def _handle_http_error(self, e: HTTPStatusError) -> NoReturn:
         """Handles HTTP status errors and raises the appropriate A2AError."""
         try:
-            with contextlib.suppress(httpx.StreamClosed):
+            with contextlib.suppress(*STREAM_CLOSED):
                 e.response.read()
 
             try:
                 error_data = e.response.json()
-            except (json.JSONDecodeError, ValueError, httpx.ResponseNotRead):
+            except (json.JSONDecodeError, ValueError, *RESPONSE_NOT_READ):
                 error_data = {}
             if not isinstance(error_data, dict):
                 error_data = {}
@@ -428,7 +436,7 @@ class CompatRestTransport(ClientTransport):
                 )
             )
 
-    async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
+    async def _send_request(self, request: Request) -> dict[str, Any]:
         return await send_http_request(
             self.httpx_client, request, self._handle_http_error
         )

@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from a2a.client import ClientConfig, ClientFactory
@@ -18,9 +17,12 @@ from a2a.types.a2a_pb2 import (
     SendMessageRequest,
     Task,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import TransportProtocol
-from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
+
+
+pytestmark = pytest.mark.httpx2
 
 
 class TestTenantDecorator:
@@ -49,7 +51,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_rest(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -86,7 +88,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_jsonrpc(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -142,7 +144,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_explicit_override(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -219,9 +221,9 @@ class TestJSONRPCTenantIntegration:
         via the JSON-RPC transport.
         """
         # 1. Setup the client using the server app as the transport
-        # We use ASGITransport so httpx calls go directly to the Starlette app
-        transport = ASGITransport(app=server_app)
-        async with AsyncClient(
+        # We use httpx_lib.ASGITransport so httpx calls go directly to the Starlette app
+        transport = httpx_lib.ASGITransport(app=server_app)
+        async with httpx_lib.AsyncClient(
             transport=transport, base_url='http://testserver'
         ) as httpx_client:
             # Create the A2A client properly configured

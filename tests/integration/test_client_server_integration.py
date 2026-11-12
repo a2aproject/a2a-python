@@ -5,7 +5,6 @@ from typing import Any, NamedTuple
 from unittest.mock import ANY, AsyncMock, patch
 
 import grpc
-import httpx
 import pytest
 import pytest_asyncio
 
@@ -57,6 +56,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import (
     PROTOCOL_VERSION_CURRENT,
     VERSION_HEADER,
@@ -81,6 +81,9 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
 from starlette.applications import Starlette
+
+
+pytestmark = pytest.mark.httpx2
 
 
 # --- Test Constants ---
@@ -245,7 +248,9 @@ def jsonrpc_setup(http_base_setup) -> TransportSetup:
         request_handler=mock_request_handler, rpc_url='/'
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+    httpx_client = httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app)
+    )
     factory = ClientFactory(
         config=ClientConfig(
             httpx_client=httpx_client,
@@ -265,7 +270,9 @@ def rest_setup(http_base_setup) -> TransportSetup:
         agent_card=agent_card, card_url='/'
     )
     app = Starlette(routes=[*rest_routes, *agent_card_routes])
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+    httpx_client = httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app)
+    )
     factory = ClientFactory(
         config=ClientConfig(
             httpx_client=httpx_client,
@@ -718,8 +725,8 @@ async def test_json_transport_get_signed_base_card(
         request_handler=mock_request_handler, rpc_url='/'
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
+    httpx_client = httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app),
         headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
     )
 
@@ -795,8 +802,8 @@ async def test_client_get_signed_extended_card(
         request_handler=mock_request_handler, rpc_url='/'
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
+    httpx_client = httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app),
         headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
     )
 
@@ -876,8 +883,8 @@ async def test_client_get_signed_base_and_extended_cards(
         request_handler=mock_request_handler, rpc_url='/'
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
+    httpx_client = httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app),
         headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
     )
 

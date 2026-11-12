@@ -5,7 +5,6 @@ import logging
 
 from unittest.mock import AsyncMock, MagicMock, Mock
 
-import httpx
 import pytest
 
 from a2a.client import A2ACardResolver, AgentCardResolutionError
@@ -30,13 +29,17 @@ from a2a.types.a2a_pb2 import (
     StringList,
 )
 from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
+from a2a.utils._httpx_compat import httpx_lib
 from google.protobuf.json_format import ParseError
+
+
+pytestmark = pytest.mark.httpx2
 
 
 @pytest.fixture
 def mock_httpx_client():
     """Fixture providing a mocked async httpx client."""
-    return AsyncMock(spec=httpx.AsyncClient)
+    return AsyncMock(spec=httpx_lib.AsyncClient)
 
 
 @pytest.fixture
@@ -57,7 +60,7 @@ def resolver(mock_httpx_client, base_url):
 @pytest.fixture
 def mock_response():
     """Fixture providing a mock httpx Response."""
-    response = Mock(spec=httpx.Response)
+    response = Mock(spec=httpx_lib.Response)
     response.raise_for_status = Mock()
     return response
 
@@ -198,7 +201,7 @@ class TestGetAgentCard:
         mock_response,
         valid_agent_card_data,
     ):
-        """Test that http_kwargs are passed to httpx.get."""
+        """Test that http_kwargs are passed to httpx_lib.get."""
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
         http_kwargs = {
@@ -249,9 +252,9 @@ class TestGetAgentCard:
     ):
         """Test A2AClientHTTPError raised on HTTP status error."""
         status_code = 404
-        mock_response = Mock(spec=httpx.Response)
+        mock_response = Mock(spec=httpx_lib.Response)
         mock_response.status_code = status_code
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        mock_response.raise_for_status.side_effect = httpx_lib.HTTPStatusError(
             'Not Found', request=Mock(), response=mock_response
         )
         mock_httpx_client.get.return_value = mock_response
@@ -281,7 +284,7 @@ class TestGetAgentCard:
         self, resolver, mock_httpx_client
     ):
         """Test A2AClientHTTPError raised on network request error."""
-        mock_httpx_client.get.side_effect = httpx.RequestError(
+        mock_httpx_client.get.side_effect = httpx_lib.RequestError(
             'Connection timeout', request=Mock()
         )
         with pytest.raises(AgentCardResolutionError) as exc_info:
@@ -329,10 +332,10 @@ class TestGetAgentCard:
         self, response_body: str
     ) -> None:
         """Non-object JSON responses use the documented resolution error."""
-        transport = httpx.MockTransport(
-            lambda _request: httpx.Response(200, content=response_body)
+        transport = httpx_lib.MockTransport(
+            lambda _request: httpx_lib.Response(200, content=response_body)
         )
-        async with httpx.AsyncClient(transport=transport) as client:
+        async with httpx_lib.AsyncClient(transport=transport) as client:
             resolver = A2ACardResolver(client, 'https://example.com')
             with pytest.raises(AgentCardResolutionError) as exc_info:
                 await resolver.get_agent_card()
@@ -370,10 +373,10 @@ class TestGetAgentCard:
         self, response_body: str, original_error: type[Exception]
     ) -> None:
         """Malformed legacy fields preserve the documented error chain."""
-        transport = httpx.MockTransport(
-            lambda _request: httpx.Response(200, content=response_body)
+        transport = httpx_lib.MockTransport(
+            lambda _request: httpx_lib.Response(200, content=response_body)
         )
-        async with httpx.AsyncClient(transport=transport) as client:
+        async with httpx_lib.AsyncClient(transport=transport) as client:
             resolver = A2ACardResolver(client, 'https://example.com')
             with pytest.raises(AgentCardResolutionError) as exc_info:
                 await resolver.get_agent_card()
@@ -445,9 +448,9 @@ class TestGetAgentCard:
         self, resolver, mock_httpx_client, status_code
     ):
         """Test different HTTP status codes raise appropriate errors."""
-        mock_response = Mock(spec=httpx.Response)
+        mock_response = Mock(spec=httpx_lib.Response)
         mock_response.status_code = status_code
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        mock_response.raise_for_status.side_effect = httpx_lib.HTTPStatusError(
             f'Status {status_code}', request=Mock(), response=mock_response
         )
         mock_httpx_client.get.return_value = mock_response
@@ -473,7 +476,7 @@ class TestGetAgentCard:
         """Test that the signature verifier is called if provided."""
         mock_verifier = MagicMock()
 
-        mock_response = MagicMock(spec=httpx.Response)
+        mock_response = MagicMock(spec=httpx_lib.Response)
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
 

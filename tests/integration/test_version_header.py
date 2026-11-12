@@ -16,6 +16,9 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class DummyAgentExecutor(AgentExecutor):
     async def execute(
         self, context: RequestContext, event_queue: EventQueue

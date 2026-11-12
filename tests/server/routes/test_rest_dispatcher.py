@@ -3,7 +3,6 @@ import json
 from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 
-import httpx
 import pytest
 
 from a2a.server.context import ServerCallContext
@@ -24,6 +23,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.errors import (
     UnsupportedOperationError,
 )
@@ -79,6 +79,9 @@ def rest_dispatcher_instance(mock_handler):
 
 
 from starlette.datastructures import Headers, QueryParams
+
+
+pytestmark = pytest.mark.httpx2
 
 
 def make_mock_request(
@@ -333,8 +336,8 @@ class TestRestDispatcherEndpoints:
         self, mock_handler: AsyncMock, value: str
     ) -> None:
         app = Starlette(routes=create_rest_routes(mock_handler))
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
+        async with httpx_lib.AsyncClient(
+            transport=httpx_lib.ASGITransport(app=app),
             base_url='http://test',
             trust_env=False,
         ) as client:

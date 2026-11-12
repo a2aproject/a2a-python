@@ -4,8 +4,6 @@ import time
 
 from collections.abc import Awaitable, Callable
 
-import httpx
-
 from google.protobuf.json_format import MessageToDict
 
 from a2a.plugins.manager import PluginManager, get_global
@@ -19,6 +17,7 @@ from a2a.server.tasks.push_notification_sender import (
     PushNotificationSender,
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
+from a2a.utils._httpx_compat import AsyncClient
 from a2a.utils.proto_utils import to_stream_response
 
 
@@ -30,7 +29,7 @@ class BasePushNotificationSender(PushNotificationSender):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: AsyncClient,
         config_store: PushNotificationConfigStore,
         context: ServerCallContext | None = None,
         *,
