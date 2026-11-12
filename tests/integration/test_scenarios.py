@@ -1291,6 +1291,188 @@ def test_input_required_followup_across_per_rpc_event_loops():
     assert result2.status.state == TaskState.TASK_STATE_COMPLETED
 
 
+# Scenario: Streaming resumption that enqueues the current Task first
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('task_enqueues', 'replacement_errors'),
+    [(1, 0), (2, 1)],
+    ids=['once', 'twice'],
+)
+async def test_scenario_streaming_resumption_enqueues_current_task(
+    caplog: pytest.LogCaptureFixture,
+    task_enqueues: int,
+    replacement_errors: int,
+) -> None:
+    class CurrentTaskAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ) -> None:
+            task = context.current_task or new_task_from_user_message(
+                context.message
+            )
+            for _ in range(task_enqueues if context.current_task else 1):
+                await event_queue.enqueue_event(task)
+            if context.current_task:
+                status = TaskStatus(state=TaskState.TASK_STATE_COMPLETED)
+            else:
+                status = TaskStatus(
+                    state=TaskState.TASK_STATE_INPUT_REQUIRED,
+                    message=Message(
+                        message_id='agent-ask',
+                        role=Role.ROLE_AGENT,
+                        parts=[Part(text='which one?')],
+                    ),
+                )
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=task.id,
+                    context_id=task.context_id,
+                    status=status,
+                )
+            )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ) -> None:
+            pass
+
+    handler = create_handler(CurrentTaskAgent(), use_legacy=False)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=True
+    )
+
+    msg1 = Message(
+        message_id='msg-start', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+    it = client.send_message(
+        SendMessageRequest(
+            message=msg1,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events1 = [event async for event in it]
+    task_id = get_task_id(events1[0])
+    context_id = get_task_context_id(events1[0])
+
+    msg2 = Message(
+        task_id=task_id,
+        context_id=context_id,
+        message_id='msg-resume',
+        role=Role.ROLE_USER,
+        parts=[Part(text='here is input')],
+    )
+    it2 = client.send_message(
+        SendMessageRequest(
+            message=msg2,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events2 = [event async for event in it2]
+
+    assert [event.WhichOneof('payload') for event in events2] == [
+        *['task'] * task_enqueues,
+        'status_update',
+    ]
+    assert [message.message_id for message in events2[0].task.history] == [
+        'msg-start',
+        'agent-ask',
+        'msg-resume',
+    ]
+    assert not events2[0].task.status.HasField('message')
+    validate_state(events2[-1], TaskState.TASK_STATE_COMPLETED)
+
+    final_task = await client.get_task(GetTaskRequest(id=task_id))
+    assert [message.message_id for message in final_task.history] == [
+        'msg-start',
+        'agent-ask',
+        'msg-resume',
+    ]
+    error_logs = [
+        record.message
+        for record in caplog.records
+        if record.levelname == 'ERROR'
+        and 'Ignoring task replacement' in record.message
+    ]
+    assert len(error_logs) == replacement_errors
+
+
+# Scenario: Resending a follow-up message adds it to history once
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'enqueue_current_task', [False, True], ids=['status_only', 'current_task']
+)
+async def test_scenario_resent_follow_up_message_saved_once(
+    enqueue_current_task: bool,
+) -> None:
+    class InputRequiredAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ) -> None:
+            task = context.current_task or new_task_from_user_message(
+                context.message
+            )
+            if enqueue_current_task or not context.current_task:
+                await event_queue.enqueue_event(task)
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=task.id,
+                    context_id=task.context_id,
+                    status=TaskStatus(
+                        state=TaskState.TASK_STATE_INPUT_REQUIRED
+                    ),
+                )
+            )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ) -> None:
+            pass
+
+    handler = create_handler(InputRequiredAgent(), use_legacy=False)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=True
+    )
+
+    msg1 = Message(
+        message_id='msg-start', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+    it = client.send_message(
+        SendMessageRequest(
+            message=msg1,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events1 = [event async for event in it]
+    task_id = get_task_id(events1[0])
+    context_id = get_task_context_id(events1[0])
+
+    msg2 = Message(
+        task_id=task_id,
+        context_id=context_id,
+        message_id='msg-resume',
+        role=Role.ROLE_USER,
+        parts=[Part(text='here is input')],
+    )
+    for _ in range(2):
+        it2 = client.send_message(
+            SendMessageRequest(
+                message=msg2,
+                configuration=SendMessageConfiguration(
+                    return_immediately=False
+                ),
+            )
+        )
+        _ = [event async for event in it2]
+
+    final_task = await client.get_task(GetTaskRequest(id=task_id))
+    assert [message.message_id for message in final_task.history] == [
+        'msg-start',
+        'msg-resume',
+    ]
+
+
 # Scenario: Auth required and side channel unblocking
 # Migrated from: test_workflow_auth_required_side_channel in test_handler_comparison
 @pytest.mark.timeout(2.0)
