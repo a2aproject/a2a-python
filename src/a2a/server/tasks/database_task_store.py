@@ -345,7 +345,7 @@ class DatabaseTaskStore(TaskStore):
             )
         try:
             cursor_timestamp = _ns_to_datetime(cursor.timestamp_ns)
-        except OverflowError as e:
+        except (OverflowError, ValueError) as e:
             raise InvalidParamsError('Invalid page token') from e
         return or_(
             timestamp_col < cursor_timestamp,
