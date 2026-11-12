@@ -3586,6 +3586,8 @@ async def test_failed_cancel_restarts_idle_release() -> None:
 
     assert await _wait_for_release(handler, task.id)
     await handler.aclose()
+
+
 class SilentExecutor(AgentExecutor):
     """Returns normally without producing any event (issue #1330)."""
 
