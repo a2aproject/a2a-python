@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from a2a.client.errors import A2AClientError
+from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.rest_transport import CompatRestTransport
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -19,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     Message,
     Role,
+    SendMessageConfiguration,
     SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
@@ -189,6 +191,56 @@ async def test_compat_rest_transport_get_extended_agent_card(transport):
 
     assert response.name == 'ExtendedAgent'
     assert response.capabilities.extended_agent_card is True
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_get_extended_agent_card_keeps_security(
+    transport,
+):
+    """v0.3 servers send the card as JSON, not as the v0.3 proto."""
+    card = types_v03.AgentCard(
+        name='ExtendedAgent',
+        description='Extended',
+        version='1.0.0',
+        url='http://example.com',
+        capabilities=types_v03.AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            types_v03.AgentSkill(
+                id='skill-1',
+                name='Skill',
+                description='Skill',
+                tags=['tag'],
+                security=[{'bearer': []}],
+            )
+        ],
+        security_schemes={
+            'bearer': types_v03.SecurityScheme(
+                root=types_v03.HTTPAuthSecurityScheme(scheme='bearer')
+            )
+        },
+        security=[{'bearer': []}],
+        supports_authenticated_extended_card=True,
+    )
+
+    async def mock_send_request(*args, **kwargs):
+        # Same serialization as REST03Handler.on_get_extended_agent_card.
+        return card.model_dump(mode='json', exclude_none=True)
+
+    transport._send_request = mock_send_request
+
+    response = await transport.get_extended_agent_card(
+        GetExtendedAgentCardRequest()
+    )
+
+    scheme = response.security_schemes['bearer']
+    assert scheme.WhichOneof('scheme') == 'http_auth_security_scheme'
+    assert scheme.http_auth_security_scheme.scheme == 'bearer'
+    assert list(response.security_requirements[0].schemes) == ['bearer']
+    assert list(response.skills[0].security_requirements[0].schemes) == [
+        'bearer'
+    ]
 
 
 @pytest.mark.asyncio
@@ -572,6 +624,50 @@ async def test_compat_rest_transport_send_message_empty(transport):
 
     response = await transport.send_message(req)
     assert response == SendMessageResponse()
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_without_configuration(
+    transport,
+):
+    """No configuration is sent, so the server keeps its blocking default."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER)
+    )
+    await transport.send_message(req)
+
+    assert 'configuration' not in sent
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_with_configuration(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert sent['configuration']['blocking'] is True
 
 
 @pytest.mark.asyncio
