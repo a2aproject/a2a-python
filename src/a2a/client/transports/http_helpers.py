@@ -72,19 +72,29 @@ _SSE_LINE_END = re.compile(r'\r\n|\r|\n')
 async def _aiter_sse_lines(
     response: httpx.Response,
 ) -> AsyncGenerator[str, None]:
-    """Yields lines ended only by CRLF, LF or CR, unlike `aiter_lines()`."""
-    pending = ''
+    """Yields lines ended only by CRLF, LF or CR, unlike `aiter_lines()`.
+
+    The unfinished line is kept as a list of pieces and joined once, and
+    only the new chunk is scanned, so a long `data:` line that spans many
+    chunks costs linear rather than quadratic time.
+    """
+    pieces: list[str] = []
+    held_cr = False
     async for chunk in response.aiter_text():
-        text = pending + chunk
+        text = '\r' + chunk if held_cr else chunk
         # Hold a trailing CR back: the next chunk may start with its LF.
         held_cr = text.endswith('\r')
-        *lines, pending = _SSE_LINE_END.split(text[:-1] if held_cr else text)
-        if held_cr:
-            pending += '\r'
-        for line in lines:
-            yield line
-    if pending:
-        yield pending.removesuffix('\r')
+        *lines, rest = _SSE_LINE_END.split(text[:-1] if held_cr else text)
+        if lines:
+            lines[0] = ''.join(pieces) + lines[0]
+            pieces = []
+            for line in lines:
+                yield line
+        if rest:
+            pieces.append(rest)
+    tail = ''.join(pieces)
+    if held_cr or tail:
+        yield tail
 
 
 async def parse_sse_stream(
