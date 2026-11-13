@@ -823,6 +823,24 @@ class TestUnrecognizedResponseFields:
         assert events[0].message.message_id == 'r1'
         assert events[0].message.parts[0].text == 'hello'
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('result', [[], None])
+    async def test_get_task_rejects_result_that_is_not_an_object(
+        self, transport, mock_httpx_client, result
+    ):
+        """A non-object result is not read as an empty Task."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': result,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        with pytest.raises(json_format.ParseError, match='JSON object'):
+            await transport.get_task(GetTaskRequest(id='task-1'))
+
 
 # A JSON-RPC error object with a member beyond code, message and data.
 _ERROR_WITH_EXTRA_MEMBER = {
