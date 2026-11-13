@@ -428,6 +428,9 @@ class DefaultRequestHandlerV2(RequestHandler):
                         f'context {task.context_id} of task {original_task_id}'
                     )
                 )
+            # Agents must infer the contextId from the task when the message
+            # names only a taskId.
+            original_context_id = original_context_id or task.context_id
 
         # Build context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(

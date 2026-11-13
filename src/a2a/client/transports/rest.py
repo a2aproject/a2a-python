@@ -418,7 +418,21 @@ class RestTransport(ClientTransport):
             **http_kwargs,
         ):
             event: StreamResponse = parse_lenient(sse_data, StreamResponse())
+            if event.WhichOneof('payload') is None:
+                self._raise_in_band_error(sse_data)
             yield event
+
+    def _raise_in_band_error(self, sse_data: str) -> None:
+        """Raises the error carried by a data event, if it carries one.
+
+        The HTTP+JSON binding defines no SSE event type for errors, so a
+        server may send the ``google.rpc.Status`` body as an ordinary data
+        event instead of an ``event: error`` one. ``StreamResponse`` has no
+        ``error`` field, so that body parses to an event with no payload.
+        """
+        payload = json.loads(sse_data)
+        if isinstance(payload, dict) and 'error' in payload:
+            self._handle_sse_error(sse_data)
 
     async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
         return await send_http_request(

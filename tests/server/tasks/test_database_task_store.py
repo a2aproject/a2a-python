@@ -36,7 +36,11 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
-from a2a.utils.task import decode_list_tasks_cursor
+from a2a.utils.task import (
+    ListTasksCursor,
+    decode_list_tasks_cursor,
+    encode_list_tasks_cursor,
+)
 from google.protobuf.json_format import MessageToDict
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.inspection import inspect
@@ -1165,6 +1169,29 @@ async def test_list_tasks_rejects_malformed_cursor_token(
     token = urlsafe_b64encode(b'{"ts":"soon","id":"t1"}').decode().rstrip('=')
 
     with pytest.raises(InvalidParamsError):
+        await db_store_parameterized.list(
+            ListTasksRequest(page_size=2, page_token=token), TEST_CONTEXT
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'timestamp_ns',
+    [
+        pytest.param(-62_135_596_800_000_000_001, id='before-min-timestamp'),
+        pytest.param(253_402_300_800_000_000_000, id='after-max-timestamp'),
+        pytest.param(-(10**100), id='huge-negative'),
+        pytest.param(10**100, id='huge-positive'),
+    ],
+)
+async def test_list_tasks_rejects_out_of_range_cursor_timestamp(
+    db_store_parameterized: DatabaseTaskStore, timestamp_ns: int
+) -> None:
+    token = encode_list_tasks_cursor(
+        ListTasksCursor(timestamp_ns=timestamp_ns, task_id='t1')
+    )
+
+    with pytest.raises(InvalidParamsError, match='Invalid page token'):
         await db_store_parameterized.list(
             ListTasksRequest(page_size=2, page_token=token), TEST_CONTEXT
         )

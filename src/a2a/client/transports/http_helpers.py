@@ -1,4 +1,5 @@
 import json
+import re
 
 from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import contextmanager
@@ -65,6 +66,39 @@ async def send_http_request(
         return response.json()
 
 
+_SSE_LINE_END = re.compile(r'\r\n|\r|\n')
+
+
+async def _aiter_sse_lines(
+    response: httpx.Response,
+) -> AsyncGenerator[str, None]:
+    """Yields lines ended only by CRLF, LF or CR, unlike `aiter_lines()`.
+
+    The unfinished line is kept as a list of pieces and joined once, and
+    only the new chunk is scanned, so a long `data:` line that spans many
+    chunks costs linear rather than quadratic time.
+    """
+    pieces: list[str] = []
+    held_cr = False
+    async for chunk in response.aiter_text():
+        text = '\r' + chunk if held_cr else chunk
+        # Hold a trailing CR back: the next chunk may start with its LF.
+        held_cr = text.endswith('\r')
+        *lines, rest = _SSE_LINE_END.split(text[:-1] if held_cr else text)
+        if lines:
+            lines[0] = ''.join(pieces) + lines[0]
+            pieces = []
+            for line in lines:
+                yield line
+        if rest:
+            pieces.append(rest)
+    tail = ''.join(pieces)
+    # A held CR at end of stream still ends a line, even an empty one. That
+    # blank line is what dispatches the last event, so yield it too.
+    if held_cr or tail:
+        yield tail
+
+
 async def parse_sse_stream(
     response: httpx.Response,
 ) -> AsyncGenerator[tuple[str, str], None]:
@@ -75,9 +109,7 @@ async def parse_sse_stream(
     event_name = 'message'
     payload_chunks: list[str] = []
 
-    async for line in response.aiter_lines():
-        raw_line = line.rstrip('\r\n')
-
+    async for raw_line in _aiter_sse_lines(response):
         # Empty line denotes the completion of the current event block
         if not raw_line:
             if payload_chunks:
