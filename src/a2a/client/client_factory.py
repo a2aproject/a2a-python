@@ -38,13 +38,13 @@ if TYPE_CHECKING:
 try:
     from a2a.client.transports.grpc import GrpcTransport
 except ImportError:
-    GrpcTransport = None  # type: ignore # pyright: ignore
+    GrpcTransport = None  # pyright: ignore
 
 
 try:
     from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
 except ImportError:
-    CompatGrpcTransport = None  # type: ignore # pyright: ignore
+    CompatGrpcTransport = None  # pyright: ignore
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 import json
 
-from collections.abc import AsyncGenerator, Callable, Iterator
+from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import contextmanager
 from typing import Any, NoReturn
 
@@ -18,7 +18,7 @@ def _default_sse_error_handler(sse_data: str) -> NoReturn:
 def handle_http_exceptions(
     status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
     | None = None,
-) -> Iterator[None]:
+) -> Generator[None]:
     """Handles common HTTP exceptions for REST and JSON-RPC transports.
 
     Args:

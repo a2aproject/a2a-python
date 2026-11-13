@@ -6,7 +6,7 @@ from typing import Any, NamedTuple
 try:
     import grpc  # type: ignore[reportMissingModuleSource]
 except ImportError:
-    grpc = None  # type: ignore
+    grpc = None
 
 from google.rpc import status_pb2  # type: ignore[reportMissingModuleSource]
 

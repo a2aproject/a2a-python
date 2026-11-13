@@ -138,9 +138,9 @@ if not otel_installed or not otel_enabled:
         def __getattr__(self, name: str) -> Any:
             return self
 
-    trace = _NoOp()  # type: ignore
-    _SpanKind = _NoOp()  # type: ignore
-    StatusCode = _NoOp()  # type: ignore
+    trace = _NoOp()
+    _SpanKind = _NoOp()
+    StatusCode = _NoOp()
 
 SpanKind = _SpanKind
 __all__ = ['SpanKind']

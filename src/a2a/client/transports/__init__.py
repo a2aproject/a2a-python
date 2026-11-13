@@ -8,7 +8,7 @@ from a2a.client.transports.rest import RestTransport
 try:
     from a2a.client.transports.grpc import GrpcTransport
 except ImportError:
-    GrpcTransport = None  # type: ignore
+    GrpcTransport = None
 
 
 __all__ = [
