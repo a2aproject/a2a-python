@@ -50,6 +50,7 @@ from a2a.types.a2a_pb2 import (
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
+    SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
     TaskState,
@@ -351,6 +352,64 @@ async def test_stream_error_reaches_final_call():
 
     final = recorder.hooks('after_handler_run')[-1]
     assert isinstance(final.error, TaskNotFoundError)
+
+
+class BlockingTaskStore(InMemoryTaskStore):
+    """Blocks every `get` until cancelled."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.waiting = asyncio.Event()
+
+    async def get(self, task_id, context):
+        self.waiting.set()
+        await asyncio.Event().wait()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_call_reaches_after_handler_run():
+    recorder = Recorder()
+    store = BlockingTaskStore()
+    handler = make_handler(recorder, task_store=store)
+
+    call = asyncio.create_task(
+        handler.on_get_task(GetTaskRequest(id='t-1'), ServerCallContext())
+    )
+    await asyncio.wait_for(store.waiting.wait(), timeout=5)
+    call.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    (response,) = recorder.hooks('after_handler_run')
+    assert response.method == 'get_task'
+    assert isinstance(response.error, asyncio.CancelledError)
+    assert response.is_final
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stream_reports_the_cancellation():
+    recorder = Recorder()
+    store = BlockingTaskStore()
+    handler = make_handler(recorder, task_store=store)
+
+    async def consume() -> None:
+        async for _ in handler.on_subscribe_to_task(
+            SubscribeToTaskRequest(id='t-1'), ServerCallContext()
+        ):
+            pass
+
+    reader = asyncio.create_task(consume())
+    await asyncio.wait_for(store.waiting.wait(), timeout=5)
+    reader.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await reader
+
+    (response,) = recorder.hooks('after_handler_run')
+    assert response.method == 'subscribe'
+    assert isinstance(response.error, asyncio.CancelledError)
+    assert response.is_final
 
 
 @pytest.mark.asyncio
