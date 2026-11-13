@@ -101,7 +101,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             '/v1/message:send',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         )
 
         resp_proto = ParseDict(
@@ -146,7 +146,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             '/v1/message:stream',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         ):
             yield event
 
@@ -223,7 +223,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         )
         resp_proto = ParseDict(
             response_data,

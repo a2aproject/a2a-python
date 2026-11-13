@@ -682,6 +682,86 @@ async def test_compat_rest_transport_send_message_with_configuration(
 
 
 @pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_uses_json_names(transport):
+    """The v0.3 spec requires json_name keys in HTTP+JSON bodies."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(
+            message_id='msg-1',
+            context_id='ctx-1',
+            task_id='task-1',
+            role=Role.ROLE_USER,
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert 'request' not in sent
+    assert sent['message']['messageId'] == 'msg-1'
+    assert sent['message']['contextId'] == 'ctx-1'
+    assert sent['message']['taskId'] == 'task-1'
+    assert sent['configuration']['acceptedOutputModes'] == ['text/plain']
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_streaming_uses_json_names(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_send_stream_request(method, path, context=None, json=None):
+        sent.update(json)
+        yield StreamResponse(message=Message(message_id='msg-123'))
+
+    transport._send_stream_request = mock_send_stream_request
+
+    req = SendMessageRequest(
+        message=Message(
+            message_id='msg-1', context_id='ctx-1', role=Role.ROLE_USER
+        )
+    )
+    _ = [event async for event in transport.send_message_streaming(req)]
+
+    assert 'request' not in sent
+    assert sent['message']['messageId'] == 'msg-1'
+    assert sent['message']['contextId'] == 'ctx-1'
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_create_task_push_notification_config_uses_json_names(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {
+            'name': 'tasks/task-123/pushNotificationConfigs/push-123',
+            'pushNotificationConfig': {'url': 'http://push', 'id': 'push-123'},
+        }
+
+    transport._execute_request = mock_execute_request
+
+    req = TaskPushNotificationConfig(
+        task_id='task-123', id='push-123', url='http://push'
+    )
+    await transport.create_task_push_notification_config(req)
+
+    assert sent['configId'] == 'push-123'
+    assert sent['config']['pushNotificationConfig']['id'] == 'push-123'
+    assert 'config_id' not in sent
+
+
+@pytest.mark.asyncio
 async def test_compat_rest_transport_get_task_no_history(transport):
     async def mock_execute_request(method, path, context=None, params=None):
         assert 'historyLength' not in params
