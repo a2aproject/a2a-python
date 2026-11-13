@@ -15,6 +15,7 @@ from a2a.types import (
     FileWithBytes,
     FileWithUri,
     Message,
+    OAuth2SecurityScheme,
     Part,
     Role,
     TaskIdParams,
@@ -224,7 +225,19 @@ async def test_get_extended_agent_card(client):
         print(
             f'card.supports_authenticated_extended_card is: {card.supports_authenticated_extended_card}'
         )
-        assert card.supports_authenticated_extended_card in (False, None)
+        assert card.supports_authenticated_extended_card is True
+
+        scheme = card.security_schemes['oauth'].root
+        assert isinstance(scheme, OAuth2SecurityScheme)
+        assert scheme.description == 'Device code'
+        # v0.3 has no device code flow, so the server sends no flows. The
+        # v0.3 gRPC client reads empty flows as a password flow with empty
+        # fields.
+        flows = scheme.flows
+        assert flows.authorization_code is None
+        assert flows.client_credentials is None
+        assert flows.implicit is None
+        assert flows.password is None or flows.password.token_url == ''
 
     print(f'Success: get_extended_agent_card passed.')
 
