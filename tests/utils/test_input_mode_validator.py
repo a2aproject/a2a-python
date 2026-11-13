@@ -149,3 +149,37 @@ def test_parameters_do_not_widen_the_declared_type():
         )
 
     assert 'text/html; charset=utf-8' in exc_info.value.message
+
+
+@pytest.mark.parametrize(
+    ('part_type', 'card_type'),
+    [
+        ('image/png', 'image/*'),
+        ('image/png; q=1', 'IMAGE/*'),
+        ('Image/PNG', 'image/*;q=0.8'),
+        ('video/mp4', '*/*'),
+    ],
+)
+def test_declared_media_range_matches_its_type(part_type, card_type):
+    """RFC 9110 12.5.1: `type/*` covers every subtype, `*/*` every type."""
+    validate_input_modes(
+        make_message(Part(raw=b'x', media_type=part_type)),
+        make_card('text/plain', card_type),
+    )
+
+
+def test_media_range_does_not_widen_to_other_types():
+    with pytest.raises(ContentTypeNotSupportedError) as exc_info:
+        validate_input_modes(
+            make_message(Part(raw=b'x', media_type='video/mp4')),
+            make_card('text/plain', 'image/*'),
+        )
+
+    assert 'video/mp4' in exc_info.value.message
+
+
+def test_media_range_declared_by_a_skill_widens_the_union():
+    validate_input_modes(
+        make_message(Part(raw=b'x', media_type='audio/wav')),
+        make_card('text/plain', skill_modes=['audio/*']),
+    )
