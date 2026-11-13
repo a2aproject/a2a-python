@@ -195,6 +195,36 @@ class REST03Handler:
         return MessageToDict(pb2_v03_config)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
+    async def delete_push_notification(
+        self,
+        request: Request,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        """Handles the 'tasks/pushNotificationConfig/delete' REST method.
+
+        Args:
+            request: The incoming `Request` object.
+            context: Context provided by the server.
+
+        Returns:
+            An empty `dict`, the JSON form of `google.protobuf.Empty`.
+        """
+        task_id = request.path_params['id']
+        push_id = request.path_params['push_id']
+
+        rpc_req = types_v03.DeleteTaskPushNotificationConfigRequest(
+            id='',
+            params=types_v03.DeleteTaskPushNotificationConfigParams(
+                id=task_id, push_notification_config_id=push_id
+            ),
+        )
+
+        await self.handler03.on_delete_task_push_notification_config(
+            rpc_req, context
+        )
+        return {}
+
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def set_push_notification(
         self,
         request: Request,

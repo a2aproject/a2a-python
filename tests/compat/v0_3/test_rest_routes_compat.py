@@ -8,11 +8,13 @@ import pytest
 
 from a2a.compat.v0_3 import a2a_v0_3_pb2, rest_adapter
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
+from a2a.compat.v0_3.rest_transport import CompatRestTransport
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    DeleteTaskPushNotificationConfigRequest,
     Message as Message10,
     Part as Part10,
     Role as Role10,
@@ -226,6 +228,69 @@ async def test_invalid_utf8_body_v03_is_bad_request(
 
     assert response.status_code == 400
     assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+
+
+@pytest.mark.anyio
+async def test_delete_push_notification_config_v03(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    request_handler.on_delete_task_push_notification_config.return_value = None
+
+    response = await client.delete(
+        '/v1/tasks/test_task_id/pushNotificationConfigs/push-1'
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {}
+    request_handler.on_delete_task_push_notification_config.assert_awaited_once()
+    params = request_handler.on_delete_task_push_notification_config.call_args[
+        0
+    ][0]
+    assert params == DeleteTaskPushNotificationConfigRequest(
+        task_id='test_task_id', id='push-1'
+    )
+
+
+@pytest.mark.anyio
+async def test_delete_push_notification_config_v03_unknown_task_returns_404(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    request_handler.on_delete_task_push_notification_config.side_effect = (
+        TaskNotFoundError
+    )
+
+    response = await client.delete(
+        '/v1/tasks/unknown/pushNotificationConfigs/push-1'
+    )
+
+    assert response.status_code == 404
+    assert response.json()['error']['status'] == 'NOT_FOUND'
+
+
+@pytest.mark.anyio
+async def test_compat_rest_client_deletes_push_notification_config(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    request_handler.on_delete_task_push_notification_config.return_value = None
+    transport = CompatRestTransport(
+        httpx_client=client,
+        agent_card=AgentCard(),
+        url='http://testapp',
+    )
+
+    await transport.delete_task_push_notification_config(
+        DeleteTaskPushNotificationConfigRequest(
+            task_id='test_task_id', id='push-1'
+        )
+    )
+
+    request_handler.on_delete_task_push_notification_config.assert_awaited_once()
+    params = request_handler.on_delete_task_push_notification_config.call_args[
+        0
+    ][0]
+    assert params == DeleteTaskPushNotificationConfigRequest(
+        task_id='test_task_id', id='push-1'
+    )
 
 
 @pytest.mark.anyio
