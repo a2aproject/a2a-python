@@ -20,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     Message,
     Role,
+    SendMessageConfiguration,
     SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
@@ -604,10 +605,21 @@ async def test_compat_rest_transport_list_task_push_notification_configs(
 async def test_compat_rest_transport_delete_task_push_notification_config(
     transport,
 ):
-    with pytest.raises(NotImplementedError):
-        await transport.delete_task_push_notification_config(
-            DeleteTaskPushNotificationConfigRequest()
+    mock_execute_request = AsyncMock(return_value={})
+    transport._execute_request = mock_execute_request
+
+    response = await transport.delete_task_push_notification_config(
+        DeleteTaskPushNotificationConfigRequest(
+            task_id='task-123', id='push-123'
         )
+    )
+
+    mock_execute_request.assert_awaited_once_with(
+        'DELETE',
+        '/v1/tasks/task-123/pushNotificationConfigs/push-123',
+        context=None,
+    )
+    assert response is None
 
 
 @pytest.mark.asyncio
@@ -623,6 +635,50 @@ async def test_compat_rest_transport_send_message_empty(transport):
 
     response = await transport.send_message(req)
     assert response == SendMessageResponse()
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_without_configuration(
+    transport,
+):
+    """No configuration is sent, so the server keeps its blocking default."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER)
+    )
+    await transport.send_message(req)
+
+    assert 'configuration' not in sent
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_with_configuration(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert sent['configuration']['blocking'] is True
 
 
 @pytest.mark.asyncio

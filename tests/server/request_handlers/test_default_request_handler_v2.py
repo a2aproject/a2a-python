@@ -1335,6 +1335,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -1374,6 +1375,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -3068,6 +3070,72 @@ async def test_follow_up_message_runs_in_sender_contextvars(streaming):
     await handler.aclose()
 
 
+class _ContextRecordingAgent(AgentExecutor):
+    """Records the context id each execution is handed."""
+
+    def __init__(self) -> None:
+        self.seen_context_ids: list[str | None] = []
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.seen_context_ids.append(context.context_id)
+        updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('streaming', [False, True])
+async def test_task_only_message_infers_context_id_from_task(streaming):
+    """A2A 3.4.3: a message naming only a taskId inherits the task's context."""
+    agent = _ContextRecordingAgent()
+    task_store = InMemoryTaskStore()
+    call_context = create_server_call_context()
+    task = Task(
+        id='task-awaiting-input',
+        context_id='ctx-from-stored-task',
+        status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
+    )
+    await task_store.save(task, call_context)
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            message_id='msg-follow-up',
+            role=Role.ROLE_USER,
+            parts=[Part(text='aaa')],
+            task_id=task.id,
+        )
+    )
+
+    if streaming:
+        events = [
+            event
+            async for event in handler.on_message_send_stream(
+                params, call_context
+            )
+        ]
+    else:
+        events = [await handler.on_message_send(params, call_context)]
+
+    assert agent.seen_context_ids == [task.context_id]
+    assert events
+    assert all(event.context_id == task.context_id for event in events)
+    assert params.message.context_id == task.context_id
+    stored = await task_store.get(task.id, call_context)
+    assert stored is not None
+    assert stored.context_id == task.context_id
+    await handler.aclose()
+
+
 def _complete_agent_card() -> AgentCard:
     """Returns an AgentCard with every field the A2A spec marks REQUIRED."""
     return AgentCard(
@@ -3586,3 +3654,38 @@ async def test_failed_cancel_restarts_idle_release() -> None:
 
     assert await _wait_for_release(handler, task.id)
     await handler.aclose()
+
+
+class SilentExecutor(AgentExecutor):
+    """Returns normally without producing any event (issue #1330)."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        return None
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_raises_when_agent_produces_no_events():
+    """A silent executor must fail fast instead of hanging forever (#1330)."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=SilentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_silent',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    with pytest.raises(InvalidAgentResponseError, match='no events'):
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )

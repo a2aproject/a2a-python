@@ -23,7 +23,11 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    DeviceCodeOAuthFlow,
+    OAuth2SecurityScheme,
+    OAuthFlows,
     Part,
+    SecurityScheme,
     TaskState,
 )
 from a2a.utils import TransportProtocol
@@ -138,7 +142,27 @@ async def main_async(http_port: int, grpc_port: int):
         description='Server running on a2a v1.0',
         version='1.0.0',
         skills=[],
-        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            # Makes v0.3 clients fetch the extended card from the server.
+            extended_agent_card=True,
+        ),
+        # v0.3 has no device code flow, so v0.3 clients get no flows.
+        security_schemes={
+            'oauth': SecurityScheme(
+                oauth2_security_scheme=OAuth2SecurityScheme(
+                    description='Device code',
+                    flows=OAuthFlows(
+                        device_code=DeviceCodeOAuthFlow(
+                            device_authorization_url='https://auth.example.com/device',
+                            token_url='https://auth.example.com/token',
+                            scopes={'read': 'Read access'},
+                        )
+                    ),
+                )
+            )
+        },
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         supported_interfaces=[

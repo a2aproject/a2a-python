@@ -316,6 +316,9 @@ class LegacyRequestHandler(RequestHandler):
                 )
 
             task = task_manager.update_with_message(params.message, task)
+            # Agents must infer the contextId from the task when the message
+            # names only a taskId.
+            context_id = context_id or task.context_id
         elif params.message.task_id:
             raise TaskNotFoundError(
                 message=f'Task {params.message.task_id} was specified but does not exist'
@@ -325,7 +328,7 @@ class LegacyRequestHandler(RequestHandler):
         request_context = await self._request_context_builder.build(
             params=params,
             task_id=task.id if task else None,
-            context_id=params.message.context_id,
+            context_id=context_id,
             task=task,
             context=context,
         )

@@ -5,12 +5,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import pytest_asyncio
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.helpers.proto_helpers import new_text_message
+from a2a.server.context import ServerCallContext
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_rest_routes
+from a2a.server.tasks import (
+    InMemoryPushNotificationConfigStore,
+    InMemoryTaskStore,
+)
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -24,13 +32,24 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     SendMessageRequest,
     SubscribeToTaskRequest,
+    Task,
     TaskPushNotificationConfig,
     TaskState,
+    TaskStatus,
 )
-from a2a.utils.constants import TransportProtocol
-from a2a.utils.errors import A2A_ERROR_MAPPING, MethodNotFoundError
+from a2a.utils.constants import (
+    PROTOCOL_VERSION_CURRENT,
+    VERSION_HEADER,
+    TransportProtocol,
+)
+from a2a.utils.errors import (
+    A2A_ERROR_MAPPING,
+    MethodNotFoundError,
+    TaskNotFoundError,
+)
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.applications import Starlette
 
 
 @pytest.fixture
@@ -213,6 +232,7 @@ class TestRestTransport:
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
+        mock_response.json = MagicMock(return_value={})
         mock_httpx_client.send.return_value = mock_response
 
         await client.send_message(request=params, context=context)
@@ -286,6 +306,7 @@ class TestRestTransportExtensions:
         # Mock the send method
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
+        mock_response.json = MagicMock(return_value={})
         mock_httpx_client.send.return_value = mock_response
 
         context = ClientCallContext(
@@ -752,6 +773,76 @@ class TestRestTransportTenant:
         assert args[2] == f'http://agent.example.com/api{expected_path}'
 
 
+class TestRestTransportPathEncoding:
+    """Ids with reserved URL characters reach their own resource.
+
+    Runs a real request handler behind the REST routes, so a wrong path
+    reads or deletes the wrong resource.
+    """
+
+    @pytest_asyncio.fixture
+    async def transport(self) -> AsyncGenerator[RestTransport, None]:
+        task_store = InMemoryTaskStore()
+        await task_store.save(
+            Task(
+                id='t1',
+                context_id='c1',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            ),
+            ServerCallContext(),
+        )
+        agent_card = AgentCard(
+            capabilities=AgentCapabilities(push_notifications=True)
+        )
+        request_handler = DefaultRequestHandler(
+            None,
+            task_store,
+            agent_card,
+            push_config_store=InMemoryPushNotificationConfigStore(),
+        )
+        app = Starlette(
+            routes=create_rest_routes(request_handler=request_handler)
+        )
+        httpx_client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
+        )
+        transport = RestTransport(httpx_client, agent_card, 'http://agent')
+        yield transport
+        await transport.close()
+
+    @pytest.mark.asyncio
+    async def test_delete_push_config_keeps_config_with_shared_prefix(
+        self, transport: RestTransport
+    ):
+        for config_id in ('alerts', 'alerts#ops'):
+            await transport.create_task_push_notification_config(
+                TaskPushNotificationConfig(
+                    task_id='t1',
+                    id=config_id,
+                    url='https://hooks.example.com/hook',
+                )
+            )
+
+        await transport.delete_task_push_notification_config(
+            DeleteTaskPushNotificationConfigRequest(
+                task_id='t1', id='alerts#ops'
+            )
+        )
+
+        response = await transport.list_task_push_notification_configs(
+            ListTaskPushNotificationConfigsRequest(task_id='t1')
+        )
+        assert [config.id for config in response.configs] == ['alerts']
+
+    @pytest.mark.asyncio
+    async def test_get_task_does_not_return_task_named_by_id_prefix(
+        self, transport: RestTransport
+    ):
+        with pytest.raises(TaskNotFoundError):
+            await transport.get_task(GetTaskRequest(id='t1?x'))
+
+
 class TestRestUnrecognizedResponseFields:
     """Spec 5.7: unrecognized response fields are ignored (issue #1341)."""
 
@@ -829,3 +920,28 @@ class TestRestUnrecognizedResponseFields:
         assert len(events) == 1
         assert events[0].message.message_id == 'r1'
         assert events[0].message.parts[0].text == 'hello'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('body', [[], None])
+    async def test_get_task_rejects_body_that_is_not_an_object(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        body: object,
+    ):
+        """A 200 body that is not an object is not read as an empty Task."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_httpx_client.build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json = MagicMock(return_value=body)
+        mock_httpx_client.send.return_value = mock_response
+
+        with pytest.raises(json_format.ParseError, match='JSON object'):
+            await client.get_task(GetTaskRequest(id='task-1'))
