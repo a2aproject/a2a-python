@@ -55,9 +55,6 @@ Event = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
 
 _MessageT = TypeVar('_MessageT', bound=ProtobufMessage)
 
-# Insignificant whitespace allowed around JSON values (RFC 8259 section 2).
-_JSON_WHITESPACE = ' \t\n\r'
-
 
 def parse_lenient(
     data: dict[str, Any] | str | bytes, message: _MessageT
