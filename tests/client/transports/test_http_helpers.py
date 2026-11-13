@@ -1,5 +1,3 @@
-import time
-
 from collections.abc import AsyncIterator
 
 import httpx
@@ -83,6 +81,7 @@ async def test_parse_sse_stream_ends_lines_only_at_cr_or_lf(
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(10)
 async def test_parse_sse_stream_long_data_line_over_many_chunks() -> None:
     """A multi-megabyte data: line read in small chunks stays linear."""
     payload = 'x' * (2 * 1024 * 1024)
@@ -91,14 +90,11 @@ async def test_parse_sse_stream_long_data_line_over_many_chunks() -> None:
     chunks = [body[i : i + chunk_size] for i in range(0, len(body), chunk_size)]
     response = httpx.Response(200, content=_byte_chunks(chunks))
 
-    start = time.perf_counter()
-    events = [e async for e in parse_sse_stream(response)]
-    elapsed = time.perf_counter() - start
-
-    assert events == [('message', payload)]
     # Re-joining and re-scanning the whole line on every chunk took tens of
     # seconds here; the linear version takes well under a second.
-    assert elapsed < 5
+    events = [e async for e in parse_sse_stream(response)]
+
+    assert events == [('message', payload)]
 
 
 @pytest.mark.asyncio

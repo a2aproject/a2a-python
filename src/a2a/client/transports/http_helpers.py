@@ -93,6 +93,8 @@ async def _aiter_sse_lines(
         if rest:
             pieces.append(rest)
     tail = ''.join(pieces)
+    # A held CR at end of stream still ends a line, even an empty one. That
+    # blank line is what dispatches the last event, so yield it too.
     if held_cr or tail:
         yield tail
 
