@@ -26,6 +26,14 @@ def mock_grpc_context() -> AsyncMock:
     context = AsyncMock(spec=grpc.aio.ServicerContext)
     context.abort = AsyncMock()
     context.set_trailing_metadata = MagicMock()
+    # Mirrors the JSON-RPC/REST test fixtures, which default their TestClient
+    # to `headers={'A2A-Version': '1.0'}` (see test_jsonrpc_dispatcher.py,
+    # test_rest_dispatcher.py) now that GrpcHandler validates A2A-Version the
+    # same way those dispatchers already did. Tests exercising version
+    # negotiation itself override `invocation_metadata.return_value`.
+    context.invocation_metadata.return_value = grpc.aio.Metadata(
+        ('a2a-version', '1.0'),
+    )
     return context
 
 
@@ -334,12 +342,12 @@ async def test_list_tasks_success(
         ),
         (
             types.PushNotificationNotSupportedError(),
-            grpc.StatusCode.FAILED_PRECONDITION,
+            grpc.StatusCode.UNIMPLEMENTED,
             'PushNotificationNotSupportedError',
         ),
         (
             types.UnsupportedOperationError(),
-            grpc.StatusCode.FAILED_PRECONDITION,
+            grpc.StatusCode.UNIMPLEMENTED,
             'UnsupportedOperationError',
         ),
         (
@@ -417,6 +425,7 @@ class TestGrpcExtensions:
         mock_grpc_context: AsyncMock,
     ) -> None:
         mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
+            ('a2a-version', '1.0'),
             (HTTP_EXTENSION_HEADER.lower(), 'foo'),
             (HTTP_EXTENSION_HEADER.lower(), 'bar'),
         )
@@ -442,6 +451,7 @@ class TestGrpcExtensions:
         mock_grpc_context: AsyncMock,
     ) -> None:
         mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
+            ('a2a-version', '1.0'),
             (HTTP_EXTENSION_HEADER.lower(), 'foo ,, bar,'),
             (HTTP_EXTENSION_HEADER.lower(), 'baz  , bar'),
         )
@@ -467,6 +477,7 @@ class TestGrpcExtensions:
         mock_grpc_context: AsyncMock,
     ) -> None:
         mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
+            ('a2a-version', '1.0'),
             (HTTP_EXTENSION_HEADER.lower(), 'foo'),
             (HTTP_EXTENSION_HEADER.lower(), 'bar'),
         )

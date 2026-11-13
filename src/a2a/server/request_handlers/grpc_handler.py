@@ -3,7 +3,7 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 
 try:
@@ -18,6 +18,7 @@ except ImportError as e:
 
 from google.protobuf import any_pb2, empty_pb2, message
 from google.rpc import error_details_pb2, status_pb2
+from packaging.version import InvalidVersion, Version
 
 import a2a.types.a2a_pb2_grpc as a2a_grpc
 
@@ -30,7 +31,7 @@ from a2a.extensions.common import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
-from a2a.utils import proto_utils
+from a2a.utils import constants, proto_utils
 from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
 from a2a.utils.grpc_status import status_to_grpc
 from a2a.utils.proto_utils import validation_errors_to_bad_request
@@ -52,7 +53,19 @@ class DefaultGrpcServerCallContextBuilder(GrpcServerCallContextBuilder):
 
     def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
         """Builds a ServerCallContext from a gRPC ServicerContext."""
-        state = {'grpc_context': context}
+        state: dict[str, Any] = {'grpc_context': context}
+        # Mirror what the HTTP route builders do (`state['headers'] =
+        # dict(request.headers)`, see a2a.server.routes.common): helpers such
+        # as `validate_version` read the A2A-Version header out of
+        # `context.state['headers']`. Without this key the gRPC transport has
+        # no way to see request metadata at all. Keys are lowercased because
+        # gRPC metadata keys are case-insensitive and normalized to lowercase.
+        state['headers'] = {
+            key.lower(): (
+                value.decode('utf-8') if isinstance(value, bytes) else value
+            )
+            for key, value in (context.invocation_metadata() or ())
+        }
         return ServerCallContext(
             user=self.build_user(context),
             state=state,
@@ -88,14 +101,57 @@ _ERROR_CODE_MAP: dict[type[A2AError], grpc.StatusCode] = {
     types.InternalError: grpc.StatusCode.INTERNAL,
     types.TaskNotFoundError: grpc.StatusCode.NOT_FOUND,
     types.TaskNotCancelableError: grpc.StatusCode.FAILED_PRECONDITION,
-    types.PushNotificationNotSupportedError: grpc.StatusCode.FAILED_PRECONDITION,
-    types.UnsupportedOperationError: grpc.StatusCode.FAILED_PRECONDITION,
+    types.PushNotificationNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
+    types.UnsupportedOperationError: grpc.StatusCode.UNIMPLEMENTED,
     types.ContentTypeNotSupportedError: grpc.StatusCode.INVALID_ARGUMENT,
     types.InvalidAgentResponseError: grpc.StatusCode.INTERNAL,
     types.ExtendedAgentCardNotConfiguredError: grpc.StatusCode.FAILED_PRECONDITION,
     types.ExtensionSupportRequiredError: grpc.StatusCode.FAILED_PRECONDITION,
-    types.VersionNotSupportedError: grpc.StatusCode.FAILED_PRECONDITION,
+    types.VersionNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
 }
+
+
+def _validate_a2a_version(server_context: ServerCallContext) -> None:
+    """Rejects requests whose A2A-Version metadata this handler can't serve.
+
+    The JSON-RPC and REST dispatchers already enforce this through the
+    `@validate_version(PROTOCOL_VERSION_1_0)` decorator; the gRPC transport had
+    no equivalent, so `A2A-Version: 99.0` was processed as if it were 1.0.
+    Spec §7 (Version Negotiation): "If the version is not supported by the
+    interface, agents MUST return a `VersionNotSupportedError`."
+
+    Applied here — in the one place every RPC funnels through — rather than as
+    a decorator on each of the 11 servicer methods. `VersionNotSupportedError`
+    is an `A2AError`, so the existing `except A2AError` in `_handle_unary` /
+    `_handle_stream` maps it to a gRPC status via `_ERROR_CODE_MAP`.
+    """
+    headers = server_context.state.get('headers', {})
+    actual = headers.get(constants.VERSION_HEADER.lower()) or headers.get(
+        constants.VERSION_HEADER
+    )
+    if not actual:
+        # Same default as `validate_version`: absent header means 0.3.
+        actual = constants.PROTOCOL_VERSION_0_3
+    actual = str(actual)
+    if actual == constants.PROTOCOL_VERSION_1_0:
+        return
+    try:
+        compatible = (
+            Version(actual).major
+            == Version(constants.PROTOCOL_VERSION_1_0).major
+        )
+    except InvalidVersion:
+        compatible = False
+    if not compatible:
+        logger.warning(
+            "Version mismatch: actual='%s', expected='%s'",
+            actual,
+            constants.PROTOCOL_VERSION_1_0,
+        )
+        raise types.VersionNotSupportedError(
+            message=f"A2A version '{actual}' is not supported by this handler. "
+            f"Expected version '{constants.PROTOCOL_VERSION_1_0}'."
+        )
 
 
 TResponse = TypeVar('TResponse')
@@ -425,4 +481,5 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     ) -> ServerCallContext:
         server_context = self._context_builder.build(context)
         server_context.tenant = getattr(request, 'tenant', '')
+        _validate_a2a_version(server_context)
         return server_context
