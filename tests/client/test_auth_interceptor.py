@@ -332,3 +332,221 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
 
     await auth_interceptor.before(args)
     assert context.service_parameters is None
+
+
+# ---------------------------------------------------------------------------
+# Tests for multi-scheme AND / multi-requirement OR semantics (#1138)
+# ---------------------------------------------------------------------------
+
+
+class DictCredentialService:
+    """A simple credential service backed by a plain dict."""
+
+    def __init__(self, creds: dict[str, str]) -> None:
+        self._creds = creds
+
+    async def get_credentials(
+        self,
+        security_scheme_name: str,
+        context: ClientCallContext | None,
+    ) -> str | None:
+        return self._creds.get(security_scheme_name)
+
+
+def _make_agent_card(
+    *,
+    security_schemes: dict[str, SecurityScheme],
+    security_requirements: list[SecurityRequirement],
+) -> AgentCard:
+    """Helper to build a minimal AgentCard with security configuration."""
+    return AgentCard(
+        name='testbot',
+        description='test',
+        version='1.0',
+        default_input_modes=[],
+        default_output_modes=[],
+        skills=[],
+        capabilities=AgentCapabilities(),
+        security_schemes=security_schemes,
+        security_requirements=security_requirements,
+    )
+
+
+@pytest.mark.asyncio
+async def test_multi_scheme_and_semantics() -> None:
+    """A single requirement with two API-key-in-header schemes must apply both headers.
+
+    This is the exact reproduction from issue #1138.
+    """
+    creds = {'AUTH_KEY': 'gw-secret-key', 'USER_ID': 'user-123'}
+    card = _make_agent_card(
+        security_schemes={
+            'AUTH_KEY': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='AUTH_KEY'
+                )
+            ),
+            'USER_ID': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='USER_ID'
+                )
+            ),
+        },
+        security_requirements=[
+            SecurityRequirement(
+                schemes={'AUTH_KEY': StringList(), 'USER_ID': StringList()}
+            )
+        ],
+    )
+
+    args = BeforeArgs(input=None, method='message/send', agent_card=card)
+    await AuthInterceptor(DictCredentialService(creds)).before(args)
+
+    assert args.context is not None
+    assert args.context.service_parameters is not None
+    assert args.context.service_parameters['AUTH_KEY'] == 'gw-secret-key'
+    assert args.context.service_parameters['USER_ID'] == 'user-123'
+
+
+@pytest.mark.asyncio
+async def test_multi_requirement_or_fallback() -> None:
+    """When the first requirement is unsatisfiable, the second (OR) should be used."""
+    creds = {'BACKUP_KEY': 'backup-secret'}
+    card = _make_agent_card(
+        security_schemes={
+            'PRIMARY_KEY': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='X-Primary'
+                )
+            ),
+            'BACKUP_KEY': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='X-Backup'
+                )
+            ),
+        },
+        security_requirements=[
+            # First requirement: credential not available
+            SecurityRequirement(schemes={'PRIMARY_KEY': StringList()}),
+            # Second requirement: credential available
+            SecurityRequirement(schemes={'BACKUP_KEY': StringList()}),
+        ],
+    )
+
+    args = BeforeArgs(input=None, method='message/send', agent_card=card)
+    await AuthInterceptor(DictCredentialService(creds)).before(args)
+
+    assert args.context is not None
+    assert args.context.service_parameters is not None
+    assert args.context.service_parameters['X-Backup'] == 'backup-secret'
+    # The primary key should NOT be present
+    assert 'X-Primary' not in args.context.service_parameters
+
+
+@pytest.mark.asyncio
+async def test_partial_requirement_not_applied() -> None:
+    """A requirement with two schemes where one credential is missing must not be partially applied."""
+    creds = {'AUTH_KEY': 'gw-secret-key'}  # USER_ID is missing
+    card = _make_agent_card(
+        security_schemes={
+            'AUTH_KEY': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='AUTH_KEY'
+                )
+            ),
+            'USER_ID': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='USER_ID'
+                )
+            ),
+        },
+        security_requirements=[
+            SecurityRequirement(
+                schemes={'AUTH_KEY': StringList(), 'USER_ID': StringList()}
+            )
+        ],
+    )
+
+    args = BeforeArgs(input=None, method='message/send', agent_card=card)
+    await AuthInterceptor(DictCredentialService(creds)).before(args)
+
+    # Nothing should be applied — partial application is not allowed
+    assert args.context is None or args.context.service_parameters is None
+
+
+@pytest.mark.asyncio
+async def test_mixed_bearer_and_apikey_in_single_requirement() -> None:
+    """A single requirement with both Bearer and API-key-in-header schemes must apply both."""
+    creds = {'bearer_scheme': 'my-token', 'apikey_scheme': 'my-api-key'}
+    card = _make_agent_card(
+        security_schemes={
+            'bearer_scheme': SecurityScheme(
+                http_auth_security_scheme=HTTPAuthSecurityScheme(
+                    scheme='bearer'
+                )
+            ),
+            'apikey_scheme': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='X-API-Key'
+                )
+            ),
+        },
+        security_requirements=[
+            SecurityRequirement(
+                schemes={
+                    'bearer_scheme': StringList(),
+                    'apikey_scheme': StringList(),
+                }
+            )
+        ],
+    )
+
+    args = BeforeArgs(input=None, method='message/send', agent_card=card)
+    await AuthInterceptor(DictCredentialService(creds)).before(args)
+
+    assert args.context is not None
+    assert args.context.service_parameters is not None
+    assert args.context.service_parameters['Authorization'] == 'Bearer my-token'
+    assert args.context.service_parameters['X-API-Key'] == 'my-api-key'
+
+
+@pytest.mark.asyncio
+async def test_unsupported_scheme_type_makes_requirement_unsatisfiable() -> (
+    None
+):
+    """An unsupported scheme type (API key in query) makes its requirement unsatisfiable.
+
+    A fallback requirement should be used instead.
+    """
+    creds = {
+        'query_key': 'query-secret',
+        'header_key': 'header-secret',
+    }
+    card = _make_agent_card(
+        security_schemes={
+            'query_key': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='query', name='api_key'
+                )
+            ),
+            'header_key': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='X-Header-Key'
+                )
+            ),
+        },
+        security_requirements=[
+            # First requirement: uses unsupported query location
+            SecurityRequirement(schemes={'query_key': StringList()}),
+            # Second requirement: uses supported header location
+            SecurityRequirement(schemes={'header_key': StringList()}),
+        ],
+    )
+
+    args = BeforeArgs(input=None, method='message/send', agent_card=card)
+    await AuthInterceptor(DictCredentialService(creds)).before(args)
+
+    assert args.context is not None
+    assert args.context.service_parameters is not None
+    assert args.context.service_parameters['X-Header-Key'] == 'header-secret'
+    assert 'api_key' not in args.context.service_parameters
