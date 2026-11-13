@@ -234,9 +234,13 @@ class TestProtoUtils:
         proto_auth_code_flow = proto_utils.ToProto.oauth2_flows(auth_code_flow)
         assert proto_auth_code_flow.HasField('authorization_code')
 
-        # Test invalid flow
-        with pytest.raises(ValueError):
-            proto_utils.ToProto.oauth2_flows(types.OAuthFlows())
+        # Test no flow, e.g. a v1.0 device code flow converted to v0.3
+        proto_no_flow = proto_utils.ToProto.oauth2_flows(types.OAuthFlows())
+        assert proto_no_flow == a2a_pb2.OAuthFlows()
+        assert (
+            proto_utils.FromProto.oauth2_flows(proto_no_flow)
+            == types.OAuthFlows()
+        )
 
         # Test FromProto
         roundtrip_password = proto_utils.FromProto.oauth2_flows(

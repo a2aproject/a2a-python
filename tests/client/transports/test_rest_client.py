@@ -109,7 +109,7 @@ class TestRestTransport:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_lines.side_effect = httpx.TimeoutException(
+        mock_response.aiter_text.side_effect = httpx.TimeoutException(
             'Read timed out'
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
@@ -232,6 +232,7 @@ class TestRestTransport:
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
+        mock_response.json = MagicMock(return_value={})
         mock_httpx_client.send.return_value = mock_response
 
         await client.send_message(request=params, context=context)
@@ -305,6 +306,7 @@ class TestRestTransportExtensions:
         # Mock the send method
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
+        mock_response.json = MagicMock(return_value={})
         mock_httpx_client.send.return_value = mock_response
 
         context = ClientCallContext(
@@ -346,7 +348,7 @@ class TestRestTransportExtensions:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_response.aiter_text.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         context = ClientCallContext(
@@ -396,7 +398,7 @@ class TestRestTransportExtensions:
             request=httpx.Request('POST', 'http://test.url'),
             response=mock_response,
         )
-        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_response.aiter_text.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
@@ -750,7 +752,7 @@ class TestRestTransportTenant:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_response.aiter_text.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         # 3. Call the method
@@ -903,8 +905,8 @@ class TestRestUnrecognizedResponseFields:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_lines.return_value = async_iterable_from_list(
-            [f'data: {json.dumps(payload)}', '']
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            [f'data: {json.dumps(payload)}\n\n']
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
@@ -918,6 +920,31 @@ class TestRestUnrecognizedResponseFields:
         assert len(events) == 1
         assert events[0].message.message_id == 'r1'
         assert events[0].message.parts[0].text == 'hello'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('body', [[], None])
+    async def test_get_task_rejects_body_that_is_not_an_object(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        body: object,
+    ):
+        """A 200 body that is not an object is not read as an empty Task."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_httpx_client.build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json = MagicMock(return_value=body)
+        mock_httpx_client.send.return_value = mock_response
+
+        with pytest.raises(json_format.ParseError, match='JSON object'):
+            await client.get_task(GetTaskRequest(id='task-1'))
 
 
 _TASK_NOT_FOUND_BODY = {
@@ -939,10 +966,10 @@ _TASK_NOT_FOUND_BODY = {
 class TestRestStreamErrors:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        'sse_lines',
+        'sse_text',
         [
-            ['event: error', f'data: {json.dumps(_TASK_NOT_FOUND_BODY)}', ''],
-            [f'data: {json.dumps(_TASK_NOT_FOUND_BODY)}', ''],
+            f'event: error\ndata: {json.dumps(_TASK_NOT_FOUND_BODY)}\n\n',
+            f'data: {json.dumps(_TASK_NOT_FOUND_BODY)}\n\n',
         ],
         ids=['error_event', 'data_event'],
     )
@@ -952,7 +979,7 @@ class TestRestStreamErrors:
         mock_sse_source: AsyncMock,
         mock_httpx_client: AsyncMock,
         mock_agent_card: MagicMock,
-        sse_lines: list[str],
+        sse_text: str,
     ):
         """An error body raises whether or not the event is named `error`."""
         client = RestTransport(
@@ -963,8 +990,8 @@ class TestRestStreamErrors:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_lines.return_value = async_iterable_from_list(
-            sse_lines
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            [sse_text]
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
@@ -989,8 +1016,8 @@ class TestRestStreamErrors:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_lines.return_value = async_iterable_from_list(
-            [f'data: {json.dumps({"someNewEvent": {"id": "e1"}})}', '']
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            [f'data: {json.dumps({"someNewEvent": {"id": "e1"}})}\n\n']
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
