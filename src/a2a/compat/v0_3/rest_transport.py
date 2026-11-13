@@ -107,7 +107,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             '/v1/message:send',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         )
 
         resp_proto = ParseDict(
@@ -152,7 +152,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             '/v1/message:stream',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         ):
             yield event
 
@@ -229,7 +229,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             f'/v1/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         )
         resp_proto = ParseDict(
             response_data,
@@ -292,8 +292,10 @@ class CompatRestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
-        raise NotImplementedError(
-            'delete_task_push_notification_config not supported in v0.3 REST'
+        await self._execute_request(
+            'DELETE',
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            context=context,
         )
 
     async def subscribe(
