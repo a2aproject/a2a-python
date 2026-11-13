@@ -120,7 +120,7 @@ class REST03Adapter:
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:
         """Constructs a dictionary of API routes and their corresponding handlers."""
-        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
+        routes: dict[tuple[str, str], Callable[[Request], Any]] = {  # ty: ignore[invalid-assignment]
             ('/v1/message:send', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_message_send
             ),

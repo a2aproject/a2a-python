@@ -105,29 +105,46 @@ Constructing messages is simplified in v1.0. The old API required wrapping conte
 ```python
 import base64
 from uuid import uuid4
-from a2a.types import Message, Part, Role, TextPart, FilePart, DataPart, FileWithBytes, FileWithUri
+from a2a.types import (
+    Message,
+    Part,
+    Role,
+    TextPart,
+    FilePart,
+    DataPart,
+    FileWithBytes,
+    FileWithUri,
+)
 
 # Text part
 text_part = Part(TextPart(text="What's the weather in Warsaw?"))
 
 # File part — base64-encoded bytes (e.g. an image)
-with open("photo.png", "rb") as f:
+with open('photo.png', 'rb') as f:
     image_b64 = base64.b64encode(f.read()).decode()
-file_bytes_part = Part(FilePart(file=FileWithBytes(
-    bytes=image_b64,
-    mime_type="image/png",
-    name="photo.png",
-)))
+file_bytes_part = Part(
+    FilePart(
+        file=FileWithBytes(
+            bytes=image_b64,
+            mime_type='image/png',
+            name='photo.png',
+        )
+    )
+)
 
 # File part — URI pointing to a remote file
-file_uri_part = Part(FilePart(file=FileWithUri(
-    uri="https://example.com/report.pdf",
-    mime_type="application/pdf",
-    name="report.pdf",
-)))
+file_uri_part = Part(
+    FilePart(
+        file=FileWithUri(
+            uri='https://example.com/report.pdf',
+            mime_type='application/pdf',
+            name='report.pdf',
+        )
+    )
+)
 
 # Data part — structured JSON payload
-data_part = Part(DataPart(data={"city": "Warsaw", "temperature_c": 18}))
+data_part = Part(DataPart(data={'city': 'Warsaw', 'temperature_c': 18}))
 
 message = Message(
     role=Role.user,
@@ -149,24 +166,24 @@ from a2a.types import Message, Part, Role
 text_part = Part(text="What's the weather in Warsaw?")
 
 # File part — raw bytes (e.g. an image); no base64 encoding required
-with open("photo.png", "rb") as f:
+with open('photo.png', 'rb') as f:
     image_bytes = f.read()
 file_bytes_part = Part(
     raw=image_bytes,
-    media_type="image/png",
-    filename="photo.png",
+    media_type='image/png',
+    filename='photo.png',
 )
 
 # File part — URI pointing to a remote file
 file_uri_part = Part(
-    url="https://example.com/report.pdf",
-    media_type="application/pdf",
-    filename="report.pdf",
+    url='https://example.com/report.pdf',
+    media_type='application/pdf',
+    filename='report.pdf',
 )
 
 # Data part — use ParseDict to convert a Python dict to a protobuf Value
 data_part = Part(
-    data=ParseDict({"city": "Warsaw", "temperature_c": 18}, Value()),
+    data=ParseDict({'city': 'Warsaw', 'temperature_c': 18}, Value()),
 )
 
 message = Message(
@@ -183,7 +200,9 @@ For text-only messages, use the [A2A helper utilities](#10-helper-utilities) to 
 from a2a.helpers import new_text_message
 from a2a.types import Role
 
-message = new_text_message(text="What's the weather in Warsaw?", role=Role.ROLE_USER)
+message = new_text_message(
+    text="What's the weather in Warsaw?", role=Role.ROLE_USER
+)
 ```
 
 > **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
@@ -257,7 +276,7 @@ agent_card = AgentCard(
         AgentInterface(
             protocol_binding='GRPC',
             url='http://localhost:50051/a2a/grpc/',
-        )
+        ),
     ],
     version='0.0.1',
     default_input_modes=['text/plain'],
@@ -327,6 +346,7 @@ from a2a.helpers import new_text_message
 from a2a.server.agent_execution import AgentExecutor
 from a2a.types import TaskStatusUpdateEvent
 
+
 class MyExecutor(AgentExecutor):
     async def execute(self, context, event_queue):
         # Mixing Message and Task events — no longer allowed.
@@ -348,6 +368,7 @@ from a2a.helpers import (
 from a2a.server.agent_execution import AgentExecutor
 from a2a.types import Role, TaskState
 
+
 # Pattern A: Message-only stream — one Message, then done.
 class GreetingExecutor(AgentExecutor):
     async def execute(self, context, event_queue):
@@ -355,13 +376,16 @@ class GreetingExecutor(AgentExecutor):
             new_text_message('Hello!', role=Role.ROLE_AGENT)
         )
 
+
 # Pattern B: Task lifecycle stream — Task first, then updates.
 class WorkflowExecutor(AgentExecutor):
     def __init__(self, agent):
         self._agent = agent  # Your underlying agent (LLM, tool, etc.)
 
     async def execute(self, context, event_queue):
-        task = context.current_task or new_task_from_user_message(context.message)
+        task = context.current_task or new_task_from_user_message(
+            context.message
+        )
         await event_queue.enqueue_event(task)  # ✅ Task MUST be first
 
         await event_queue.enqueue_event(
@@ -434,7 +458,9 @@ routes = []
 # A2A Agent Card routes
 routes.extend(create_agent_card_routes(agent_card))
 # JSON-RPC routes
-routes.extend(create_jsonrpc_routes(request_handler, rpc_url='/api/v1/jsonrpc/'))
+routes.extend(
+    create_jsonrpc_routes(request_handler, rpc_url='/api/v1/jsonrpc/')
+)
 
 # Optional: Add routes for REST/HTTP transports
 # routes.extend(create_rest_routes(request_handler, path_prefix='/api/v1/rest/'))
@@ -501,8 +527,12 @@ If you cannot update all clients at once, you can run a v1.0 server that also ac
 **1. Add the v0.3 AgentInterface to `supported_interfaces` in your `AgentCard`**:
 
 ```python
-supported_interfaces=[
-    AgentInterface(protocol_binding='JSONRPC', protocol_version='0.3', url='http://localhost:9999/'),
+supported_interfaces = [
+    AgentInterface(
+        protocol_binding='JSONRPC',
+        protocol_version='0.3',
+        url='http://localhost:9999/',
+    ),
 ]
 ```
 
@@ -638,7 +668,7 @@ from a2a.types import Role
 user_message = new_text_message("What's the weather?", role=Role.ROLE_USER)
 
 # Create an agent response message
-response_message = new_text_message("It is sunny today!")
+response_message = new_text_message('It is sunny today!')
 ```
 
 **2. Extract text from a message**

@@ -222,6 +222,7 @@ ignore = [
     "TRY003",
     "TRY201",
     "FIX002",
+    "PLR0917", # Too many positional arguments
 ]
 
 select = [

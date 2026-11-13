@@ -50,5 +50,4 @@ from a2a.compat.v0_3 import conversions
 
 # 3. Convert the legacy Pydantic object into a modern v1.0 Protobuf
 core_pb_msg: pb2_v10.Message = conversions.to_core_message(pydantic_msg)
-
 ```
