@@ -285,8 +285,10 @@ class CompatRestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
-        raise NotImplementedError(
-            'delete_task_push_notification_config not supported in v0.3 REST'
+        await self._execute_request(
+            'DELETE',
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            context=context,
         )
 
     async def subscribe(
