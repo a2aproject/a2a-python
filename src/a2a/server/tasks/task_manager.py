@@ -15,7 +15,6 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.errors import InvalidAgentResponseError, InvalidParamsError
 from a2a.utils.telemetry import trace_function
 
@@ -222,13 +221,12 @@ class TaskManager:
             logger.debug('Task %s not found.', self.task_id)
         return self._current_task
 
-    def _stamp_terminal_timestamp(
+    def _stamp_status_timestamp(
         self, holder: Task | TaskStatusUpdateEvent
     ) -> None:
-        """Auto-stamps a terminal status that arrives without a timestamp."""
-        if (
-            holder.status.state in TERMINAL_TASK_STATES
-            and not holder.status.HasField('timestamp')
+        """Supply a timestamp for a status when the agent did not provide one."""
+        if holder.HasField('status') and not holder.status.HasField(
+            'timestamp'
         ):
             holder.status.timestamp.FromDatetime(datetime.now(timezone.utc))
 
@@ -272,7 +270,7 @@ class TaskManager:
             task_id_from_event,
         )
         if isinstance(event, Task):
-            self._stamp_terminal_timestamp(event)
+            self._stamp_status_timestamp(event)
             self._pending_event = event
             try:
                 await self._save_task(event)
@@ -294,7 +292,7 @@ class TaskManager:
             # Stamped on the event, not the copy below: the same event object
             # is published to subscribers, push notifications and the event
             # table, so it has to carry the timestamp too.
-            self._stamp_terminal_timestamp(event)
+            self._stamp_status_timestamp(event)
             if task.status.HasField('message'):
                 task.history.append(task.status.message)
             if event.metadata:
@@ -400,12 +398,14 @@ class TaskManager:
             context_id,
         )
         history = [self._initial_message] if self._initial_message else []
-        return Task(
+        task = Task(
             id=task_id,
             context_id=context_id,
             status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
             history=history,
         )
+        self._stamp_status_timestamp(task)
+        return task
 
     async def _save_task(self, task: Task) -> None:
         """Saves the task and updates the snapshot.

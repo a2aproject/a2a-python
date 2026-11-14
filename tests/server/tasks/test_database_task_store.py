@@ -24,6 +24,7 @@ from a2a.auth.user import User
 from a2a.compat.v0_3.model_conversions import core_to_compat_task_model
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel  # Important: To get Base.metadata
+from a2a.server.tasks import TaskManager
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.types.a2a_pb2 import (
     Artifact,
@@ -33,6 +34,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskState,
     TaskStatus,
+    TaskStatusUpdateEvent,
 )
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
@@ -225,6 +227,40 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
     await db_store_parameterized.delete(
         task_to_save.id, TEST_CONTEXT
     )  # Cleanup
+
+
+@pytest.mark.asyncio
+async def test_manager_timestamps_support_database_status_filter(
+    db_store_parameterized: DatabaseTaskStore,
+) -> None:
+    manager = TaskManager(
+        task_id='timestamp-filter-task',
+        context_id='timestamp-filter-context',
+        task_store=db_store_parameterized,
+        initial_message=None,
+        context=TEST_CONTEXT,
+    )
+    event = TaskStatusUpdateEvent(
+        task_id='timestamp-filter-task',
+        context_id='timestamp-filter-context',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+    await manager.save_task_event(event)
+    assert event.status.HasField('timestamp')
+
+    timestamp = event.status.timestamp.ToDatetime(tzinfo=timezone.utc)
+    request = ListTasksRequest(status=TaskState.TASK_STATE_WORKING)
+    request.status_timestamp_after.FromDatetime(
+        timestamp - timedelta(seconds=1)
+    )
+    listed = await db_store_parameterized.list(request, TEST_CONTEXT)
+    assert [task.id for task in listed.tasks] == ['timestamp-filter-task']
+
+    request.status_timestamp_after.FromDatetime(
+        timestamp + timedelta(seconds=1)
+    )
+    listed = await db_store_parameterized.list(request, TEST_CONTEXT)
+    assert not listed.tasks
 
 
 @pytest.mark.asyncio
