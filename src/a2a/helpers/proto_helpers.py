@@ -339,6 +339,11 @@ def new_data_part(
 ) -> Part:
     """Creates a Part with structured data (google.protobuf.Value).
 
+    Note:
+        ``google.protobuf.Value`` stores every number as a double, so whole
+        numbers lose their integer type here and are read back as floats
+        (``4326`` becomes ``4326.0``). See ``get_data_parts``.
+
     Args:
         data: JSON-serializable data to embed (dict, list, str, etc.).
         media_type: Optional MIME type of the part content (e.g., "text/plain", "application/json", "image/png").
@@ -406,6 +411,11 @@ def get_data_parts(parts: Sequence[Part]) -> list[Any]:
 
     Each returned element is the Python object obtained by converting
     the ``google.protobuf.Value`` back via ``MessageToDict``.
+
+    Note:
+        Whole numbers come back as floats (``4326`` becomes ``4326.0``)
+        because ``google.protobuf.Value`` stores numbers as doubles. For
+        fields you model as integers, narrow floats with ``is_integer()``.
 
     Args:
         parts: A sequence of ``Part`` objects.

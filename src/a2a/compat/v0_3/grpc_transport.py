@@ -2,10 +2,10 @@ import logging
 
 from collections.abc import AsyncGenerator, Callable
 from functools import wraps
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.errors import A2A_REASON_TO_ERROR, JSON_RPC_ERROR_CODE_MAP
 
 
 try:
@@ -17,6 +17,10 @@ except ImportError as e:
         "'pip install a2a-sdk[grpc]'"
     ) from e
 
+
+from google.rpc import (  # type: ignore[reportMissingModuleSource]
+    error_details_pb2,
+)
 
 from a2a.client.client import ClientCallContext, ClientConfig
 from a2a.client.optionals import Channel
@@ -33,6 +37,7 @@ from a2a.compat.v0_3 import (
 from a2a.compat.v0_3.extension_headers import add_legacy_extension_header
 from a2a.types import a2a_pb2
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
+from a2a.utils.grpc_status import status_from_call
 from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -54,6 +59,18 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
         exception_cls = _A2A_ERROR_NAME_TO_CLS.get(error_type_name)
         if exception_cls:
             raise exception_cls(error_message) from e
+
+    # Other v0.3 servers (a2a-go) name the error in ErrorInfo.reason instead.
+    status = status_from_call(cast('grpc.Call', e))
+    if status is not None:
+        for detail in status.details:
+            # `.DESCRIPTOR` is typed as a py/C union; `.Is` wants a Descriptor.
+            if detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):  # ty: ignore[invalid-argument-type]
+                error_info = error_details_pb2.ErrorInfo()
+                detail.Unpack(error_info)
+                exception_cls = A2A_REASON_TO_ERROR.get(error_info.reason)
+                if error_info.domain == 'a2a-protocol.org' and exception_cls:
+                    raise exception_cls(status.message) from e
     raise A2AClientError(f'gRPC Error {e.code().name}: {e.details()}') from e
 
 

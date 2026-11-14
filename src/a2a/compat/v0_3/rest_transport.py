@@ -4,11 +4,13 @@ import logging
 
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
+from urllib.parse import quote
 
 import httpx
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 
+from a2a.client.card_resolver import parse_agent_card
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.base import ClientTransport
@@ -46,6 +48,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, MethodNotFoundError
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -55,6 +58,11 @@ logger = logging.getLogger(__name__)
 _A2A_ERROR_NAME_TO_CLS = {
     error_type.__name__: error_type for error_type in JSON_RPC_ERROR_CODE_MAP
 }
+
+
+def _quote_id(value: str) -> str:
+    """Percent-encodes an id so it stays a single URL path segment."""
+    return quote(value, safe='')
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -67,11 +75,14 @@ class CompatRestTransport(ClientTransport):
         agent_card: AgentCard | None,
         url: str,
         subscribe_method_override: str | None = None,
+        *,
+        is_shared_httpx: bool = False,
     ):
         """Initializes the CompatRestTransport."""
         self.url = url.removesuffix('/')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
+        self.is_shared_httpx = is_shared_httpx
         self._subscribe_method_override = subscribe_method_override
         self._subscribe_auto_method_override = subscribe_method_override is None
 
@@ -97,7 +108,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             '/v1/message:send',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         )
 
         resp_proto = ParseDict(
@@ -145,7 +156,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             '/v1/message:stream',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         ):
             if event.HasField('task'):
                 event.task.CopyFrom(
@@ -166,7 +177,7 @@ class CompatRestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/v1/tasks/{request.id}',
+            f'/v1/tasks/{_quote_id(request.id)}',
             context=context,
             params=params,
         )
@@ -200,7 +211,7 @@ class CompatRestTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/v1/tasks/{request.id}:cancel',
+            f'/v1/tasks/{_quote_id(request.id)}:cancel',
             context=context,
         )
         resp_proto = ParseDict(
@@ -229,9 +240,9 @@ class CompatRestTransport(ClientTransport):
         )
         response_data = await self._execute_request(
             'POST',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/v1/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         )
         resp_proto = ParseDict(
             response_data,
@@ -251,7 +262,8 @@ class CompatRestTransport(ClientTransport):
         """Retrieves the push notification configuration for a specific task."""
         response_data = await self._execute_request(
             'GET',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/v1/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             context=context,
         )
         resp_proto = ParseDict(
@@ -270,8 +282,20 @@ class CompatRestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
-        raise NotImplementedError(
-            'list_task_push_notification_configs not supported in v0.3 REST'
+        response_data = await self._execute_request(
+            'GET',
+            f'/v1/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
+            context=context,
+        )
+        resp_proto = ParseDict(
+            response_data,
+            a2a_v0_3_pb2.ListTaskPushNotificationConfigResponse(),
+            ignore_unknown_fields=True,
+        )
+        return conversions.to_core_list_task_push_notification_config_response(
+            proto_utils.FromProto.list_task_push_notification_config_response(
+                resp_proto
+            )
         )
 
     async def delete_task_push_notification_config(
@@ -281,8 +305,10 @@ class CompatRestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
-        raise NotImplementedError(
-            'delete_task_push_notification_config not supported in v0.3 REST'
+        await self._execute_request(
+            'DELETE',
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            context=context,
         )
 
     async def subscribe(
@@ -304,7 +330,7 @@ class CompatRestTransport(ClientTransport):
         try:
             async for event in self._send_stream_request(
                 subscribe_method,
-                f'/v1/tasks/{request.id}:subscribe',
+                f'/v1/tasks/{_quote_id(request.id)}:subscribe',
                 context=context,
             ):
                 yield event
@@ -341,18 +367,28 @@ class CompatRestTransport(ClientTransport):
         response_data = await self._execute_request(
             'GET', '/v1/card', context=context
         )
-        resp_proto = ParseDict(
-            response_data, a2a_v0_3_pb2.AgentCard(), ignore_unknown_fields=True
-        )
-        card = conversions.to_core_agent_card(
-            proto_utils.FromProto.agent_card(resp_proto)
-        )
+        # v0.3 servers send the card as JSON. parse_agent_card reads it like
+        # the card resolver does, and still accepts a card missing required
+        # fields, which only gets a warning.
+        card = parse_agent_card(response_data)
+        warn_on_missing_required_fields(card, 'v0.3 extended agent card')
         self.agent_card = card
         return card
 
     async def close(self) -> None:
-        """Closes the httpx client."""
-        await self.httpx_client.aclose()
+        """Closes the httpx client unless it is shared."""
+        if self.is_shared_httpx:
+            logger.debug(
+                'Cannot close a shared httpx client; only the provider '
+                'that supplied it via ClientConfig.httpx_client can close it.'
+            )
+            return
+        if self.httpx_client.is_closed:
+            raise A2AClientError('HTTP client is already closed')
+        try:
+            await self.httpx_client.aclose()
+        except Exception as e:
+            raise A2AClientError(f'Failed to close HTTP client: {e}') from e
 
     def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
         """Handles HTTP status errors and raises the appropriate A2AError."""

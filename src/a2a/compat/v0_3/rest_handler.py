@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.json_format import MessageToDict
 
 
 if TYPE_CHECKING:
@@ -28,6 +28,8 @@ from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
 from a2a.utils import constants
+from a2a.utils.errors import InvalidParamsError
+from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
 from a2a.utils.version_validator import validate_version
 
@@ -67,7 +69,7 @@ class REST03Handler:
         """
         body = await request.body()
         v03_pb_msg = pb2_v03.SendMessageRequest()
-        Parse(body, v03_pb_msg, ignore_unknown_fields=True)
+        parse_lenient(body, v03_pb_msg)
         v03_params_msg = proto_utils.FromProto.message_send_params(v03_pb_msg)
         rpc_req = types_v03.SendMessageRequest(id='', params=v03_params_msg)
 
@@ -93,7 +95,7 @@ class REST03Handler:
         """
         body = await request.body()
         v03_pb_msg = pb2_v03.SendMessageRequest()
-        Parse(body, v03_pb_msg, ignore_unknown_fields=True)
+        parse_lenient(body, v03_pb_msg)
         v03_params_msg = proto_utils.FromProto.message_send_params(v03_pb_msg)
         rpc_req = types_v03.SendMessageRequest(id='', params=v03_params_msg)
 
@@ -193,6 +195,36 @@ class REST03Handler:
         return MessageToDict(pb2_v03_config)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
+    async def delete_push_notification(
+        self,
+        request: Request,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        """Handles the 'tasks/pushNotificationConfig/delete' REST method.
+
+        Args:
+            request: The incoming `Request` object.
+            context: Context provided by the server.
+
+        Returns:
+            An empty `dict`, the JSON form of `google.protobuf.Empty`.
+        """
+        task_id = request.path_params['id']
+        push_id = request.path_params['push_id']
+
+        rpc_req = types_v03.DeleteTaskPushNotificationConfigRequest(
+            id='',
+            params=types_v03.DeleteTaskPushNotificationConfigParams(
+                id=task_id, push_notification_config_id=push_id
+            ),
+        )
+
+        await self.handler03.on_delete_task_push_notification_config(
+            rpc_req, context
+        )
+        return {}
+
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def set_push_notification(
         self,
         request: Request,
@@ -211,7 +243,7 @@ class REST03Handler:
         body = await request.body()
 
         v03_pb_push = pb2_v03.CreateTaskPushNotificationConfigRequest()
-        Parse(body, v03_pb_push, ignore_unknown_fields=True)
+        parse_lenient(body, v03_pb_push)
 
         v03_params_push = (
             proto_utils.FromProto.task_push_notification_config_request(
@@ -250,7 +282,14 @@ class REST03Handler:
         """
         task_id = request.path_params['id']
         history_length_str = request.query_params.get('historyLength')
-        history_length = int(history_length_str) if history_length_str else None
+        try:
+            history_length = (
+                int(history_length_str) if history_length_str else None
+            )
+        except ValueError as e:
+            raise InvalidParamsError(
+                message=f'Failed to parse historyLength field: {e}.'
+            ) from e
 
         rpc_req = types_v03.GetTaskRequest(
             id='',

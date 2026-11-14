@@ -30,7 +30,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskState,
 )
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, TaskNotFoundError
 from google.protobuf import json_format
 
 
@@ -46,6 +46,7 @@ async def async_iterable_from_list(
 def mock_httpx_client():
     """Creates a mock httpx.AsyncClient."""
     client = AsyncMock(spec=httpx.AsyncClient)
+    client.is_closed = False
     client.headers = httpx.Headers()
     client.timeout = httpx.Timeout(30.0)
     return client
@@ -244,7 +245,7 @@ class TestSendMessage:
         mock_httpx_client.build_request.assert_called_once()
         _, kwargs = mock_httpx_client.build_request.call_args
         assert 'timeout' in kwargs
-        assert kwargs['timeout'] == httpx.Timeout(15.0)
+        assert kwargs['timeout'] == 15.0
 
 
 class TestGetTask:
@@ -450,12 +451,8 @@ class TestStreamingErrors:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_lines.return_value = async_iterable_from_list(
-            [
-                'event: error',
-                'data: Simulated SSE error',
-                '',
-            ]
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            ['event: error\ndata: Simulated SSE error\n\n']
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
@@ -474,7 +471,7 @@ class TestStreamingErrors:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_lines.side_effect = httpx.RequestError(
+        mock_response.aiter_text.side_effect = httpx.RequestError(
             'Simulated request error', request=MagicMock()
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
@@ -494,9 +491,7 @@ class TestStreamingErrors:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_lines.side_effect = httpx.TimeoutException(
-            'Timeout'
-        )
+        mock_response.aiter_text.side_effect = httpx.TimeoutException('Timeout')
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError, match='timed out'):
@@ -580,7 +575,7 @@ class TestExtensions:
             request=httpx.Request('POST', 'http://test.url'),
             response=mock_response,
         )
-        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_response.aiter_text.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
@@ -758,3 +753,223 @@ class TestCreateJsonRpcError:
         )
         assert isinstance(exc, JSONParseError)
         assert exc.message == 'Invalid JSON payload'
+
+
+class TestUnrecognizedResponseFields:
+    """Spec 5.7: unrecognized response fields are ignored (issue #1341)."""
+
+    @pytest.mark.asyncio
+    async def test_get_task_ignores_unrecognized_fields(
+        self, transport, mock_httpx_client
+    ):
+        """Unknown keys are skipped at every depth; known ones still parse."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'id': 'task-1',
+                'contextId': 'ctx-1',
+                'status': {
+                    'state': 'TASK_STATE_COMPLETED',
+                    'someNestedField': 'y',
+                },
+                'someNewField': 'x',
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        task = await transport.get_task(GetTaskRequest(id='task-1'))
+
+        assert task.id == 'task-1'
+        assert task.context_id == 'ctx-1'
+        assert task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_send_message_streaming_ignores_unrecognized_fields(
+        self, mock_sse_source: AsyncMock, transport
+    ):
+        """The streamed branch is as lenient as the unary one."""
+        payload = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'message': {
+                    'messageId': 'r1',
+                    'role': 'ROLE_AGENT',
+                    'parts': [{'text': 'hello'}],
+                },
+                'someNewField': 'x',
+            },
+        }
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            [f'data: {json.dumps(payload)}\n\n']
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        events = [
+            event
+            async for event in transport.send_message_streaming(
+                create_send_message_request()
+            )
+        ]
+
+        assert len(events) == 1
+        assert events[0].message.message_id == 'r1'
+        assert events[0].message.parts[0].text == 'hello'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('result', [[], None])
+    async def test_get_task_rejects_result_that_is_not_an_object(
+        self, transport, mock_httpx_client, result
+    ):
+        """A non-object result is not read as an empty Task."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': result,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        with pytest.raises(json_format.ParseError, match='JSON object'):
+            await transport.get_task(GetTaskRequest(id='task-1'))
+
+
+# A JSON-RPC error object with a member beyond code, message and data.
+_ERROR_WITH_EXTRA_MEMBER = {
+    'jsonrpc': '2.0',
+    'id': '1',
+    'error': {'code': -32001, 'message': 'Task not found', 'reason': 'x'},
+}
+
+
+class TestMalformedJsonRpcResponses:
+    """Responses that are not valid JSON-RPC 2.0 raise A2A errors.
+
+    The transport used to build ``JSONRPC20Response`` objects from the raw
+    body, so these responses leaked ``TypeError``/``ValueError`` from the
+    ``json-rpc`` package instead of an ``A2AClientError``.
+    """
+
+    @pytest.mark.parametrize(
+        'body',
+        [
+            pytest.param(
+                [{'jsonrpc': '2.0', 'id': '1', 'result': {}}], id='list'
+            ),
+            pytest.param('Bad Gateway', id='string'),
+            pytest.param(
+                {'jsonrpc': '2.0', 'id': '1'}, id='no-result-or-error'
+            ),
+            pytest.param(
+                {'jsonrpc': '2.0', 'id': '1', 'error': 'boom'},
+                id='error-not-an-object',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_invalid_envelope_raises_client_error(
+        self, transport, mock_httpx_client, body
+    ):
+        mock_response = MagicMock()
+        mock_response.json.return_value = body
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        with pytest.raises(A2AClientError, match='Invalid JSON-RPC response'):
+            await transport.get_task(GetTaskRequest(id='task-1'))
+
+    @pytest.mark.parametrize(
+        'error',
+        [
+            pytest.param(_ERROR_WITH_EXTRA_MEMBER['error'], id='extra-member'),
+            pytest.param({'code': -32001}, id='no-message'),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_nonstandard_error_object_maps_to_a2a_error(
+        self, transport, mock_httpx_client, error
+    ):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'error': error,
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        with pytest.raises(TaskNotFoundError):
+            await transport.get_task(GetTaskRequest(id='task-1'))
+
+    @pytest.mark.asyncio
+    async def test_delete_push_config_error_still_raises(
+        self, transport, mock_httpx_client
+    ):
+        """The delete call ignores the result but must still raise errors."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'error': {'code': -32001, 'message': 'Task not found'},
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        with pytest.raises(TaskNotFoundError):
+            await transport.delete_task_push_notification_config(
+                DeleteTaskPushNotificationConfigRequest(
+                    task_id='task-1', id='config-1'
+                )
+            )
+
+    @pytest.mark.parametrize(
+        ('lines', 'expected_error'),
+        [
+            pytest.param(['data: not json', ''], A2AClientError, id='not-json'),
+            pytest.param(
+                [f'data: {json.dumps({"jsonrpc": "2.0", "id": "1"})}', ''],
+                A2AClientError,
+                id='no-result-or-error',
+            ),
+            pytest.param(
+                [f'data: {json.dumps(_ERROR_WITH_EXTRA_MEMBER)}', ''],
+                TaskNotFoundError,
+                id='error-extra-member',
+            ),
+            pytest.param(
+                [
+                    'event: error',
+                    f'data: {json.dumps(_ERROR_WITH_EXTRA_MEMBER)}',
+                    '',
+                ],
+                TaskNotFoundError,
+                id='error-event-extra-member',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_streaming_malformed_event_raises_a2a_error(
+        self, mock_sse_source: AsyncMock, transport, lines, expected_error
+    ):
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            [f'{line}\n' for line in lines]
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        with pytest.raises(expected_error):
+            async for _ in transport.send_message_streaming(
+                create_send_message_request()
+            ):
+                pass

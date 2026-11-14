@@ -36,7 +36,11 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
-from a2a.utils.task import decode_list_tasks_cursor
+from a2a.utils.task import (
+    ListTasksCursor,
+    decode_list_tasks_cursor,
+    encode_list_tasks_cursor,
+)
 from google.protobuf.json_format import MessageToDict
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.inspection import inspect
@@ -405,6 +409,82 @@ async def test_list_tasks_does_not_bind_out_of_range_datetimes(
 
     assert compiled_execution_count > 0
     assert all(value.year >= 1000 for value in bound_datetimes)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'state, legacy_state',
+    [
+        (TaskState.TASK_STATE_SUBMITTED, 'submitted'),
+        (TaskState.TASK_STATE_WORKING, 'working'),
+        (TaskState.TASK_STATE_COMPLETED, 'completed'),
+        (TaskState.TASK_STATE_FAILED, 'failed'),
+        (TaskState.TASK_STATE_CANCELED, 'canceled'),
+        (TaskState.TASK_STATE_INPUT_REQUIRED, 'input-required'),
+        (TaskState.TASK_STATE_REJECTED, 'rejected'),
+        (TaskState.TASK_STATE_AUTH_REQUIRED, 'auth-required'),
+    ],
+)
+async def test_list_tasks_filters_mixed_protocol_states(
+    db_store_parameterized: DatabaseTaskStore,
+    state: TaskState.ValueType,
+    legacy_state: str,
+) -> None:
+    store = db_store_parameterized
+    other_context = ServerCallContext(user=SampleUser('other_user'))
+    for owner_context in (TEST_CONTEXT, other_context):
+        owner = store.owner_resolver(owner_context)
+        for prefix, core_state, stored_state in (
+            ('match', state, legacy_state),
+            ('nonmatch', TaskState.TASK_STATE_UNSPECIFIED, 'unknown'),
+        ):
+            await store.save(
+                Task(
+                    id=f'{owner}-{prefix}-modern',
+                    context_id='mixed-context',
+                    status=TaskStatus(state=core_state),
+                ),
+                owner_context,
+            )
+            async with store.async_session_maker.begin() as session:
+                for version in (None, '0.3'):
+                    await session.execute(
+                        insert(store.task_model).values(
+                            id=f'{owner}-{prefix}-legacy-{version}',
+                            context_id='mixed-context',
+                            owner=owner,
+                            status={'state': stored_state},
+                            protocol_version=version,
+                        )
+                    )
+
+    owner = store.owner_resolver(TEST_CONTEXT)
+    expected_ids = [
+        f'{owner}-match-modern',
+        f'{owner}-match-legacy-None',
+        f'{owner}-match-legacy-0.3',
+    ]
+    for params in (
+        ListTasksRequest(),
+        ListTasksRequest(status=TaskState.TASK_STATE_UNSPECIFIED),
+    ):
+        unfiltered = await store.list(params, TEST_CONTEXT)
+        assert unfiltered.total_size == 6
+        assert {task.id for task in unfiltered.tasks} == {
+            task_id.replace('-match-', f'-{prefix}-')
+            for task_id in expected_ids
+            for prefix in ('match', 'nonmatch')
+        }
+
+    params = ListTasksRequest(status=state, page_size=1)
+    for index, expected_id in enumerate(expected_ids):
+        page = await store.list(params, TEST_CONTEXT)
+        assert page.total_size == 3
+        assert [task.id for task in page.tasks] == [expected_id]
+        assert page.tasks[0].status.state == state
+        assert page.page_size == 1
+        assert bool(page.next_page_token) == (index < len(expected_ids) - 1)
+        params.page_token = page.next_page_token
 
 
 @pytest.mark.asyncio
@@ -1089,6 +1169,29 @@ async def test_list_tasks_rejects_malformed_cursor_token(
     token = urlsafe_b64encode(b'{"ts":"soon","id":"t1"}').decode().rstrip('=')
 
     with pytest.raises(InvalidParamsError):
+        await db_store_parameterized.list(
+            ListTasksRequest(page_size=2, page_token=token), TEST_CONTEXT
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'timestamp_ns',
+    [
+        pytest.param(-62_135_596_800_000_000_001, id='before-min-timestamp'),
+        pytest.param(253_402_300_800_000_000_000, id='after-max-timestamp'),
+        pytest.param(-(10**100), id='huge-negative'),
+        pytest.param(10**100, id='huge-positive'),
+    ],
+)
+async def test_list_tasks_rejects_out_of_range_cursor_timestamp(
+    db_store_parameterized: DatabaseTaskStore, timestamp_ns: int
+) -> None:
+    token = encode_list_tasks_cursor(
+        ListTasksCursor(timestamp_ns=timestamp_ns, task_id='t1')
+    )
+
+    with pytest.raises(InvalidParamsError, match='Invalid page token'):
         await db_store_parameterized.list(
             ListTasksRequest(page_size=2, page_token=token), TEST_CONTEXT
         )

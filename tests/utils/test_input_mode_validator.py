@@ -119,3 +119,33 @@ def test_skill_modes_alone_are_enforced_when_the_card_declares_none():
             make_message(Part(text='hi', media_type='application/x-nope')),
             make_card(skill_modes=['image/png']),
         )
+
+
+@pytest.mark.parametrize(
+    ('part_type', 'card_type'),
+    [
+        ('Text/Plain', 'text/plain'),
+        ('text/plain', 'TEXT/PLAIN'),
+        ('text/plain; charset=utf-8', 'text/plain'),
+        ('text/plain', 'text/plain;charset=utf-8'),
+        (' application/json ', 'application/json'),
+    ],
+)
+def test_media_types_match_on_type_and_subtype(part_type, card_type):
+    """RFC 2045 5.1: type and subtype are case-insensitive, parameters are not the type."""
+    validate_input_modes(
+        make_message(Part(text='hi', media_type=part_type)),
+        make_card(card_type),
+    )
+
+
+def test_parameters_do_not_widen_the_declared_type():
+    with pytest.raises(ContentTypeNotSupportedError) as exc_info:
+        validate_input_modes(
+            make_message(
+                Part(text='hi', media_type='text/html; charset=utf-8')
+            ),
+            make_card('text/plain'),
+        )
+
+    assert 'text/html; charset=utf-8' in exc_info.value.message

@@ -94,6 +94,41 @@ def _make_send_message_request(
     }
 
 
+class TestJsonRpcRequestIds:
+    """JSON booleans are not numeric JSON-RPC request identifiers."""
+
+    @pytest.mark.parametrize('request_id', [True, False])
+    def test_boolean_id_is_rejected(
+        self, client: TestClient, mock_handler: AsyncMock, request_id: bool
+    ) -> None:
+        request = _make_send_message_request()
+        request['id'] = request_id
+
+        response = client.post('/', json=request)
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body['id'] is None
+        assert body['error']['code'] == -32600
+        mock_handler.on_message_send.assert_not_awaited()
+
+    @pytest.mark.parametrize('request_id', [0, 1, '', 'request'])
+    def test_integer_and_string_ids_are_preserved(
+        self, client: TestClient, mock_handler: AsyncMock, request_id: int | str
+    ) -> None:
+        request = _make_send_message_request()
+        request['id'] = request_id
+
+        response = client.post('/', json=request)
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body['id'] == request_id
+        assert type(body['id']) is type(request_id)
+        assert 'result' in body
+        mock_handler.on_message_send.assert_awaited_once()
+
+
 class TestUnrecognizedFields:
     """Unrecognized fields are ignored, for forward compatibility."""
 
@@ -159,6 +194,16 @@ class TestParseErrorDataShape:
 
 
 class TestMalformedJsonBody:
+    def test_invalid_utf8_is_a_parse_error(self, client):
+        response = client.post(
+            '/',
+            content=b'{"jsonrpc": "2.0", "id": 1, "method": "GetTask", '
+            b'"params": {"id": "\xff"}}',
+            headers={'Content-Type': 'application/json'},
+        )
+
+        assert response.json()['error']['code'] == -32700
+
     def test_reported_through_logging_not_stderr(self, client, capsys, caplog):
         response = client.post(
             '/',

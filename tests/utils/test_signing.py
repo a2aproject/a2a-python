@@ -143,6 +143,42 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
         verifier_wrong_key(signed_card)
 
 
+@pytest.mark.parametrize(
+    'protected',
+    [
+        pytest.param('!!!not-base64url!!!', id='invalid-base64url'),
+        pytest.param(
+            base64url_encode(b'\xff').decode('utf-8'), id='invalid-utf8'
+        ),
+        pytest.param(base64url_encode(b'{').decode('utf-8'), id='invalid-json'),
+        pytest.param(base64url_encode(b'[]').decode('utf-8'), id='non-object'),
+    ],
+)
+def test_verifier_skips_malformed_protected_header(
+    sample_agent_card: AgentCard,
+    protected: str,
+):
+    key = 'key12345'
+    signer = signing.create_agent_card_signer(
+        signing_key=key,
+        protected_header={'alg': 'HS384', 'kid': 'key1', 'jku': None},
+    )
+    verifier = signing.create_signature_verifier(
+        create_key_provider(key), ['HS256', 'HS384', 'ES256', 'RS256']
+    )
+    malformed = AgentCardSignature(protected=protected, signature='invalid')
+
+    invalid_card = AgentCard()
+    invalid_card.CopyFrom(sample_agent_card)
+    invalid_card.signatures.append(malformed)
+    with pytest.raises(signing.InvalidSignaturesError):
+        verifier(invalid_card)
+
+    valid_card = signer(sample_agent_card)
+    valid_card.signatures.insert(0, malformed)
+    verifier(valid_card)
+
+
 def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
     """Test the agent card signing and verification process with an asymmetric key encryption."""
     private_key = ec.generate_private_key(ec.SECP256R1())

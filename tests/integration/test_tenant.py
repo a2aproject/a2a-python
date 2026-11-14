@@ -12,6 +12,7 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    GetTaskRequest,
     ListTasksRequest,
     ListTasksResponse,
     Message,
@@ -50,6 +51,7 @@ class TestTenantDecorator:
     @pytest.mark.asyncio
     async def test_tenant_decorator_rest(self, agent_card):
         mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
             status_code=200, json=lambda: {'message': {}}
@@ -69,8 +71,7 @@ class TestTenantDecorator:
         request = SendMessageRequest(message=Message(parts=[{'text': 'hi'}]))
         await client._transport.send_message(request)
 
-        # Check that tenant was populated in request
-        assert request.tenant == 'tenant-1'
+        assert request.tenant == ''
 
         # Check that path was prepended in the underlying transport
         mock_httpx.build_request.assert_called()
@@ -86,6 +87,7 @@ class TestTenantDecorator:
     @pytest.mark.asyncio
     async def test_tenant_decorator_jsonrpc(self, agent_card):
         mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
             status_code=200,
@@ -141,6 +143,7 @@ class TestTenantDecorator:
     @pytest.mark.asyncio
     async def test_tenant_decorator_explicit_override(self, agent_card):
         mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
             status_code=200, json=lambda: {'message': {}}
@@ -246,3 +249,45 @@ class TestJSONRPCTenantIntegration:
             server_context = call_args[0][1]
             assert isinstance(server_context, ServerCallContext)
             assert server_context.tenant == 'my-test-tenant'
+
+
+@pytest.mark.asyncio
+async def test_reused_request_uses_each_clients_default_tenant() -> None:
+    paths: list[str] = []
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        return httpx.Response(
+            200,
+            json={
+                'id': 'task',
+                'contextId': 'context',
+                'status': {'state': 'TASK_STATE_WORKING'},
+            },
+        )
+
+    request = GetTaskRequest(id='task')
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(respond)
+    ) as http:
+        factory = ClientFactory(
+            ClientConfig(
+                httpx_client=http,
+                supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
+            )
+        )
+        for tenant in ('alpha', 'beta'):
+            card = AgentCard(
+                supported_interfaces=[
+                    AgentInterface(
+                        url='https://agent.example/a2a',
+                        protocol_binding=TransportProtocol.HTTP_JSON,
+                        tenant=tenant,
+                    )
+                ]
+            )
+            client = factory.create(card)
+            await client.get_task(request)
+
+    assert paths == ['/a2a/alpha/tasks/task', '/a2a/beta/tasks/task']
+    assert request.tenant == ''

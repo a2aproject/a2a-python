@@ -1,3 +1,4 @@
+import binascii
 import json
 
 from collections.abc import Callable
@@ -144,6 +145,13 @@ def create_signature_verifier(
                     agent_card_signature.protected.encode('utf-8')
                 ).decode('utf-8')
                 protected_header = json.loads(protected_header_json)
+            except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError):
+                continue
+
+            if not isinstance(protected_header, dict):
+                continue
+
+            try:
                 kid = protected_header.get('kid')
                 jku = protected_header.get('jku')
                 verification_key = key_provider(kid, jku)

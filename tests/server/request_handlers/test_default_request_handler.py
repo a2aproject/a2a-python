@@ -79,6 +79,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.push_url_validator import (
     validate_push_notification_url,
 )
@@ -422,11 +423,16 @@ async def test_on_cancel_task_cancels_running_agent(agent_card):
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
-        params = CancelTaskRequest(id=f'{task_id}')
+        params = CancelTaskRequest(
+            id=f'{task_id}',
+            metadata={'reason': 'user_aborted'},
+        )
         await request_handler.on_cancel_task(params, context)
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
+    cancel_ctx: RequestContext = mock_agent_executor.cancel.call_args.args[0]
+    assert cancel_ctx.metadata == {'reason': 'user_aborted'}
 
 
 @pytest.mark.asyncio
@@ -1097,11 +1103,10 @@ async def test_on_message_send_non_blocking(agent_card):
 
     assert task is not None
     assert task.status.state == TaskState.TASK_STATE_COMPLETED
-    assert (
-        result.history
-        and task.history
-        and len(result.history) == len(task.history)
-    )
+    # The result is the task as it was returned, with its whole history; the
+    # agent's later status messages are added to the stored task only.
+    assert result.history
+    assert list(task.history[: len(result.history)]) == list(result.history)
 
 
 @pytest.mark.asyncio
@@ -1140,6 +1145,46 @@ async def test_on_message_send_limit_history(agent_card):
     task = await task_store.get(result.id, context)
     assert task is not None
     assert task.history is not None and len(task.history) > 1
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_limit_history(agent_card):
+    task_store = InMemoryTaskStore()
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        agent_card=agent_card,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_stream',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain'],
+            history_length=0,
+        ),
+    )
+
+    context = create_server_call_context()
+    tasks = [
+        event
+        async for event in request_handler.on_message_send_stream(
+            params, context
+        )
+        if isinstance(event, Task)
+    ]
+
+    # verify that history_length is honored
+    assert tasks
+    assert all(len(task.history) == 0 for task in tasks)
+
+    # verify that history is still persisted to the store
+    task = await task_store.get(tasks[0].id, context)
+    assert task is not None
+    assert len(task.history) > 0
 
 
 @pytest.mark.asyncio
@@ -2660,14 +2705,6 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id(
     assert len(result2.configs) == 0
 
 
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
 async def test_on_message_send_task_in_terminal_state(
@@ -2908,6 +2945,7 @@ async def test_on_message_send_error_does_not_hang(agent_card):
     """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
     agent = HelloWorldAgentExecutor()
     task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = None
     task_store.save.side_effect = RuntimeError('This is an Error!')
 
     request_handler = DefaultRequestHandler(
@@ -3010,6 +3048,38 @@ async def test_on_message_send_negative_history_length_error(agent_card):
 
     with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_message_send(params, context)
+
+    assert 'history length must be non-negative' in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_negative_history_length_error(
+    agent_card,
+):
+    """Test on_message_send_stream raises error for negative history length in configuration."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        agent_card=agent_card,
+    )
+
+    message_config = SendMessageConfiguration(
+        history_length=-1,
+        accepted_output_modes=['text/plain'],
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER, message_id='msg1', parts=[Part(text='Test')]
+        ),
+        configuration=message_config,
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        async for _ in request_handler.on_message_send_stream(params, context):
+            pass
 
     assert 'history length must be non-negative' in exc_info.value.message
 
@@ -3475,3 +3545,59 @@ async def test_push_sender_failure_does_not_propagate(agent_card):
     await request_handler._send_push_notification_if_needed(event.id, event)
 
     mock_push_sender.send_notification.assert_awaited_once_with(event.id, event)
+
+
+class _ContextRecordingAgent(AgentExecutor):
+    """Records the context id each execution is handed."""
+
+    def __init__(self) -> None:
+        self.seen_context_ids: list[str | None] = []
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.seen_context_ids.append(context.context_id)
+        updater = TaskUpdater(
+            event_queue,
+            context.task_id,  # type: ignore[arg-type]
+            context.context_id,  # type: ignore[arg-type]
+        )
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_task_only_message_infers_context_id_from_task(agent_card):
+    """A2A 3.4.3: a message naming only a taskId inherits the task's context."""
+    agent = _ContextRecordingAgent()
+    task_store = InMemoryTaskStore()
+    call_context = create_server_call_context()
+    task = create_sample_task(
+        task_id='task-awaiting-input',
+        status_state=TaskState.TASK_STATE_INPUT_REQUIRED,
+        context_id='ctx-from-stored-task',
+    )
+    await task_store.save(task, call_context)
+    handler = DefaultRequestHandler(
+        agent_executor=agent,
+        task_store=task_store,
+        agent_card=agent_card,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            message_id='msg-follow-up',
+            role=Role.ROLE_USER,
+            parts=[Part(text='Friday')],
+            task_id=task.id,
+        )
+    )
+
+    result = await handler.on_message_send(params, call_context)
+
+    assert agent.seen_context_ids == [task.context_id]
+    assert result.context_id == task.context_id
+    assert params.message.context_id == task.context_id

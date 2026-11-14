@@ -9,6 +9,7 @@ from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.id_generator import IDGenerator
 from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
     Message,
     SendMessageRequest,
     Task,
@@ -346,3 +347,49 @@ class TestRequestContext:
         context = RequestContext(call_context=call_context)
 
         assert context.requested_extensions == {'foo', 'bar'}
+
+    def test_init_with_cancel_task_request_metadata(
+        self, mock_task: Mock
+    ) -> None:
+        """Test RequestContext exposes metadata from CancelTaskRequest safely."""
+        cancel_request = CancelTaskRequest(
+            id=mock_task.id,
+            metadata={
+                'reason': 'user_aborted',
+                'nested': {'attempt': 2, 'flags': ['urgent', 'manual']},
+            },
+        )
+        context = RequestContext(
+            call_context=ServerCallContext(),
+            request=cancel_request,
+            task_id=mock_task.id,
+            context_id=mock_task.context_id,
+            task=mock_task,
+        )
+
+        assert context.metadata == {
+            'reason': 'user_aborted',
+            'nested': {'attempt': 2.0, 'flags': ['urgent', 'manual']},
+        }
+        assert context.message is None
+        assert context.configuration is None
+        assert context.get_user_input() == ''
+        assert context.task_id == mock_task.id
+        assert context.context_id == mock_task.context_id
+        assert context.current_task == mock_task
+
+    def test_init_with_cancel_task_request_without_metadata(
+        self, mock_task: Mock
+    ) -> None:
+        """Test RequestContext returns empty metadata when CancelTaskRequest has none."""
+        cancel_request = CancelTaskRequest(id=mock_task.id)
+        context = RequestContext(
+            call_context=ServerCallContext(),
+            request=cancel_request,
+            task_id=mock_task.id,
+            context_id=mock_task.context_id,
+            task=mock_task,
+        )
+
+        assert context.metadata == {}
+        assert context.message is None

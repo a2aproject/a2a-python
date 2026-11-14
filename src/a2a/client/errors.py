@@ -14,6 +14,14 @@ class AgentCardResolutionError(A2AClientError):
         super().__init__(message)
         self.status_code = status_code
 
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation exposing the status code."""
+        return (
+            f'{self.__class__.__name__}('
+            f'status_code={self.status_code!r}, '
+            f'message={self.message!r})'
+        )
+
 
 class A2AClientTimeoutError(A2AClientError):
     """Exception for timeout errors during a request."""

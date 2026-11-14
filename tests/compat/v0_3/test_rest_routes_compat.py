@@ -1,3 +1,4 @@
+import json
 import logging
 
 from collections.abc import AsyncIterator
@@ -7,11 +8,13 @@ import pytest
 
 from a2a.compat.v0_3 import a2a_v0_3_pb2, rest_adapter
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
+from a2a.compat.v0_3.rest_transport import CompatRestTransport
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    DeleteTaskPushNotificationConfigRequest,
     Message as Message10,
     Part as Part10,
     Role as Role10,
@@ -19,6 +22,7 @@ from a2a.types.a2a_pb2 import (
     TaskState as TaskState10,
     TaskStatus as TaskStatus10,
 )
+from a2a.utils.errors import TaskNotFoundError
 from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
@@ -200,6 +204,96 @@ async def test_get_task_v03(
 
 
 @pytest.mark.anyio
+async def test_get_task_v03_non_integer_history_length(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    response = await client.get('/v1/tasks/test_task_id?historyLength=abc')
+
+    assert response.status_code == 400
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+    request_handler.on_get_task.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    'path',
+    ['/v1/message:send', '/v1/tasks/test_task_id/pushNotificationConfigs'],
+)
+async def test_invalid_utf8_body_v03_is_bad_request(
+    client: AsyncClient, path: str
+) -> None:
+    response = await client.post(
+        path, content=b'{"message": {"messageId": "\xff"}}'
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+
+
+@pytest.mark.anyio
+async def test_delete_push_notification_config_v03(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    request_handler.on_delete_task_push_notification_config.return_value = None
+
+    response = await client.delete(
+        '/v1/tasks/test_task_id/pushNotificationConfigs/push-1'
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {}
+    request_handler.on_delete_task_push_notification_config.assert_awaited_once()
+    params = request_handler.on_delete_task_push_notification_config.call_args[
+        0
+    ][0]
+    assert params == DeleteTaskPushNotificationConfigRequest(
+        task_id='test_task_id', id='push-1'
+    )
+
+
+@pytest.mark.anyio
+async def test_delete_push_notification_config_v03_unknown_task_returns_404(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    request_handler.on_delete_task_push_notification_config.side_effect = (
+        TaskNotFoundError
+    )
+
+    response = await client.delete(
+        '/v1/tasks/unknown/pushNotificationConfigs/push-1'
+    )
+
+    assert response.status_code == 404
+    assert response.json()['error']['status'] == 'NOT_FOUND'
+
+
+@pytest.mark.anyio
+async def test_compat_rest_client_deletes_push_notification_config(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    request_handler.on_delete_task_push_notification_config.return_value = None
+    transport = CompatRestTransport(
+        httpx_client=client,
+        agent_card=AgentCard(),
+        url='http://testapp',
+    )
+
+    await transport.delete_task_push_notification_config(
+        DeleteTaskPushNotificationConfigRequest(
+            task_id='test_task_id', id='push-1'
+        )
+    )
+
+    request_handler.on_delete_task_push_notification_config.assert_awaited_once()
+    params = request_handler.on_delete_task_push_notification_config.call_args[
+        0
+    ][0]
+    assert params == DeleteTaskPushNotificationConfigRequest(
+        task_id='test_task_id', id='push-1'
+    )
+
+
+@pytest.mark.anyio
 async def test_list_tasks_not_in_v03_adapter_routes(
     request_handler: RequestHandler,
 ) -> None:
@@ -271,3 +365,64 @@ async def test_v03_streaming_does_not_ascii_escape_non_ascii(
         payload = payload.decode('utf-8')
     assert non_ascii_text in payload
     assert '\\u4f60\\u597d' not in payload
+
+
+@pytest.mark.anyio
+async def test_v03_message_stream_malformed_json_returns_400(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    response = await client.post(
+        '/v1/message:stream',
+        content=b'{bad',
+        headers={'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+    request_handler.on_message_send_stream.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_v03_subscribe_unknown_task_returns_404(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    async def not_found(*args: object, **kwargs: object) -> AsyncIterator[None]:
+        raise TaskNotFoundError
+        yield
+
+    request_handler.on_subscribe_to_task.side_effect = not_found
+
+    response = await client.post('/v1/tasks/unknown:subscribe')
+
+    assert response.status_code == 404
+    assert response.json()['error']['status'] == 'NOT_FOUND'
+
+
+@pytest.mark.anyio
+async def test_v03_streaming_yields_all_events_in_order(
+    request_handler: RequestHandler,
+) -> None:
+    adapter = REST03Adapter(http_handler=request_handler)
+
+    async def stream(
+        request: Request, context: object
+    ) -> AsyncIterator[dict[str, int]]:
+        for i in range(3):
+            yield {'n': i}
+
+    mock_req = MagicMock(spec=Request)
+    mock_req.body = AsyncMock(return_value=b'{}')
+    mock_req.headers = Headers({'a2a-version': '0.3'})
+    mock_req.user = MagicMock(is_authenticated=False)
+    mock_req.auth = None
+    mock_req.scope = {}
+
+    response = await adapter._handle_streaming_request(stream, mock_req)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    assert [json.loads(chunk) for chunk in chunks] == [
+        {'n': 0},
+        {'n': 1},
+        {'n': 2},
+    ]

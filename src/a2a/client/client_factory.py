@@ -77,6 +77,9 @@ class ClientFactory:
 
     The client can be used consistently regardless of the transport. This
     aligns the client configuration with the server's capabilities.
+
+    Each created client gets its own `httpx.AsyncClient` and closes it on
+    `close()`, unless `ClientConfig.httpx_client` is set.
     """
 
     def __init__(
@@ -84,15 +87,24 @@ class ClientFactory:
         config: ClientConfig | None = None,
     ):
         config = config or ClientConfig()
-        httpx_client = config.httpx_client or httpx.AsyncClient()
+        if config.httpx_client:
+            config.httpx_client.headers.setdefault(
+                VERSION_HEADER, PROTOCOL_VERSION_CURRENT
+            )
+
+        self._config = config
+        self._registry: dict[str, TransportProducer] = {}
+        self._register_defaults(config.supported_protocol_bindings)
+
+    def _resolve_http_client(self) -> tuple[httpx.AsyncClient, bool]:
+        """Returns an HTTP client and whether it is shared across clients."""
+        if self._config.httpx_client:
+            return self._config.httpx_client, True
+        httpx_client = httpx.AsyncClient()
         httpx_client.headers.setdefault(
             VERSION_HEADER, PROTOCOL_VERSION_CURRENT
         )
-
-        self._config = config
-        self._httpx_client = httpx_client
-        self._registry: dict[str, TransportProducer] = {}
-        self._register_defaults(config.supported_protocol_bindings)
+        return httpx_client, False
 
     def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
@@ -115,21 +127,25 @@ class ClientFactory:
                     else PROTOCOL_VERSION_CURRENT
                 )
 
+                httpx_client, is_shared_httpx = self._resolve_http_client()
+
                 if is_legacy_version(version):
                     from a2a.compat.v0_3.jsonrpc_transport import (  # noqa: PLC0415
                         CompatJsonRpcTransport,
                     )
 
                     return CompatJsonRpcTransport(
-                        self._httpx_client,
+                        httpx_client,
                         card,
                         url,
+                        is_shared_httpx=is_shared_httpx,
                     )
 
                 return JsonRpcTransport(
-                    self._httpx_client,
+                    httpx_client,
                     card,
                     url,
+                    is_shared_httpx=is_shared_httpx,
                 )
 
             self.register(
@@ -154,21 +170,25 @@ class ClientFactory:
                     else PROTOCOL_VERSION_CURRENT
                 )
 
+                httpx_client, is_shared_httpx = self._resolve_http_client()
+
                 if is_legacy_version(version):
                     from a2a.compat.v0_3.rest_transport import (  # noqa: PLC0415
                         CompatRestTransport,
                     )
 
                     return CompatRestTransport(
-                        self._httpx_client,
+                        httpx_client,
                         card,
                         url,
+                        is_shared_httpx=is_shared_httpx,
                     )
 
                 return RestTransport(
-                    self._httpx_client,
+                    httpx_client,
                     card,
                     url,
+                    is_shared_httpx=is_shared_httpx,
                 )
 
             self.register(
@@ -273,8 +293,9 @@ class ClientFactory:
     ) -> Client:
         """Create a `Client` by resolving an `AgentCard` from a URL.
 
-        Resolves the agent card from the given URL using the factory's
-        configured httpx client, then creates a client via `create`.
+        Resolves the agent card from the given URL, then creates a client
+        via `create`. The card is fetched with `ClientConfig.httpx_client`
+        when one is set, otherwise with a temporary client.
 
         If the agent card is already available, use `create` directly
         instead.
@@ -295,12 +316,17 @@ class ClientFactory:
         Returns:
           A `Client` object.
         """
-        resolver = A2ACardResolver(self._httpx_client, url)
-        card = await resolver.get_agent_card(
-            relative_card_path=relative_card_path,
-            http_kwargs=resolver_http_kwargs,
-            signature_verifier=signature_verifier,
-        )
+        httpx_client, is_shared_httpx = self._resolve_http_client()
+        try:
+            resolver = A2ACardResolver(httpx_client, url)
+            card = await resolver.get_agent_card(
+                relative_card_path=relative_card_path,
+                http_kwargs=resolver_http_kwargs,
+                signature_verifier=signature_verifier,
+            )
+        finally:
+            if not is_shared_httpx:
+                await httpx_client.aclose()
         return self.create(card, interceptors)
 
     def register(self, label: str, generator: TransportProducer) -> None:

@@ -93,14 +93,28 @@ class REST03Adapter:
 
         call_context = self._context_builder.build(request)
 
+        # Fetch the first item before starting the SSE response so that
+        # errors raised before any event (e.g. a malformed body) are mapped
+        # to an HTTP error by @rest_stream_error_handler instead of an empty
+        # 200 stream, matching the v1.0 REST dispatcher.
+        stream = aiter(method(request, call_context))
+        try:
+            first_item = await anext(stream)
+        except StopAsyncIteration:
+            return create_event_source_response(
+                iter([]),
+                shutdown_grace_period=self._shutdown_grace_period,
+            )
+
         async def event_generator(
             stream: AsyncIterable[Any],
         ) -> AsyncIterator[str]:
+            yield json_utils.dumps(first_item)
             async for item in stream:
                 yield json_utils.dumps(item)
 
         return create_event_source_response(
-            event_generator(method(request, call_context)),
+            event_generator(stream),
             shutdown_grace_period=self._shutdown_grace_period,
         )
 
@@ -133,6 +147,12 @@ class REST03Adapter:
                 'GET',
             ): functools.partial(
                 self._handle_request, self.handler.get_push_notification
+            ),
+            (
+                '/v1/tasks/{id}/pushNotificationConfigs/{push_id}',
+                'DELETE',
+            ): functools.partial(
+                self._handle_request, self.handler.delete_push_notification
             ),
             (
                 '/v1/tasks/{id}/pushNotificationConfigs',

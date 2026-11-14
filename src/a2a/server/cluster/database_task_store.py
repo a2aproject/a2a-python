@@ -44,19 +44,11 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskState,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.proto_utils import to_stream_response
 
 
 logger = logging.getLogger(__name__)
-
-_TERMINAL_STATES = frozenset(
-    {
-        TaskState.TASK_STATE_COMPLETED,
-        TaskState.TASK_STATE_CANCELED,
-        TaskState.TASK_STATE_FAILED,
-        TaskState.TASK_STATE_REJECTED,
-    }
-)
 
 # DB contention retry
 _MAX_ATTEMPTS = 5
@@ -195,7 +187,10 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
             if task.status.state == TaskState.TASK_STATE_CANCELED:
                 stored = await self._lock_version(session, task.id, owner)
                 current = await self._current_task(session, task.id, owner)
-                if current is None or current.status.state in _TERMINAL_STATES:
+                if (
+                    current is None
+                    or current.status.state in TERMINAL_TASK_STATES
+                ):
                     raise ConcurrentTaskModificationError(task.id)
                 new_version = (stored or 0) + 1
                 if stored is None:
@@ -258,6 +253,7 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
         commits) rather than failing the read.
         """
         await self._db._ensure_initialized()  # noqa: SLF001
+        await self._ensure_cluster_tables()
         owner = self._db.owner_resolver(context)
         attempts = 0
         while True:
@@ -355,6 +351,8 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
 
     async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task and its version row via the underlying store."""
+        await self._db._ensure_initialized()  # noqa: SLF001
+        await self._ensure_cluster_tables()
         owner = self._db.owner_resolver(context)
         await self._db.delete(task_id, context)
         async with self._db.async_session_maker.begin() as session:

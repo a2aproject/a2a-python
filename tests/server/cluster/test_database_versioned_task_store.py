@@ -136,6 +136,24 @@ async def versioned_store(
         await engine.dispose()
 
 
+@pytest_asyncio.fixture(params=DB_CONFIGS)
+async def uninitialized_store(
+    request,
+) -> AsyncGenerator[VersionedDatabaseTaskStore, None]:
+    """A store that creates its tables lazily, without `initialize()`."""
+    db_url, dialect_name = request.param
+    if db_url is None:
+        pytest.skip(f'DSN for {dialect_name} not set in environment variables.')
+    engine = create_async_engine(db_url)
+    _enforce_sqlite_foreign_keys(engine)
+    try:
+        yield VersionedDatabaseTaskStore(engine=engine, create_table=True)
+    finally:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
+
+
 @pytest.mark.asyncio
 async def test_is_a_versioned_task_store(
     versioned_store: VersionedDatabaseTaskStore,
@@ -652,6 +670,21 @@ async def test_delete_removes_version_row(
     )
     stored = await versioned_store.get('task-abc', TEST_CONTEXT)
     assert stored is not None
+
+
+@pytest.mark.asyncio
+async def test_get_without_initialize_creates_tables(
+    uninitialized_store: VersionedDatabaseTaskStore,
+) -> None:
+    assert await uninitialized_store.get('task-abc', TEST_CONTEXT) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_without_initialize_creates_tables(
+    uninitialized_store: VersionedDatabaseTaskStore,
+) -> None:
+    await uninitialized_store.delete('task-abc', TEST_CONTEXT)
+    assert await uninitialized_store.get('task-abc', TEST_CONTEXT) is None
 
 
 @pytest.mark.asyncio
