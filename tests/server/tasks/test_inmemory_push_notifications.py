@@ -44,8 +44,11 @@ def _create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
+    task_id: str = '',
 ) -> TaskPushNotificationConfig:
-    return TaskPushNotificationConfig(id=config_id, url=url, token=token)
+    return TaskPushNotificationConfig(
+        id=config_id, url=url, token=token, task_id=task_id
+    )
 
 
 class SampleUser(User):
@@ -103,7 +106,9 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
     async def test_set_info_adds_new_config(self) -> None:
         task_id = 'task_new'
-        config = _create_sample_push_config(url='http://new.url/callback')
+        config = _create_sample_push_config(
+            task_id=task_id, url='http://new.url/callback'
+        )
 
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
@@ -112,17 +117,38 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(retrieved, [config])
 
+    async def test_set_info_returns_the_stored_config_without_mutating_input(
+        self,
+    ) -> None:
+        task_id = 'task_normalize'
+        config = TaskPushNotificationConfig(url='http://normalize.url/callback')
+
+        stored = await self.config_store.set_info(
+            task_id, config, MINIMAL_CALL_CONTEXT
+        )
+
+        assert (stored.task_id, stored.id) == (task_id, task_id)
+        assert (config.task_id, config.id) == ('', '')
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
+        self.assertEqual(retrieved, [stored])
+
     async def test_set_info_appends_to_existing_config(self) -> None:
         task_id = 'task_update'
         initial_config = _create_sample_push_config(
-            url='http://initial.url/callback', config_id='cfg_initial'
+            task_id=task_id,
+            url='http://initial.url/callback',
+            config_id='cfg_initial',
         )
         await self.config_store.set_info(
             task_id, initial_config, MINIMAL_CALL_CONTEXT
         )
 
         updated_config = _create_sample_push_config(
-            url='http://updated.url/callback', config_id='cfg_updated'
+            task_id=task_id,
+            url='http://updated.url/callback',
+            config_id='cfg_updated',
         )
         await self.config_store.set_info(
             task_id, updated_config, MINIMAL_CALL_CONTEXT
@@ -164,7 +190,9 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_info_existing_config(self) -> None:
         task_id = 'task_get_exist'
-        config = _create_sample_push_config(url='http://get.this/callback')
+        config = _create_sample_push_config(
+            task_id=task_id, url='http://get.this/callback'
+        )
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         retrieved_config = await self.config_store.get_info(

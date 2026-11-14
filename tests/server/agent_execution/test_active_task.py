@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 
 from unittest.mock import AsyncMock, Mock, patch
@@ -6,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import pytest_asyncio
 
-from a2a.server.agent_execution.active_task import ActiveTask
+from a2a.server.agent_execution.active_task import ActiveTask, EventConsumer
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.context import ServerCallContext
@@ -14,6 +15,7 @@ from a2a.server.events.event_queue_v2 import EventQueueSource as EventQueue
 from a2a.server.tasks.push_notification_sender import PushNotificationSender
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
     Message,
     Task,
     TaskState,
@@ -21,7 +23,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils._async_queue_compat import QueueShutDown, create_async_queue
-from a2a.utils.errors import InvalidParamsError
+from a2a.utils.errors import TaskNotFoundError, UnsupportedOperationError
 
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ class TestActiveTask:
         tm.get_task = AsyncMock(return_value=None)
         tm.context_id = 'test-context-id'
         tm._init_task_obj = Mock(return_value=Task(id='test-task-id'))
+        tm.ensure_task_id = AsyncMock(return_value=Task(id='test-task-id'))
         tm.save_task_event = AsyncMock()
         return tm
 
@@ -127,6 +130,63 @@ class TestActiveTask:
         await active_task.cancel(request_context)
 
         agent_executor.cancel.assert_called_once()
+        stop_event.set()
+
+    @pytest.mark.asyncio
+    async def test_active_task_cancel_forwards_request_metadata(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """Test ActiveTask.cancel passes CancelTaskRequest metadata to AgentExecutor.cancel."""
+        started = asyncio.Event()
+        stop_event = asyncio.Event()
+
+        async def execute_mock(
+            _ctx: RequestContext, _queue: EventQueue
+        ) -> None:
+            started.set()
+            await stop_event.wait()
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock()
+        task_manager.get_task.side_effect = [
+            Task(
+                id='test-task-id',
+                context_id='ctx-1',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        ] * 5 + [
+            Task(
+                id='test-task-id',
+                context_id='ctx-1',
+                status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
+            )
+        ] * 5
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.wait_for(started.wait(), timeout=5)
+
+        cancel_req = CancelTaskRequest(
+            id='test-task-id',
+            metadata={'reason': 'user_aborted', 'actor': 'alice'},
+        )
+        await active_task.cancel(ServerCallContext(), request=cancel_req)
+
+        agent_executor.cancel.assert_awaited_once()
+        cancel_ctx: RequestContext = agent_executor.cancel.call_args.args[0]
+        assert cancel_ctx.metadata == {
+            'reason': 'user_aborted',
+            'actor': 'alice',
+        }
+        assert cancel_ctx.message is None
+        assert cancel_ctx.task_id == 'test-task-id'
+        assert cancel_ctx.context_id == 'ctx-1'
         stop_event.set()
 
     @pytest.mark.asyncio
@@ -231,6 +291,115 @@ class TestActiveTask:
         assert result is not shared
         assert shared.status.state == TaskState.TASK_STATE_WORKING
         stop_event.set()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('final_state', 'cancel_error_message', 'expected_failed_count'),
+        [
+            (TaskState.TASK_STATE_COMPLETED, 'cancel lost the race', 0),
+            (TaskState.TASK_STATE_WORKING, 'agent cancel blew up', 1),
+        ],
+        ids=['terminal-task-not-overwritten', 'active-task-still-marks-failed'],
+    )
+    async def test_active_task_cancel_exception_marks_failed_only_when_not_terminal(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+        final_state: TaskState,
+        cancel_error_message: str,
+        expected_failed_count: int,
+    ) -> None:
+        """Regression test: FAILED is enqueued only if the task was not already terminal when cancel() failed."""
+        stop_event = asyncio.Event()
+
+        async def execute_mock(req: RequestContext, q: EventQueue) -> None:
+            await stop_event.wait()
+
+        get_task_calls = 0
+
+        async def get_task_side_effect() -> Task | None:
+            nonlocal get_task_calls
+            get_task_calls += 1
+            # start()'s existence check needs a non-terminal task so it sets _task_created.
+            if get_task_calls == 1:
+                return Task(
+                    id='test-task-id',
+                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                )
+            return Task(id='test-task-id', status=TaskStatus(state=final_state))
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock(
+            side_effect=RuntimeError(cancel_error_message)
+        )
+        task_manager.get_task = AsyncMock(side_effect=get_task_side_effect)
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.sleep(0.1)
+        # Precondition: the guard under test only applies once this is set.
+        assert active_task._task_created.is_set()
+
+        with patch.object(
+            active_task._event_queue_agent,
+            'enqueue_event',
+            wraps=active_task._event_queue_agent.enqueue_event,
+        ) as enqueue_spy:
+            with pytest.raises(RuntimeError, match=cancel_error_message):
+                await active_task.cancel(request_context)
+
+        failed_writes = [
+            call.args[0]
+            for call in enqueue_spy.await_args_list
+            if isinstance(call.args[0], TaskStatusUpdateEvent)
+            and call.args[0].status.state == TaskState.TASK_STATE_FAILED
+        ]
+        assert len(failed_writes) == expected_failed_count
+        assert all(write.task_id == 'test-task-id' for write in failed_writes)
+
+        stop_event.set()
+        await active_task.aclose()
+
+    @pytest.mark.asyncio
+    async def test_event_consumer_drops_status_update_for_terminal_task(
+        self,
+        active_task: ActiveTask,
+        task_manager: Mock,
+    ) -> None:
+        """Regression test: FAILED update enqueued before the task turned terminal must be dropped at apply-time too."""
+        task_manager.get_task = AsyncMock(
+            return_value=Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+            )
+        )
+
+        stale_failed_event = TaskStatusUpdateEvent(
+            task_id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_FAILED),
+        )
+        await active_task._event_queue_agent.enqueue_event(stale_failed_event)
+        # Round-trip through the queue so task_done() below has a matching get().
+        dequeued = await active_task._event_queue_agent.dequeue_event()
+
+        # Not started: exercising the consumer's guard directly needs no
+        # producer/consumer loop.
+        consumer = EventConsumer(active_task)
+        with patch.object(
+            active_task._event_queue_subscribers,
+            'enqueue_event',
+            wraps=active_task._event_queue_subscribers.enqueue_event,
+        ) as subscriber_spy:
+            await consumer._process_event(dequeued)
+
+        # Dropped event must reach neither TaskManager nor subscribers.
+        task_manager.ensure_task_id.assert_not_awaited()
+        task_manager.process.assert_not_awaited()
+        subscriber_spy.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_active_task_interrupted_auth(
@@ -532,9 +701,9 @@ class TestActiveTask:
 
         task.cancel()
 
-        # In python 3.10+ cancelling an async generator next() might raise StopAsyncIteration
-        # if the generator handles the cancellation by closing.
-        with pytest.raises((asyncio.CancelledError, StopAsyncIteration)):
+        # The cancellation belongs to the caller, so subscribe() must re-raise
+        # it rather than end the stream as if the task had finished.
+        with pytest.raises(asyncio.CancelledError):
             await task
 
         await it.aclose()
@@ -805,7 +974,7 @@ class TestActiveTask:
         await active_task._is_finished.wait()
 
         with pytest.raises(
-            InvalidParamsError, match=r'Task .* is already completed'
+            UnsupportedOperationError, match=r'Task .* is already completed'
         ):
             async for _ in active_task.subscribe():
                 pass
@@ -921,6 +1090,83 @@ class TestActiveTask:
         ):
             async for _ in active_task.subscribe():
                 pass
+
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(5)
+    async def test_active_task_cancel_while_subscribed_frees_producer(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """Regression (#1322): cancelling a stream frees its producer."""
+        hang = asyncio.Event()
+        executing = asyncio.Event()
+
+        async def execute_mock(req, q):
+            executing.set()
+            await hang.wait()  # long-running work, cancelled from outside
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        task_manager.get_task = AsyncMock(
+            return_value=Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        producer = active_task._producer_task
+        assert producer is not None
+
+        # Subscribe before cancellation so the lifecycle event requires an ack.
+        subscription = active_task.subscribe(request=request_context)
+
+        async def drain() -> None:
+            async for _event in subscription:
+                pass
+
+        reader = asyncio.create_task(drain())
+        # Ensure cancellation reaches _run_producer's cleanup path.
+        await asyncio.wait_for(executing.wait(), timeout=2)
+        producer.cancel()
+
+        # Graceful cleanup must not wait on an unacknowledged lifecycle event.
+        await asyncio.wait_for(asyncio.shield(producer), timeout=2)
+
+        reader.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reader
+        hang.set()
+        await active_task.aclose()
+
+    @pytest.mark.asyncio
+    async def test_active_task_subscribe_acks_raised_exception(
+        self,
+        active_task: ActiveTask,
+    ) -> None:
+        """A re-raised queue exception is still acknowledged."""
+        tapped_queue = Mock(spec=EventQueue)
+        tapped_queue.dequeue_event = AsyncMock(
+            return_value=(RuntimeError('boom'), None)
+        )
+        tapped_queue.close = AsyncMock()
+
+        with (
+            patch.object(
+                active_task._event_queue_subscribers,
+                'tap',
+                return_value=tapped_queue,
+            ),
+            pytest.raises(RuntimeError, match='boom'),
+        ):
+            await anext(active_task.subscribe())
+
+        tapped_queue.task_done.assert_called_once_with()
 
 
 @pytest.mark.asyncio
@@ -1257,3 +1503,46 @@ async def test_subscriber_taps_are_evict_on_full():
     for t in background:
         t.cancel()
     await asyncio.gather(*background, return_exceptions=True)
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('stored_task', 'expected_error'),
+    [
+        (
+            Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+            ),
+            UnsupportedOperationError,
+        ),
+        (None, TaskNotFoundError),
+    ],
+)
+async def test_active_task_start_setup_failure_closes_event_queues(
+    stored_task, expected_error
+):
+    """A failed start() closes both event queues.
+
+    Each EventQueueSource starts its dispatcher task when it is created, so
+    without this the dispatchers stay pending until garbage collection and
+    surface as ``Task was destroyed but it is pending!``.
+    """
+    task_manager = Mock()
+    task_manager.get_task = AsyncMock(return_value=stored_task)
+
+    active_task = ActiveTask(
+        agent_executor=Mock(),
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=Mock(),
+    )
+
+    with pytest.raises(expected_error):
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=False
+        )
+
+    assert active_task._event_queue_agent._dispatcher_task.done()
+    assert active_task._event_queue_subscribers._dispatcher_task.done()

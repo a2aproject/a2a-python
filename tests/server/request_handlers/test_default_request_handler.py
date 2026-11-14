@@ -45,6 +45,7 @@ from a2a.server.tasks import (
     TaskUpdater,
 )
 from a2a.types import (
+    ContentTypeNotSupportedError,
     InternalError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
@@ -55,6 +56,8 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
+    AgentSkill,
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -76,6 +79,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.push_url_validator import (
     validate_push_notification_url,
 )
@@ -419,11 +423,16 @@ async def test_on_cancel_task_cancels_running_agent(agent_card):
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
-        params = CancelTaskRequest(id=f'{task_id}')
+        params = CancelTaskRequest(
+            id=f'{task_id}',
+            metadata={'reason': 'user_aborted'},
+        )
         await request_handler.on_cancel_task(params, context)
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
+    cancel_ctx: RequestContext = mock_agent_executor.cancel.call_args.args[0]
+    assert cancel_ctx.metadata == {'reason': 'user_aborted'}
 
 
 @pytest.mark.asyncio
@@ -464,13 +473,40 @@ async def test_on_cancel_task_completes_during_cancellation(agent_card):
         return_value=mock_result_aggregator_instance,
     ):
         params = CancelTaskRequest(id=f'{task_id}')
-        with pytest.raises(TaskNotCancelableError):
+        with pytest.raises(
+            TaskNotCancelableError,
+            match='current state: TASK_STATE_COMPLETED',
+        ):
             await request_handler.on_cancel_task(
                 params, create_server_call_context()
             )
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_cancel_task_already_terminal_names_state(agent_card):
+    """Cancelling a finished task reports the state by name."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = create_sample_task(
+        task_id='finished_task', status_state=TaskState.TASK_STATE_FAILED
+    )
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        agent_card=agent_card,
+    )
+
+    with pytest.raises(
+        TaskNotCancelableError, match='current state: TASK_STATE_FAILED'
+    ):
+        await request_handler.on_cancel_task(
+            CancelTaskRequest(id='finished_task'), create_server_call_context()
+        )
+
+    mock_agent_executor.cancel.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -987,6 +1023,47 @@ class HelloAgentExecutor(AgentExecutor):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('validate_input_modes', 'expect_rejection'), [(True, True), (False, False)]
+)
+async def test_on_message_send_input_mode_validation_is_opt_in(
+    validate_input_modes, expect_rejection
+):
+    """The legacy handler gates the same check behind the same flag."""
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(streaming=True),
+            default_input_modes=['text/plain'],
+        ),
+        validate_input_modes=validate_input_modes,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_media_type',
+            parts=[Part(text='hello', media_type='application/x-nope')],
+        )
+    )
+
+    if expect_rejection:
+        with pytest.raises(ContentTypeNotSupportedError):
+            await request_handler.on_message_send(
+                params, create_server_call_context()
+            )
+    else:
+        assert (
+            await request_handler.on_message_send(
+                params, create_server_call_context()
+            )
+            is not None
+        )
+
+
+@pytest.mark.asyncio
 async def test_on_message_send_non_blocking(agent_card):
     task_store = InMemoryTaskStore()
     push_store = InMemoryPushNotificationConfigStore()
@@ -1026,11 +1103,10 @@ async def test_on_message_send_non_blocking(agent_card):
 
     assert task is not None
     assert task.status.state == TaskState.TASK_STATE_COMPLETED
-    assert (
-        result.history
-        and task.history
-        and len(result.history) == len(task.history)
-    )
+    # The result is the task as it was returned, with its whole history; the
+    # agent's later status messages are added to the stored task only.
+    assert result.history
+    assert list(task.history[: len(result.history)]) == list(result.history)
 
 
 @pytest.mark.asyncio
@@ -1069,6 +1145,46 @@ async def test_on_message_send_limit_history(agent_card):
     task = await task_store.get(result.id, context)
     assert task is not None
     assert task.history is not None and len(task.history) > 1
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_limit_history(agent_card):
+    task_store = InMemoryTaskStore()
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        agent_card=agent_card,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_stream',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain'],
+            history_length=0,
+        ),
+    )
+
+    context = create_server_call_context()
+    tasks = [
+        event
+        async for event in request_handler.on_message_send_stream(
+            params, context
+        )
+        if isinstance(event, Task)
+    ]
+
+    # verify that history_length is honored
+    assert tasks
+    assert all(len(task.history) == 0 for task in tasks)
+
+    # verify that history is still persisted to the store
+    task = await task_store.get(tasks[0].id, context)
+    assert task is not None
+    assert len(task.history) > 0
 
 
 @pytest.mark.asyncio
@@ -1936,6 +2052,87 @@ async def test_set_task_push_notification_config_task_not_found(agent_card):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('store_kind', ['inmemory', 'database'])
+async def test_create_task_push_notification_config_returns_stored_id(
+    agent_card, store_kind
+):
+    """Test on_create_task_push_notification_config returns the id that was stored."""
+    if store_kind == 'database':
+        pytest.importorskip('sqlalchemy')
+        pytest.importorskip('aiosqlite')
+        from a2a.server.tasks.database_push_notification_config_store import (
+            DatabasePushNotificationConfigStore,
+        )
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        engine = create_async_engine(
+            'sqlite+aiosqlite:///file:pushid?mode=memory&cache=shared&uri=true'
+        )
+        push_config_store = DatabasePushNotificationConfigStore(engine=engine)
+    else:
+        push_config_store = InMemoryPushNotificationConfigStore()
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=agent_card,
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id,
+        url='http://example.com',
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    stored = await push_config_store.get_info(task.id, context)
+    if store_kind == 'database':
+        await engine.dispose()
+
+    assert response.id == task.id
+    assert list(stored) == [response]
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
+async def test_create_task_push_notification_config_normalizes_when_store_returns_none(
+    agent_card,
+):
+    """A custom store that still returns None from set_info keeps working."""
+    push_config_store = AsyncMock(spec=PushNotificationConfigStore)
+    push_config_store.set_info.return_value = None
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=agent_card,
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id, url='http://example.com'
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    assert (response.task_id, response.id) == (task.id, task.id)
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
 async def test_get_task_push_notification_config_no_store(agent_card):
     """Test on_get_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
@@ -2508,14 +2705,6 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id(
     assert len(result2.configs) == 0
 
 
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
 async def test_on_message_send_task_in_terminal_state(
@@ -2553,13 +2742,13 @@ async def test_on_message_send_task_in_terminal_state(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(InvalidParamsError) as exc_info:
+        with pytest.raises(UnsupportedOperationError) as exc_info:
             await request_handler.on_message_send(
                 params, create_server_call_context()
             )
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -2597,14 +2786,14 @@ async def test_on_message_send_stream_task_in_terminal_state(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(InvalidParamsError) as exc_info:
+        with pytest.raises(UnsupportedOperationError) as exc_info:
             async for _ in request_handler.on_message_send_stream(
                 params, create_server_call_context()
             ):
                 pass  # pragma: no cover
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -2639,7 +2828,7 @@ async def test_on_subscribe_to_task_in_terminal_state(
             pass  # pragma: no cover
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
     mock_task_store.get.assert_awaited_once_with(f'{task_id}', context)
@@ -2756,6 +2945,7 @@ async def test_on_message_send_error_does_not_hang(agent_card):
     """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
     agent = HelloWorldAgentExecutor()
     task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = None
     task_store.save.side_effect = RuntimeError('This is an Error!')
 
     request_handler = DefaultRequestHandler(
@@ -2858,6 +3048,38 @@ async def test_on_message_send_negative_history_length_error(agent_card):
 
     with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_message_send(params, context)
+
+    assert 'history length must be non-negative' in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_negative_history_length_error(
+    agent_card,
+):
+    """Test on_message_send_stream raises error for negative history length in configuration."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        agent_card=agent_card,
+    )
+
+    message_config = SendMessageConfiguration(
+        history_length=-1,
+        accepted_output_modes=['text/plain'],
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER, message_id='msg1', parts=[Part(text='Test')]
+        ),
+        configuration=message_config,
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        async for _ in request_handler.on_message_send_stream(params, context):
+            pass
 
     assert 'history length must be non-negative' in exc_info.value.message
 
@@ -3239,3 +3461,143 @@ async def test_on_message_send_rejects_invalid_push_url(agent_card):
         InvalidParamsError, match='Invalid push notification URL'
     ):
         await request_handler.on_message_send(params, context)
+
+
+def _complete_agent_card() -> AgentCard:
+    """Returns an AgentCard with every field the A2A spec marks REQUIRED."""
+    return AgentCard(
+        name='complete_agent',
+        description='An agent card with all required fields.',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://localhost:8000',
+                protocol_binding='JSONRPC',
+                protocol_version='1.0',
+            )
+        ],
+        version='1.0',
+        capabilities=AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            AgentSkill(
+                id='echo',
+                name='Echo',
+                description='Echoes the input.',
+                tags=['test'],
+            )
+        ],
+    )
+
+
+def test_init_warns_about_incomplete_agent_cards(
+    agent_card: AgentCard,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Cards missing REQUIRED fields are accepted, but each one is logged."""
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandler(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=agent_card,
+            extended_agent_card=AgentCard(),
+        )
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 2
+    assert messages[0].startswith('agent_card passed to DefaultRequestHandler:')
+    assert messages[1].startswith(
+        'extended_agent_card passed to DefaultRequestHandler:'
+    )
+
+
+def test_init_does_not_warn_for_complete_agent_cards(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandler(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=_complete_agent_card(),
+            extended_agent_card=_complete_agent_card(),
+        )
+    assert caplog.records == []
+
+
+@pytest.mark.asyncio
+async def test_push_sender_failure_does_not_propagate(agent_card):
+    """A push-notification infrastructure failure raised by the sender must
+    not propagate out of _send_push_notification_if_needed into the task
+    lifecycle (#1313)."""
+    mock_push_sender = AsyncMock(spec=PushNotificationSender)
+    mock_push_sender.send_notification.side_effect = RuntimeError(
+        'transient push infrastructure error'
+    )
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        push_config_store=AsyncMock(spec=PushNotificationConfigStore),
+        push_sender=mock_push_sender,
+        agent_card=agent_card,
+    )
+    event = create_sample_task()
+
+    # Must not raise: push delivery is best-effort.
+    await request_handler._send_push_notification_if_needed(event.id, event)
+
+    mock_push_sender.send_notification.assert_awaited_once_with(event.id, event)
+
+
+class _ContextRecordingAgent(AgentExecutor):
+    """Records the context id each execution is handed."""
+
+    def __init__(self) -> None:
+        self.seen_context_ids: list[str | None] = []
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.seen_context_ids.append(context.context_id)
+        updater = TaskUpdater(
+            event_queue,
+            context.task_id,  # type: ignore[arg-type]
+            context.context_id,  # type: ignore[arg-type]
+        )
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_task_only_message_infers_context_id_from_task(agent_card):
+    """A2A 3.4.3: a message naming only a taskId inherits the task's context."""
+    agent = _ContextRecordingAgent()
+    task_store = InMemoryTaskStore()
+    call_context = create_server_call_context()
+    task = create_sample_task(
+        task_id='task-awaiting-input',
+        status_state=TaskState.TASK_STATE_INPUT_REQUIRED,
+        context_id='ctx-from-stored-task',
+    )
+    await task_store.save(task, call_context)
+    handler = DefaultRequestHandler(
+        agent_executor=agent,
+        task_store=task_store,
+        agent_card=agent_card,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            message_id='msg-follow-up',
+            role=Role.ROLE_USER,
+            parts=[Part(text='Friday')],
+            task_id=task.id,
+        )
+    )
+
+    result = await handler.on_message_send(params, call_context)
+
+    assert agent.seen_context_ids == [task.context_id]
+    assert result.context_id == task.context_id
+    assert params.message.context_id == task.context_id

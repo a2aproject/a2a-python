@@ -3,16 +3,18 @@ import logging
 
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
+from urllib.parse import quote
 
 import httpx
 
-from google.protobuf.json_format import MessageToDict, Parse, ParseDict
+from google.protobuf.json_format import MessageToDict
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
     get_http_args,
+    handle_http_exceptions,
     send_http_request,
     send_http_stream_request,
 )
@@ -35,6 +37,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.errors import A2A_REASON_TO_ERROR, MethodNotFoundError
+from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -42,19 +45,25 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_rest_error(
-    error_payload: dict[str, Any],
+    error_payload: Any,
     fallback_message: str,
 ) -> Exception | None:
     """Parses a REST error payload and returns the appropriate A2AError.
 
     Args:
-        error_payload: The parsed JSON error payload.
+        error_payload: The parsed JSON error payload. Any JSON value is
+            accepted, since a proxy or gateway may answer with a body that
+            is not a ``google.rpc.Status``.
         fallback_message: Message to use if the payload has no ``message``.
 
     Returns:
         The mapped A2AError if a known reason was found, otherwise ``None``.
     """
-    error_data = error_payload.get('error', {})
+    if not isinstance(error_payload, dict):
+        return None
+    error_data = error_payload.get('error')
+    if not isinstance(error_data, dict):
+        return None
     message = error_data.get('message', fallback_message)
     details = error_data.get('details', [])
     if not isinstance(details, list):
@@ -82,6 +91,11 @@ def _parse_rest_error(
     return None
 
 
+def _quote_id(value: str) -> str:
+    """Percent-encodes an id so it stays a single URL path segment."""
+    return quote(value, safe='')
+
+
 @trace_class(kind=SpanKind.CLIENT)
 class RestTransport(ClientTransport):
     """A REST transport for the A2A client."""
@@ -91,11 +105,13 @@ class RestTransport(ClientTransport):
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard,
         url: str,
+        is_shared_httpx: bool = False,
     ):
         """Initializes the RestTransport."""
         self.url = url.removesuffix('/')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
+        self.is_shared_httpx = is_shared_httpx
 
     async def send_message(
         self,
@@ -111,7 +127,7 @@ class RestTransport(ClientTransport):
             context=context,
             json=MessageToDict(request),
         )
-        response: SendMessageResponse = ParseDict(
+        response: SendMessageResponse = parse_lenient(
             response_data, SendMessageResponse()
         )
         return response
@@ -149,12 +165,12 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.id}',
+            f'/tasks/{_quote_id(request.id)}',
             request.tenant,
             context=context,
             params=params,
         )
-        response: Task = ParseDict(response_data, Task())
+        response: Task = parse_lenient(response_data, Task())
         return response
 
     async def list_tasks(
@@ -175,7 +191,7 @@ class RestTransport(ClientTransport):
             context=context,
             params=params,
         )
-        response: ListTasksResponse = ParseDict(
+        response: ListTasksResponse = parse_lenient(
             response_data, ListTasksResponse()
         )
         return response
@@ -189,12 +205,12 @@ class RestTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/tasks/{request.id}:cancel',
+            f'/tasks/{_quote_id(request.id)}:cancel',
             request.tenant,
             context=context,
             json=MessageToDict(request),
         )
-        response: Task = ParseDict(response_data, Task())
+        response: Task = parse_lenient(response_data, Task())
         return response
 
     async def create_task_push_notification_config(
@@ -206,12 +222,12 @@ class RestTransport(ClientTransport):
         """Sets or updates the push notification configuration for a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             request.tenant,
             context=context,
             json=MessageToDict(request),
         )
-        response: TaskPushNotificationConfig = ParseDict(
+        response: TaskPushNotificationConfig = parse_lenient(
             response_data, TaskPushNotificationConfig()
         )
         return response
@@ -233,12 +249,13 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             request.tenant,
             context=context,
             params=params,
         )
-        response: TaskPushNotificationConfig = ParseDict(
+        response: TaskPushNotificationConfig = parse_lenient(
             response_data, TaskPushNotificationConfig()
         )
         return response
@@ -258,12 +275,12 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             request.tenant,
             context=context,
             params=params,
         )
-        response: ListTaskPushNotificationConfigsResponse = ParseDict(
+        response: ListTaskPushNotificationConfigsResponse = parse_lenient(
             response_data, ListTaskPushNotificationConfigsResponse()
         )
         return response
@@ -283,13 +300,24 @@ class RestTransport(ClientTransport):
         if 'tenant' in params:
             del params['tenant']
 
-        await self._execute_request(
-            'DELETE',
-            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+        path = self._get_path(
+            f'/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             request.tenant,
-            context=context,
-            params=params,
         )
+        http_request = self.httpx_client.build_request(
+            'DELETE',
+            f'{self.url}{path}',
+            params=params,
+            **get_http_args(context),
+        )
+        if self.httpx_client.is_closed:
+            raise A2AClientError('HTTP client is closed')
+        # The body is not read: servers confirm the deletion with `{}`,
+        # with 204 No Content, or with a 200 that has no body.
+        with handle_http_exceptions(self._handle_http_error):
+            response = await self.httpx_client.send(http_request)
+            response.raise_for_status()
 
     async def subscribe(
         self,
@@ -300,7 +328,7 @@ class RestTransport(ClientTransport):
         """Reconnects to get task updates."""
         async for event in self._send_stream_request(
             'POST',
-            f'/tasks/{request.id}:subscribe',
+            f'/tasks/{_quote_id(request.id)}:subscribe',
             request.tenant,
             context=context,
         ):
@@ -321,11 +349,22 @@ class RestTransport(ClientTransport):
             'GET', '/extendedAgentCard', request.tenant, context=context
         )
 
-        return ParseDict(response_data, AgentCard())
+        return parse_lenient(response_data, AgentCard())
 
     async def close(self) -> None:
-        """Closes the httpx client."""
-        await self.httpx_client.aclose()
+        """Closes the httpx client unless it is shared."""
+        if self.is_shared_httpx:
+            logger.debug(
+                'Cannot close a shared httpx client; only the provider '
+                'that supplied it via ClientConfig.httpx_client can close it.'
+            )
+            return
+        if self.httpx_client.is_closed:
+            raise A2AClientError('HTTP client is already closed')
+        try:
+            await self.httpx_client.aclose()
+        except Exception as e:
+            raise A2AClientError(f'Failed to close HTTP client: {e}') from e
 
     def _get_path(self, base_path: str, tenant: str) -> str:
         """Returns the full path, prepending the tenant if provided."""
@@ -378,8 +417,22 @@ class RestTransport(ClientTransport):
             json=json,
             **http_kwargs,
         ):
-            event: StreamResponse = Parse(sse_data, StreamResponse())
+            event: StreamResponse = parse_lenient(sse_data, StreamResponse())
+            if event.WhichOneof('payload') is None:
+                self._raise_in_band_error(sse_data)
             yield event
+
+    def _raise_in_band_error(self, sse_data: str) -> None:
+        """Raises the error carried by a data event, if it carries one.
+
+        The HTTP+JSON binding defines no SSE event type for errors, so a
+        server may send the ``google.rpc.Status`` body as an ordinary data
+        event instead of an ``event: error`` one. ``StreamResponse`` has no
+        ``error`` field, so that body parses to an event with no payload.
+        """
+        payload = json.loads(sse_data)
+        if isinstance(payload, dict) and 'error' in payload:
+            self._handle_sse_error(sse_data)
 
     async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
         return await send_http_request(

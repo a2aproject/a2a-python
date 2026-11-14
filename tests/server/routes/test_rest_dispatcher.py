@@ -3,6 +3,7 @@ import json
 from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from a2a.server.context import ServerCallContext
@@ -11,9 +12,12 @@ from a2a.server.routes import rest_dispatcher
 from a2a.server.routes.rest_dispatcher import (
     RestDispatcher,
 )
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    Artifact,
+    CancelTaskRequest,
     ListTaskPushNotificationConfigsResponse,
     ListTasksResponse,
     Message,
@@ -23,6 +27,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.errors import (
     UnsupportedOperationError,
 )
+from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -190,6 +195,61 @@ class TestRestDispatcherEndpoints:
         response = await rest_dispatcher_instance.on_cancel_task(req)
         assert response.status_code == 404  # TaskNotFoundError maps to 404
 
+    async def test_on_cancel_task_forwards_metadata_and_keeps_path_id(
+        self,
+        rest_dispatcher_instance: RestDispatcher,
+        mock_handler: AsyncMock,
+    ) -> None:
+        body = json.dumps(
+            {
+                'id': 'body_id_ignored',
+                'metadata': {'reason': 'user_aborted', 'nested': {'step': 3}},
+            }
+        ).encode('utf-8')
+        req = make_mock_request(
+            method='POST', path_params={'id': 'test_task'}, body=body
+        )
+
+        response = await rest_dispatcher_instance.on_cancel_task(req)
+        assert response.status_code == 200
+        mock_handler.on_cancel_task.assert_awaited_once()
+        cancel_params = mock_handler.on_cancel_task.call_args.args[0]
+        assert cancel_params == CancelTaskRequest(
+            id='test_task',
+            metadata={'reason': 'user_aborted', 'nested': {'step': 3}},
+        )
+
+    @pytest.mark.parametrize('body', [b'', b'   \n\t '])
+    async def test_on_cancel_task_accepts_empty_body(
+        self,
+        rest_dispatcher_instance: RestDispatcher,
+        mock_handler: AsyncMock,
+        body: bytes,
+    ) -> None:
+        req = make_mock_request(
+            method='POST', path_params={'id': 'test_task'}, body=body
+        )
+
+        response = await rest_dispatcher_instance.on_cancel_task(req)
+        assert response.status_code == 200
+        mock_handler.on_cancel_task.assert_awaited_once()
+        cancel_params = mock_handler.on_cancel_task.call_args.args[0]
+        assert cancel_params == CancelTaskRequest(id='test_task')
+        assert not cancel_params.HasField('metadata')
+
+    async def test_on_cancel_task_invalid_json_body_returns_400(
+        self,
+        rest_dispatcher_instance: RestDispatcher,
+        mock_handler: AsyncMock,
+    ) -> None:
+        req = make_mock_request(
+            method='POST', path_params={'id': 'test_task'}, body=b'{not-json'
+        )
+
+        response = await rest_dispatcher_instance.on_cancel_task(req)
+        assert response.status_code == 400
+        mock_handler.on_cancel_task.assert_not_awaited()
+
     async def test_on_get_task_success(
         self, rest_dispatcher_instance, mock_handler
     ):
@@ -225,6 +285,21 @@ class TestRestDispatcherEndpoints:
                 True,
                 id='included',
             ),
+            pytest.param(
+                QueryParams({'includeArtifacts': 'false'}),
+                False,
+                id='excluded',
+            ),
+            pytest.param(
+                QueryParams({'includeArtifacts': 'TRUE'}),
+                True,
+                id='uppercase-true',
+            ),
+            pytest.param(
+                QueryParams({'includeArtifacts': 'False'}),
+                False,
+                id='mixed-case-false',
+            ),
         ],
     )
     async def test_list_tasks_artifact_presence(
@@ -235,7 +310,12 @@ class TestRestDispatcherEndpoints:
         artifacts_expected: bool,
     ) -> None:
         mock_handler.on_list_tasks.return_value = ListTasksResponse(
-            tasks=[Task(id='test_task')]
+            tasks=[
+                Task(
+                    id='test_task',
+                    artifacts=[Artifact(artifact_id='test-artifact')],
+                )
+            ]
         )
         req = make_mock_request(method='GET', query_params=query_params)
 
@@ -243,6 +323,33 @@ class TestRestDispatcherEndpoints:
 
         task = json.loads(response.body)['tasks'][0]
         assert ('artifacts' in task) is artifacts_expected
+        if artifacts_expected:
+            assert task['artifacts'][0]['artifactId'] == 'test-artifact'
+
+    @pytest.mark.parametrize(
+        'value', ['garbage', '', '0', '1', ' ', ' true ', 'private-query-value']
+    )
+    async def test_list_tasks_rejects_invalid_boolean_query(
+        self, mock_handler: AsyncMock, value: str
+    ) -> None:
+        app = Starlette(routes=create_rest_routes(mock_handler))
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url='http://test',
+            trust_env=False,
+        ) as client:
+            response = await client.get(
+                '/tasks',
+                params={'includeArtifacts': value},
+                headers={'a2a-version': '1.0'},
+            )
+
+        assert response.status_code == 400
+        assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+        assert 'includeArtifacts' in response.json()['error']['message']
+        if value.strip():
+            assert value not in response.json()['error']['message']
+        mock_handler.on_list_tasks.assert_not_awaited()
 
     async def test_get_push_notification(
         self, rest_dispatcher_instance, mock_handler
@@ -276,6 +383,32 @@ class TestRestDispatcherEndpoints:
 
 @pytest.mark.asyncio
 class TestRestDispatcherStreaming:
+    async def test_shutdown_grace_period_is_passed_to_streaming_responses(
+        self, mock_handler
+    ) -> None:
+        async def stream(
+            context: ServerCallContext,
+        ) -> AsyncIterator[dict[str, str]]:
+            yield {'result': 'value'}
+
+        async def empty_stream(
+            context: ServerCallContext,
+        ) -> AsyncIterator[dict[str, str]]:
+            for item in []:
+                yield item
+
+        dispatcher = RestDispatcher(
+            request_handler=mock_handler,
+            shutdown_grace_period=30.0,
+        )
+        req = make_mock_request(method='POST')
+
+        response = await dispatcher._handle_streaming(req, stream)
+        empty_response = await dispatcher._handle_streaming(req, empty_stream)
+
+        assert getattr(response, '_shutdown_grace_period') == 30.0
+        assert getattr(empty_response, '_shutdown_grace_period') == 30.0
+
     async def test_on_message_send_stream_success(
         self, rest_dispatcher_instance
     ):

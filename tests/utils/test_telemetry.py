@@ -294,3 +294,45 @@ async def test_trace_function_async_non_error_exception_does_not_mark_span_error
     # the span was never marked as failed.
     for call in mock_span.set_status.call_args_list:
         assert 'description' not in call.kwargs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('exc_cls', 'is_error'), [(QueueShutDown, False), (ValueError, True)]
+)
+async def test_span_status_with_real_otel_sdk(
+    exc_cls: type[Exception], is_error: bool
+) -> None:
+    """Check the status a real OTel SDK span ends with.
+
+    The mocked-tracer tests only see the wrapper's own calls. By default,
+    `start_as_current_span` also records any exception leaving its block and
+    marks the span ERROR, which would turn a `QueueShutDown` into an error
+    span and record every exception twice.
+    """
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+    from opentelemetry.trace import StatusCode
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    with mock.patch(
+        'opentelemetry.trace.get_tracer', side_effect=provider.get_tracer
+    ):
+
+        @trace_function
+        async def fail() -> NoReturn:
+            await asyncio.sleep(0)
+            raise exc_cls
+
+        with pytest.raises(exc_cls):
+            await fail()
+
+    (span,) = exporter.get_finished_spans()
+    assert (span.status.status_code is StatusCode.ERROR) is is_error
+    assert [event.name for event in span.events] == ['exception']

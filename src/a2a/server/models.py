@@ -15,7 +15,15 @@ from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
 try:
-    from sqlalchemy import JSON, DateTime, Index, LargeBinary, String
+    from sqlalchemy import (
+        JSON,
+        BigInteger,
+        DateTime,
+        Index,
+        Integer,
+        LargeBinary,
+        String,
+    )
     from sqlalchemy.orm import (
         DeclarativeBase,
         Mapped,
@@ -192,3 +200,82 @@ class PushNotificationConfigModel(PushNotificationConfigMixin, Base):
     """Default push notification config model with standard table name."""
 
     __tablename__ = 'push_notification_configs'
+
+
+# TaskEventMixin: append-only log of task events for the clustered event stream.
+class TaskEventMixin:
+    """Mixin providing columns for an append-only task-event log.
+
+    Written transactionally with the task row by the clustered
+    `VersionedTaskStore` and read by `DatabaseTaskEventStream`. Only used by
+    `a2a.server.cluster`; unused by the default single-process stores.
+    """
+
+    seq: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, 'sqlite'),
+        primary_key=True,
+        autoincrement=True,
+    )
+    task_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True)
+    # Task version produced by applying this event.
+    task_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Serialized StreamResponse proto for the event.
+    event_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    @override
+    def __repr__(self) -> str:
+        """Return a string representation of the task event."""
+        return (
+            f'<{self.__class__.__name__}(seq={getattr(self, "seq", None)}, '
+            f'task_id="{self.task_id}", task_version={self.task_version})>'
+        )
+
+
+def create_task_event_model(
+    table_name: str = 'task_events', base: type[DeclarativeBase] = Base
+) -> type:
+    """Create a TaskEventModel class with a configurable table name."""
+
+    class TaskEventModel(TaskEventMixin, base):  # type: ignore
+        __tablename__ = table_name
+
+    TaskEventModel.__name__ = f'TaskEventModel_{table_name}'
+    TaskEventModel.__qualname__ = f'TaskEventModel_{table_name}'
+    return TaskEventModel
+
+
+# Default TaskEventModel for backward compatibility.
+class TaskEventModel(TaskEventMixin, Base):
+    """Default task-event model with standard table name."""
+
+    __tablename__ = 'task_events'
+
+
+class TaskVersionMixin:
+    """Mixin providing the compare-and-swap version for a task."""
+
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True)
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+def create_task_version_model(
+    table_name: str = 'task_versions',
+    base: type[DeclarativeBase] = Base,
+) -> type:
+    """Create a TaskVersionModel class with a configurable table name."""
+
+    class TaskVersionModel(TaskVersionMixin, base):  # type: ignore
+        __tablename__ = table_name
+
+    TaskVersionModel.__name__ = f'TaskVersionModel_{table_name}'
+    TaskVersionModel.__qualname__ = f'TaskVersionModel_{table_name}'
+    return TaskVersionModel
+
+
+# Default TaskVersionModel for backward compatibility.
+class TaskVersionModel(TaskVersionMixin, Base):
+    """Default task-version model with standard table name."""
+
+    __tablename__ = 'task_versions'

@@ -15,6 +15,7 @@ AGrpc
 aio
 aiomysql
 AIP
+AJSON
 alg
 amannn
 aproject
@@ -33,6 +34,7 @@ buf
 bufbuild
 cla
 cls
+clustermode
 coc
 codegen
 coro
@@ -44,6 +46,7 @@ deepwiki
 denormal
 denormals
 drivername
+dsn
 DSNs
 dunders
 ES256
@@ -51,6 +54,7 @@ euo
 EUR
 evt
 excinfo
+EXTCARD
 FastAPI
 fernet
 fetchrow
@@ -109,13 +113,16 @@ openapiv
 openapiv2
 opensource
 otherurl
+outerjoin
 pb2
+PLW
 podman
 Podman
 poolclass
 postgres
 POSTGRES
 postgresql
+procs
 proot
 proto
 protobuf
@@ -135,11 +142,14 @@ rmi
 RS256
 RUF
 Rundgren
+SECP
 SECP256R1
 SFIXED
+signings
 SLF
 socio
 sourced
+sqlstate
 sse
 starlette
 Starlette
@@ -158,5 +168,8 @@ TResponse
 typ
 typeerror
 UIDs
+urlsafe
+versioned
+Versioned
 vulnz
 whl

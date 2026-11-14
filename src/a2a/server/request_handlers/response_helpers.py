@@ -44,6 +44,7 @@ from a2a.utils.errors import (
     UnsupportedOperationError,
     VersionNotSupportedError,
 )
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 
 
 EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
@@ -86,6 +87,9 @@ EventTypes = (
 
 def agent_card_to_dict(card: AgentCard) -> dict[str, Any]:
     """Convert AgentCard to dict and inject backward compatibility fields."""
+    warn_on_missing_required_fields(
+        card, 'agent_card passed to agent_card_to_dict:'
+    )
     result = MessageToDict(card)
 
     try:

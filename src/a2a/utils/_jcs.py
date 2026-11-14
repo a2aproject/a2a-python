@@ -81,7 +81,7 @@ def canonicalize(obj: Any) -> str:
             than `MAX_DEPTH`.
     """
     out: list[str] = []
-    _write(obj, out, 0)
+    _write(obj, out, 1)
     canonical = ''.join(out)
     try:
         # RFC 8785 canonical output is UTF-8. Round-tripping here rejects
@@ -96,8 +96,13 @@ def canonicalize(obj: Any) -> str:
 
 
 def _write(obj: Any, out: list[str], depth: int) -> None:
-    """Appends the canonical form of `obj` to `out`."""
-    if depth > MAX_DEPTH:
+    """Appends the canonical form of `obj` to `out`.
+
+    `depth` is the number of open containers on the path to `obj`, the
+    outermost at 1. Only containers are recursed into, so only containers
+    carry a depth worth checking; a scalar's depth is never read.
+    """
+    if isinstance(obj, (list, tuple, dict)) and depth > MAX_DEPTH:
         raise CanonicalizationError(
             f'nesting exceeds the maximum depth of {MAX_DEPTH}'
         )

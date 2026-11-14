@@ -1,4 +1,5 @@
 import json
+import re
 
 from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import contextmanager
@@ -46,7 +47,7 @@ def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
     if context and context.service_parameters:
         http_kwargs['headers'] = context.service_parameters.copy()
     if context and context.timeout is not None:
-        http_kwargs['timeout'] = httpx.Timeout(context.timeout)
+        http_kwargs['timeout'] = context.timeout
     return http_kwargs
 
 
@@ -57,10 +58,45 @@ async def send_http_request(
     | None = None,
 ) -> dict[str, Any]:
     """Sends an HTTP request and parses the JSON response, handling common exceptions."""
+    if httpx_client.is_closed:
+        raise A2AClientError('HTTP client is closed')
     with handle_http_exceptions(status_error_handler):
         response = await httpx_client.send(request)
         response.raise_for_status()
         return response.json()
+
+
+_SSE_LINE_END = re.compile(r'\r\n|\r|\n')
+
+
+async def _aiter_sse_lines(
+    response: httpx.Response,
+) -> AsyncGenerator[str, None]:
+    """Yields lines ended only by CRLF, LF or CR, unlike `aiter_lines()`.
+
+    The unfinished line is kept as a list of pieces and joined once, and
+    only the new chunk is scanned, so a long `data:` line that spans many
+    chunks costs linear rather than quadratic time.
+    """
+    pieces: list[str] = []
+    held_cr = False
+    async for chunk in response.aiter_text():
+        text = '\r' + chunk if held_cr else chunk
+        # Hold a trailing CR back: the next chunk may start with its LF.
+        held_cr = text.endswith('\r')
+        *lines, rest = _SSE_LINE_END.split(text[:-1] if held_cr else text)
+        if lines:
+            lines[0] = ''.join(pieces) + lines[0]
+            pieces = []
+            for line in lines:
+                yield line
+        if rest:
+            pieces.append(rest)
+    tail = ''.join(pieces)
+    # A held CR at end of stream still ends a line, even an empty one. That
+    # blank line is what dispatches the last event, so yield it too.
+    if held_cr or tail:
+        yield tail
 
 
 async def parse_sse_stream(
@@ -73,9 +109,7 @@ async def parse_sse_stream(
     event_name = 'message'
     payload_chunks: list[str] = []
 
-    async for line in response.aiter_lines():
-        raw_line = line.rstrip('\r\n')
-
+    async for raw_line in _aiter_sse_lines(response):
         # Empty line denotes the completion of the current event block
         if not raw_line:
             if payload_chunks:
@@ -125,6 +159,8 @@ async def send_http_stream_request(
             Should raise an appropriate domain-specific exception.
         **kwargs: Additional keyword arguments forwarded to ``aconnect_sse``.
     """
+    if httpx_client.is_closed:
+        raise A2AClientError('HTTP client is closed')
     with handle_http_exceptions(status_error_handler):
         async with _SSEEventSource(
             httpx_client, method, url, **kwargs
@@ -138,8 +174,9 @@ async def send_http_stream_request(
                 raise e
 
             # If the response is not a stream, read it standardly (e.g., upfront JSON-RPC error payload)
-            if 'text/event-stream' not in response.headers.get(
-                'content-type', ''
+            if (
+                'text/event-stream'
+                not in response.headers.get('content-type', '').lower()
             ):
                 content = await response.aread()
                 yield content.decode('utf-8')
@@ -175,9 +212,12 @@ class _SSEEventSource:
         url: str,
         **kwargs: Any,
     ) -> None:
-        headers = httpx.Headers(kwargs.pop('headers', None))
-        headers.setdefault('Accept', 'text/event-stream')
-        headers.setdefault('Cache-Control', 'no-store')
+        headers: dict[str, str] = dict(kwargs.pop('headers', None) or {})
+        present = {key.lower() for key in headers}
+        if 'accept' not in present:
+            headers['Accept'] = 'text/event-stream'
+        if 'cache-control' not in present:
+            headers['Cache-Control'] = 'no-store'
         self._request = client.build_request(
             method, url, headers=headers, **kwargs
         )

@@ -32,6 +32,9 @@ from a2a.server.tasks import (
     TaskManager,
     TaskStore,
 )
+from a2a.server.tasks.push_notification_config_store import (
+    normalize_push_notification_config,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -50,6 +53,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskState,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
     InternalError,
@@ -59,6 +63,8 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.input_mode_validator import validate_input_modes
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -68,13 +74,6 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
-
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
 
 
 @trace_class(kind=SpanKind.SERVER)
@@ -104,6 +103,7 @@ class LegacyRequestHandler(RequestHandler):
         ]
         | None = None,
         push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
+        validate_input_modes: bool = False,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -123,6 +123,13 @@ class LegacyRequestHandler(RequestHandler):
               library screening). The spec lists these checks as SHOULD,
               so deployments that want the built-in policy should pass
               ``validate_push_notification_url``.
+            validate_input_modes: Reject message parts whose ``media_type``
+              the card declares nowhere -- neither in
+              ``default_input_modes`` nor in any skill's ``input_modes`` --
+              with ``ContentTypeNotSupportedError``. Defaults to False,
+              because an agent whose declared modes do not spell the media
+              types its clients really send would start refusing traffic it
+              previously accepted.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -131,8 +138,17 @@ class LegacyRequestHandler(RequestHandler):
         self._push_config_store = push_config_store
         self._push_sender = push_sender
         self._push_url_validator = push_url_validator
+        self._validate_input_modes = validate_input_modes
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
+        warn_on_missing_required_fields(
+            agent_card, 'agent_card passed to DefaultRequestHandler:'
+        )
+        if extended_agent_card is not None:
+            warn_on_missing_required_fields(
+                extended_agent_card,
+                'extended_agent_card passed to DefaultRequestHandler:',
+            )
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
@@ -209,7 +225,7 @@ class LegacyRequestHandler(RequestHandler):
         # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
         if task.status.state in TERMINAL_TASK_STATES:
             raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {task.status.state}'
+                message=f'Task cannot be canceled - current state: {TaskState.Name(task.status.state)}'
             )
 
         task_manager = TaskManager(
@@ -228,7 +244,7 @@ class LegacyRequestHandler(RequestHandler):
         await self.agent_executor.cancel(
             RequestContext(
                 call_context=context,
-                request=None,
+                request=params,
                 task_id=task.id,
                 context_id=task.context_id,
                 task=task,
@@ -248,7 +264,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if result.status.state != TaskState.TASK_STATE_CANCELED:
             raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {result.status.state}'
+                message=f'Task cannot be canceled - current state: {TaskState.Name(result.status.state)}'
             )
 
         return result
@@ -277,6 +293,9 @@ class LegacyRequestHandler(RequestHandler):
         Returns:
             A tuple of (task_manager, task_id, queue, result_aggregator, producer_task)
         """
+        if self._validate_input_modes:
+            validate_input_modes(params.message, self._agent_card)
+
         # Create task manager and validate existing task
         # Proto empty strings should be treated as None
         task_id = params.message.task_id or None
@@ -292,11 +311,14 @@ class LegacyRequestHandler(RequestHandler):
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
-                raise InvalidParamsError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state}'
+                raise UnsupportedOperationError(
+                    message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
                 )
 
             task = task_manager.update_with_message(params.message, task)
+            # Agents must infer the contextId from the task when the message
+            # names only a taskId.
+            context_id = context_id or task.context_id
         elif params.message.task_id:
             raise TaskNotFoundError(
                 message=f'Task {params.message.task_id} was specified but does not exist'
@@ -306,7 +328,7 @@ class LegacyRequestHandler(RequestHandler):
         request_context = await self._request_context_builder.build(
             params=params,
             task_id=task.id if task else None,
-            context_id=params.message.context_id,
+            context_id=context_id,
             task=task,
             context=context,
         )
@@ -357,7 +379,16 @@ class LegacyRequestHandler(RequestHandler):
             and task_id
             and isinstance(event, PushNotificationEvent)
         ):
-            await self._push_sender.send_notification(task_id, event)
+            try:
+                await self._push_sender.send_notification(task_id, event)
+            except Exception:
+                # Push delivery is best-effort: a sender failure must not
+                # fail the task or disturb the event stream.
+                logger.exception(
+                    'Push notification sender raised for task_id=%s; '
+                    'ignoring the failure.',
+                    task_id,
+                )
 
     @validate_request_params
     async def on_message_send(
@@ -444,6 +475,8 @@ class LegacyRequestHandler(RequestHandler):
         Starts the agent execution and yields events as they are produced
         by the agent.
         """
+        validate_history_length(params.configuration)
+
         (
             _task_manager,
             task_id,
@@ -456,11 +489,13 @@ class LegacyRequestHandler(RequestHandler):
 
         try:
             async for event in result_aggregator.consume_and_emit(consumer):
+                response = event
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
+                    response = apply_history_length(event, params.configuration)
 
                 await self._send_push_notification_if_needed(task_id, event)
-                yield event
+                yield response
         except (asyncio.CancelledError, GeneratorExit):
             # Client disconnected: continue consuming and persisting events in the background
             bg_task = asyncio.create_task(
@@ -547,13 +582,15 @@ class LegacyRequestHandler(RequestHandler):
 
         await self._reject_unsafe_push_url(params.url)
 
-        await self._push_config_store.set_info(
+        stored = await self._push_config_store.set_info(
             task_id,
             params,
             context,
         )
-
-        return params
+        if stored is not None:
+            return stored
+        # Custom stores written before set_info returned the stored config.
+        return normalize_push_notification_config(task_id, params)
 
     @validate_request_params
     @validate(
@@ -611,7 +648,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if task.status.state in TERMINAL_TASK_STATES:
             raise UnsupportedOperationError(
-                message=f'Task {task.id} is in terminal state: {task.status.state}'
+                message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
             )
 
         # The operation MUST return a Task object as the first event in the stream

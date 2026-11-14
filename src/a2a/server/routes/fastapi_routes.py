@@ -54,13 +54,18 @@ _A2A_VERSION_HEADER = {
 }
 
 
+_OPTIONAL_REST_BODIES: frozenset[tuple[str, str]] = frozenset(
+    {('/tasks/{id}:cancel', 'POST')}
+)
+
+
 def _request_body_extra(
-    ref: dict[str, Any], description: str
+    ref: dict[str, Any], description: str, *, required: bool = True
 ) -> dict[str, Any]:
     return {
         'requestBody': {
             'description': description,
-            'required': True,
+            'required': required,
             'content': {'application/json': {'schema': ref}},
         },
     }
@@ -151,6 +156,7 @@ def add_a2a_routes_to_fastapi(
         key: _request_body_extra(
             message_schema(cls.DESCRIPTOR, components),
             f'A2A {cls.__name__}',
+            required=key not in _OPTIONAL_REST_BODIES,
         )
         for key, cls in REST_BODY_TYPES.items()
     }

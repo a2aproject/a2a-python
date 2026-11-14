@@ -21,6 +21,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 
 
 class TaskUpdater:
@@ -51,12 +52,7 @@ class TaskUpdater:
         self.context_id = context_id
         self._lock = asyncio.Lock()
         self._terminal_state_reached = False
-        self._terminal_states = {
-            TaskState.TASK_STATE_COMPLETED,
-            TaskState.TASK_STATE_CANCELED,
-            TaskState.TASK_STATE_FAILED,
-            TaskState.TASK_STATE_REJECTED,
-        }
+        self._terminal_states = set(TERMINAL_TASK_STATES)
         self._artifact_id_generator = (
             artifact_id_generator if artifact_id_generator else UUIDGenerator()
         )
@@ -84,8 +80,6 @@ class TaskUpdater:
                 raise RuntimeError(
                     f'Task {self.task_id} is already in a terminal state.'
                 )
-            if state in self._terminal_states:
-                self._terminal_state_reached = True
 
             # Create proto timestamp from datetime
             ts = Timestamp()
@@ -101,14 +95,15 @@ class TaskUpdater:
                 status.message.CopyFrom(message)
             status.timestamp.CopyFrom(ts)
 
-            await self.event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=self.task_id,
-                    context_id=self.context_id,
-                    metadata=metadata,
-                    status=status,
-                )
+            event = TaskStatusUpdateEvent(
+                task_id=self.task_id,
+                context_id=self.context_id,
+                metadata=metadata,
+                status=status,
             )
+            if state in self._terminal_states:
+                self._terminal_state_reached = True
+            await self.event_queue.enqueue_event(event)
 
     async def add_artifact(  # noqa: PLR0913
         self,

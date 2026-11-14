@@ -99,6 +99,7 @@ Constructing messages is simplified in v1.0. The old API required wrapping conte
 **Note**:
 * When using `File (bytes)` in v1.0, data serialization (via base64 encoding) is not required because A2A now uses Protobuf, which handles it automatically.
 * In v1.0, `Part.DataPart.data` is renamed to `Part.data` and is of type `google.protobuf.Value`. Use `ParseDict` to convert a Python dict into a suitable value. See the examples below for more details.
+* `google.protobuf.Value` stores every number as a double, so whole numbers in a data Part are read back as floats on every transport (`4326` becomes `4326.0`). This is a fidelity loss, not a spec violation, since JSON does not distinguish the two. On the receiving side, narrow floats for fields you model as integers (for example with `float.is_integer()`) and leave other fields alone.
 
 **Before (v0.3):**
 ```python

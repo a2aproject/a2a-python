@@ -2,6 +2,8 @@
 
 from enum import Enum
 
+from a2a.types.a2a_pb2 import TaskState
+
 
 AGENT_CARD_WELL_KNOWN_PATH = '/.well-known/agent-card.json'
 DEFAULT_RPC_URL = '/'
@@ -10,6 +12,9 @@ DEFAULT_LIST_TASKS_PAGE_SIZE = 50
 
 MAX_LIST_TASKS_PAGE_SIZE = 100
 """Maximum page size for the `tasks/list` method."""
+
+A2A_JSON_MEDIA_TYPE = 'application/a2a+json'
+"""Media type for HTTP+JSON binding payloads."""
 
 
 class TransportProtocol(str, Enum):
@@ -26,3 +31,19 @@ VERSION_HEADER = 'A2A-Version'
 PROTOCOL_VERSION_1_0 = '1.0'
 PROTOCOL_VERSION_0_3 = '0.3'
 PROTOCOL_VERSION_CURRENT = PROTOCOL_VERSION_1_0
+
+TERMINAL_TASK_STATES: frozenset[TaskState.ValueType] = frozenset(
+    {
+        TaskState.TASK_STATE_COMPLETED,
+        TaskState.TASK_STATE_CANCELED,
+        TaskState.TASK_STATE_FAILED,
+        TaskState.TASK_STATE_REJECTED,
+    }
+)
+
+INTERRUPTED_TASK_STATES: frozenset[TaskState.ValueType] = frozenset(
+    {
+        TaskState.TASK_STATE_INPUT_REQUIRED,
+        TaskState.TASK_STATE_AUTH_REQUIRED,
+    }
+)

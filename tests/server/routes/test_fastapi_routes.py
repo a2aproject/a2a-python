@@ -130,8 +130,15 @@ def test_request_body_schemas_are_attached(
     }
 
     send_body = schema['paths']['/message:send']['post']['requestBody']
+    assert send_body['required'] is True
     assert send_body['content']['application/json']['schema'] == {
         '$ref': '#/components/schemas/SendMessageRequest'
+    }
+
+    cancel_body = schema['paths']['/tasks/{id}:cancel']['post']['requestBody']
+    assert cancel_body['required'] is False
+    assert cancel_body['content']['application/json']['schema'] == {
+        '$ref': '#/components/schemas/CancelTaskRequest'
     }
 
     assert 'Message' in components
@@ -152,7 +159,7 @@ def test_routes_without_body_have_no_request_body(
 
     assert 'requestBody' not in paths[AGENT_CARD_WELL_KNOWN_PATH]['get']
     assert 'requestBody' not in paths['/tasks']['get']
-    assert 'requestBody' not in paths['/tasks/{id}:cancel']['post']
+    assert 'requestBody' not in paths['/tasks/{id}:subscribe']['post']
     assert (
         'requestBody'
         not in paths['/tasks/{id}/pushNotificationConfigs/{push_id}']['delete']

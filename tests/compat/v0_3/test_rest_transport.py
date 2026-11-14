@@ -1,12 +1,22 @@
 import json
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import pytest_asyncio
 
 from a2a.client.errors import A2AClientError
+from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.rest_transport import CompatRestTransport
+from a2a.server.context import ServerCallContext
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_rest_routes
+from a2a.server.tasks import (
+    InMemoryPushNotificationConfigStore,
+    InMemoryTaskStore,
+)
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -19,19 +29,25 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     Message,
     Role,
+    SendMessageConfiguration,
     SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
+    TaskState,
+    TaskStatus,
 )
 from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
+from starlette.applications import Starlette
 
 
 @pytest.fixture
 def mock_httpx_client():
-    return AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.is_closed = False
+    return client
 
 
 @pytest.fixture
@@ -93,8 +109,6 @@ async def test_compat_rest_transport_send_message_task(transport):
     expected_response = SendMessageResponse(
         task=Task(id='task-123', status=Task(id='task-123').status)
     )
-    # The default conversion from 0.3 task generates a TaskStatus with a default empty message with role=ROLE_AGENT
-    expected_response.task.status.message.role = Role.ROLE_AGENT
     assert response == expected_response
 
 
@@ -108,8 +122,7 @@ async def test_compat_rest_transport_get_task(transport):
     req = GetTaskRequest(id='task-123')
     response = await transport.get_task(req)
 
-    expected_response = Task(id='task-123')
-    expected_response.status.message.role = Role.ROLE_AGENT
+    expected_response = Task(id='task-123', status=TaskStatus())
     assert response == expected_response
 
 
@@ -123,8 +136,7 @@ async def test_compat_rest_transport_cancel_task(transport):
     req = CancelTaskRequest(id='task-123')
     response = await transport.cancel_task(req)
 
-    expected_response = Task(id='task-123')
-    expected_response.status.message.role = Role.ROLE_AGENT
+    expected_response = Task(id='task-123', status=TaskStatus())
     assert response == expected_response
 
 
@@ -190,6 +202,56 @@ async def test_compat_rest_transport_get_extended_agent_card(transport):
 
     assert response.name == 'ExtendedAgent'
     assert response.capabilities.extended_agent_card is True
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_get_extended_agent_card_keeps_security(
+    transport,
+):
+    """v0.3 servers send the card as JSON, not as the v0.3 proto."""
+    card = types_v03.AgentCard(
+        name='ExtendedAgent',
+        description='Extended',
+        version='1.0.0',
+        url='http://example.com',
+        capabilities=types_v03.AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            types_v03.AgentSkill(
+                id='skill-1',
+                name='Skill',
+                description='Skill',
+                tags=['tag'],
+                security=[{'bearer': []}],
+            )
+        ],
+        security_schemes={
+            'bearer': types_v03.SecurityScheme(
+                root=types_v03.HTTPAuthSecurityScheme(scheme='bearer')
+            )
+        },
+        security=[{'bearer': []}],
+        supports_authenticated_extended_card=True,
+    )
+
+    async def mock_send_request(*args, **kwargs):
+        # Same serialization as REST03Handler.on_get_extended_agent_card.
+        return card.model_dump(mode='json', exclude_none=True)
+
+    transport._send_request = mock_send_request
+
+    response = await transport.get_extended_agent_card(
+        GetExtendedAgentCardRequest()
+    )
+
+    scheme = response.security_schemes['bearer']
+    assert scheme.WhichOneof('scheme') == 'http_auth_security_scheme'
+    assert scheme.http_auth_security_scheme.scheme == 'bearer'
+    assert list(response.security_requirements[0].schemes) == ['bearer']
+    assert list(response.skills[0].security_requirements[0].schemes) == [
+        'bearer'
+    ]
 
 
 @pytest.mark.asyncio
@@ -259,13 +321,16 @@ async def test_compat_rest_transport_stream_url_has_alt_sse_param(transport):
 
     # Test subscribe
     captured_paths.clear()
-    sub_req = SubscribeToTaskRequest(id='task-123')
+    sub_req = SubscribeToTaskRequest(id='task/:subscribe?x=1')
     events = [event async for event in transport.subscribe(sub_req)]
     assert len(events) == 1
     assert isinstance(events[0], StreamResponse)
     assert events[0].task.id == 'task-123'
 
-    assert captured_paths[-1] == '/v1/tasks/task-123:subscribe?alt=sse'
+    assert (
+        captured_paths[-1]
+        == '/v1/tasks/task%2F%3Asubscribe%3Fx%3D1:subscribe?alt=sse'
+    )
 
 
 def create_405_error():
@@ -546,20 +611,64 @@ async def test_compat_rest_transport_list_tasks(transport):
 async def test_compat_rest_transport_list_task_push_notification_configs(
     transport,
 ):
-    with pytest.raises(NotImplementedError):
-        await transport.list_task_push_notification_configs(
-            ListTaskPushNotificationConfigsRequest()
-        )
+    mock_execute_request = AsyncMock(
+        return_value={
+            'configs': [
+                {
+                    'name': 'tasks/task-123/pushNotificationConfigs/push-1',
+                    'pushNotificationConfig': {
+                        'url': 'http://push-1',
+                        'id': 'push-1',
+                    },
+                },
+                {
+                    'name': 'tasks/task-123/pushNotificationConfigs/push-2',
+                    'pushNotificationConfig': {
+                        'url': 'http://push-2',
+                        'id': 'push-2',
+                    },
+                },
+            ]
+        }
+    )
+    transport._execute_request = mock_execute_request
+
+    response = await transport.list_task_push_notification_configs(
+        ListTaskPushNotificationConfigsRequest(task_id='task-123')
+    )
+
+    mock_execute_request.assert_awaited_once_with(
+        'GET', '/v1/tasks/task-123/pushNotificationConfigs', context=None
+    )
+    assert list(response.configs) == [
+        TaskPushNotificationConfig(
+            id='push-1', task_id='task-123', url='http://push-1'
+        ),
+        TaskPushNotificationConfig(
+            id='push-2', task_id='task-123', url='http://push-2'
+        ),
+    ]
 
 
 @pytest.mark.asyncio
 async def test_compat_rest_transport_delete_task_push_notification_config(
     transport,
 ):
-    with pytest.raises(NotImplementedError):
-        await transport.delete_task_push_notification_config(
-            DeleteTaskPushNotificationConfigRequest()
+    mock_execute_request = AsyncMock(return_value={})
+    transport._execute_request = mock_execute_request
+
+    response = await transport.delete_task_push_notification_config(
+        DeleteTaskPushNotificationConfigRequest(
+            task_id='task-123', id='push-123'
         )
+    )
+
+    mock_execute_request.assert_awaited_once_with(
+        'DELETE',
+        '/v1/tasks/task-123/pushNotificationConfigs/push-123',
+        context=None,
+    )
+    assert response is None
 
 
 @pytest.mark.asyncio
@@ -578,6 +687,130 @@ async def test_compat_rest_transport_send_message_empty(transport):
 
 
 @pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_without_configuration(
+    transport,
+):
+    """No configuration is sent, so the server keeps its blocking default."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER)
+    )
+    await transport.send_message(req)
+
+    assert 'configuration' not in sent
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_with_configuration(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert sent['configuration']['blocking'] is True
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_uses_json_names(transport):
+    """The v0.3 spec requires json_name keys in HTTP+JSON bodies."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(
+            message_id='msg-1',
+            context_id='ctx-1',
+            task_id='task-1',
+            role=Role.ROLE_USER,
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert 'request' not in sent
+    assert sent['message']['messageId'] == 'msg-1'
+    assert sent['message']['contextId'] == 'ctx-1'
+    assert sent['message']['taskId'] == 'task-1'
+    assert sent['configuration']['acceptedOutputModes'] == ['text/plain']
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_streaming_uses_json_names(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_send_stream_request(method, path, context=None, json=None):
+        sent.update(json)
+        yield StreamResponse(message=Message(message_id='msg-123'))
+
+    transport._send_stream_request = mock_send_stream_request
+
+    req = SendMessageRequest(
+        message=Message(
+            message_id='msg-1', context_id='ctx-1', role=Role.ROLE_USER
+        )
+    )
+    _ = [event async for event in transport.send_message_streaming(req)]
+
+    assert 'request' not in sent
+    assert sent['message']['messageId'] == 'msg-1'
+    assert sent['message']['contextId'] == 'ctx-1'
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_create_task_push_notification_config_uses_json_names(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {
+            'name': 'tasks/task-123/pushNotificationConfigs/push-123',
+            'pushNotificationConfig': {'url': 'http://push', 'id': 'push-123'},
+        }
+
+    transport._execute_request = mock_execute_request
+
+    req = TaskPushNotificationConfig(
+        task_id='task-123', id='push-123', url='http://push'
+    )
+    await transport.create_task_push_notification_config(req)
+
+    assert sent['configId'] == 'push-123'
+    assert sent['config']['pushNotificationConfig']['id'] == 'push-123'
+    assert 'config_id' not in sent
+
+
+@pytest.mark.asyncio
 async def test_compat_rest_transport_get_task_no_history(transport):
     async def mock_execute_request(method, path, context=None, params=None):
         assert 'historyLength' not in params
@@ -587,8 +820,7 @@ async def test_compat_rest_transport_get_task_no_history(transport):
 
     req = GetTaskRequest(id='task-123')
     response = await transport.get_task(req)
-    expected_response = Task(id='task-123')
-    expected_response.status.message.role = Role.ROLE_AGENT
+    expected_response = Task(id='task-123', status=TaskStatus())
     assert response == expected_response
 
 
@@ -602,8 +834,7 @@ async def test_compat_rest_transport_get_task_with_history(transport):
 
     req = GetTaskRequest(id='task-123', history_length=10)
     response = await transport.get_task(req)
-    expected_response = Task(id='task-123')
-    expected_response.status.message.role = Role.ROLE_AGENT
+    expected_response = Task(id='task-123', status=TaskStatus())
     assert response == expected_response
 
 
@@ -623,6 +854,32 @@ def test_compat_rest_transport_handle_http_error_invalid_error_type(transport):
     )
 
     with pytest.raises(A2AClientError):
+        transport._handle_http_error(error)
+
+
+@pytest.mark.parametrize(
+    ('status_code', 'body', 'expected_error'),
+    [
+        (401, 'invalid_token', A2AClientError),
+        (404, ['Not Found'], MethodNotFoundError),
+        (503, None, A2AClientError),
+    ],
+)
+def test_compat_rest_transport_handle_http_error_non_object_body(
+    transport, status_code, body, expected_error
+):
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = status_code
+    mock_response.json.return_value = body
+
+    mock_request = MagicMock(spec=httpx.Request)
+    mock_request.url = 'http://example.com'
+
+    error = httpx.HTTPStatusError(
+        'Error', request=mock_request, response=mock_response
+    )
+
+    with pytest.raises(expected_error):
         transport._handle_http_error(error)
 
 
@@ -660,8 +917,7 @@ async def test_compat_rest_transport_send_stream_request(
     ]
 
     assert len(events) == 1
-    expected_task = Task(id='task-123')
-    expected_task.status.message.role = Role.ROLE_AGENT
+    expected_task = Task(id='task-123', status=TaskStatus())
     assert events[0] == StreamResponse(task=expected_task)
 
     mock_send_http_stream_request.assert_called_once_with(
@@ -699,3 +955,71 @@ async def test_compat_rest_transport_execute_request(
     mock_send_http_request.assert_called_once_with(
         transport.httpx_client, mock_request, transport._handle_http_error
     )
+
+
+class TestCompatRestTransportPathEncoding:
+    """Ids with reserved URL characters reach their own resource.
+
+    Runs a real request handler behind the v0.3 REST routes, so a wrong path
+    reads the wrong resource.
+    """
+
+    @pytest_asyncio.fixture
+    async def transport(self) -> AsyncGenerator[CompatRestTransport, None]:
+        task_store = InMemoryTaskStore()
+        await task_store.save(
+            Task(
+                id='t1',
+                context_id='c1',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            ),
+            ServerCallContext(),
+        )
+        agent_card = AgentCard(
+            capabilities=AgentCapabilities(push_notifications=True)
+        )
+        request_handler = DefaultRequestHandler(
+            None,
+            task_store,
+            agent_card,
+            push_config_store=InMemoryPushNotificationConfigStore(),
+        )
+        app = Starlette(
+            routes=create_rest_routes(
+                request_handler=request_handler, enable_v0_3_compat=True
+            )
+        )
+        httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+        transport = CompatRestTransport(
+            httpx_client, agent_card, 'http://agent'
+        )
+        yield transport
+        await transport.close()
+
+    @pytest.mark.asyncio
+    async def test_get_push_config_does_not_return_config_named_by_prefix(
+        self, transport: CompatRestTransport
+    ):
+        for config_id, url in (
+            ('alerts', 'https://hooks.example.com/alerts'),
+            ('alerts#ops', 'https://hooks.example.com/ops'),
+        ):
+            await transport.create_task_push_notification_config(
+                TaskPushNotificationConfig(task_id='t1', id=config_id, url=url)
+            )
+
+        config = await transport.get_task_push_notification_config(
+            GetTaskPushNotificationConfigRequest(task_id='t1', id='alerts#ops')
+        )
+
+        assert config.id == 'alerts#ops'
+        assert config.url == 'https://hooks.example.com/ops'
+
+    @pytest.mark.asyncio
+    async def test_get_task_does_not_return_task_named_by_id_prefix(
+        self, transport: CompatRestTransport
+    ):
+        # The v0.3 client maps the server's 404 for an unknown task to
+        # MethodNotFoundError.
+        with pytest.raises(MethodNotFoundError):
+            await transport.get_task(GetTaskRequest(id='t1?x'))

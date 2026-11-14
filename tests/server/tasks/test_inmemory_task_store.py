@@ -2,7 +2,8 @@ import asyncio
 import concurrent.futures
 import threading
 
-from datetime import datetime, timezone
+from base64 import urlsafe_b64encode
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -12,6 +13,7 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types.a2a_pb2 import ListTasksRequest, Task, TaskState, TaskStatus
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
+from a2a.utils.task import decode_list_tasks_cursor
 
 
 class SampleUser(User):
@@ -30,6 +32,21 @@ class SampleUser(User):
 
 
 TEST_CONTEXT = ServerCallContext(user=SampleUser('test_user'))
+
+
+def _decoded_cursor(page_token: str) -> tuple[datetime | None, str] | None:
+    """The (timestamp, task ID) a page token resumes after; None on the last page."""
+    if not page_token:
+        return None
+    cursor = decode_list_tasks_cursor(page_token)
+    assert cursor is not None, 'expected a cursor token, not a legacy one'
+    timestamp = (
+        datetime(1970, 1, 1, tzinfo=timezone.utc)
+        + timedelta(microseconds=cursor.timestamp_ns // 1_000)
+        if cursor.timestamp_ns is not None
+        else None
+    )
+    return (timestamp, cursor.task_id)
 
 
 def create_minimal_task(
@@ -63,7 +80,7 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'params, expected_ids, total_count, next_page_token',
+    'params, expected_ids, total_count, next_cursor',
     [
         # No parameters, should return all tasks
         (
@@ -84,7 +101,7 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
             ListTasksRequest(page_size=2),
             ['task-2', 'task-1'],
             5,
-            'dGFzay0w',  # base64 for 'task-0'
+            (datetime(2025, 1, 1, tzinfo=timezone.utc), 'task-1'),
         ),
         # Pagination (same timestamp)
         (
@@ -94,7 +111,7 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
             ),
             ['task-1', 'task-0'],
             5,
-            'dGFzay00',  # base64 for 'task-4'
+            (datetime(2025, 1, 1, tzinfo=timezone.utc), 'task-0'),
         ),
         # Pagination (final page)
         (
@@ -137,7 +154,7 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
             ),
             ['task-2'],
             3,
-            'dGFzay0w',  # base64 for 'task-0'
+            (datetime(2025, 1, 2, tzinfo=timezone.utc), 'task-2'),
         ),
     ],
 )
@@ -145,7 +162,7 @@ async def test_list_tasks(
     params: ListTasksRequest,
     expected_ids: list[str],
     total_count: int,
-    next_page_token: str,
+    next_cursor: tuple[datetime, str] | None,
 ) -> None:
     """Test listing tasks with various filters and pagination."""
     store = InMemoryTaskStore()
@@ -193,7 +210,7 @@ async def test_list_tasks(
     retrieved_ids = [task.id for task in page.tasks]
     assert retrieved_ids == expected_ids
     assert page.total_size == total_count
-    assert page.next_page_token == (next_page_token or '')
+    assert _decoded_cursor(page.next_page_token) == next_cursor
     assert page.page_size == (params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE)
 
     # Cleanup
@@ -255,6 +272,173 @@ async def test_list_tasks_fails(
     # Cleanup
     for task in tasks_to_create:
         await store.delete(task.id, TEST_CONTEXT)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'task_time, threshold, included',
+    [
+        ('00Z', '00.001Z', False),
+        ('00.001Z', '00Z', True),
+        ('00.123Z', '00.123001Z', False),
+        ('00.123001Z', '00.123Z', True),
+        ('00.123Z', '00.123000001Z', False),
+        ('00.123000001Z', '00.123Z', True),
+        ('00.123001Z', '00.123001001Z', False),
+        ('00.123001001Z', '00.123001Z', True),
+        ('00.123Z', '00.123Z', True),
+        ('00.123000001Z', '00.123000001Z', True),
+        ('00.999999999Z', '01Z', False),
+        ('01Z', '00.999999999Z', True),
+    ],
+)
+async def test_list_tasks_timestamp_filter_precision(
+    task_time: str, threshold: str, included: bool
+) -> None:
+    """Compare timestamp values across JSON fractional-second precisions."""
+    store = InMemoryTaskStore()
+    task = create_minimal_task()
+    task.status.timestamp.FromJsonString(f'2025-01-01T00:00:{task_time}')
+    await store.save(task, TEST_CONTEXT)
+    await store.save(create_minimal_task('no-timestamp'), TEST_CONTEXT)
+    await store.save(Task(id='no-status'), TEST_CONTEXT)
+    params = ListTasksRequest()
+    params.status_timestamp_after.FromJsonString(
+        f'2025-01-01T00:00:{threshold}'
+    )
+
+    page = await store.list(params, TEST_CONTEXT)
+
+    assert [result.id for result in page.tasks] == (
+        [task.id] if included else []
+    )
+    assert page.total_size == int(included)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('page_size', [1, 3, 20])
+async def test_list_tasks_timestamp_ordering_and_pagination(
+    page_size: int,
+) -> None:
+    """Keep chronological order and ID tie-breaking across page boundaries."""
+    store = InMemoryTaskStore()
+    # Chronological order, including timestamps before and at the Unix epoch.
+    timestamps = [
+        '1969-12-31T23:59:59.999999999Z',
+        '1970-01-01T00:00:00Z',
+        '2025-01-01T00:00:00Z',
+        '2025-01-01T00:00:00.123Z',
+        '2025-01-01T00:00:00.123000001Z',
+        '2025-01-01T00:00:00.123001Z',
+        '2025-01-01T00:00:00.123001001Z',
+        '2025-01-01T00:00:01Z',
+        '2025-01-01T00:00:01Z',
+    ]
+    for index, timestamp in enumerate(timestamps):
+        task = create_minimal_task(f'task-{index}')
+        task.status.timestamp.FromJsonString(timestamp)
+        await store.save(task, TEST_CONTEXT)
+    await store.save(create_minimal_task('no-timestamp'), TEST_CONTEXT)
+    await store.save(Task(id='no-status'), TEST_CONTEXT)
+    expected_ids = [
+        *(f'task-{index}' for index in reversed(range(len(timestamps)))),
+        'no-timestamp',
+        'no-status',
+    ]
+    params = ListTasksRequest(page_size=page_size)
+
+    for start in range(0, len(expected_ids), page_size):
+        page = await store.list(params, TEST_CONTEXT)
+        assert [task.id for task in page.tasks] == expected_ids[
+            start : start + page_size
+        ]
+        assert page.total_size == len(expected_ids)
+        assert bool(page.next_page_token) == (
+            start + page_size < len(expected_ids)
+        )
+        params.page_token = page.next_page_token
+
+
+async def _store_with_five_tasks() -> InMemoryTaskStore:
+    """t1..t5 with increasing timestamps, so they list as t5, t4, t3, t2, t1."""
+    store = InMemoryTaskStore()
+    for i in range(1, 6):
+        task = create_minimal_task(f't{i}')
+        task.status.timestamp.FromSeconds(1_700_000_000 + i)
+        await store.save(task, TEST_CONTEXT)
+    return store
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'change, task_id, expected_second_page',
+    [
+        # The last task returned moves to the top: the listing continues.
+        ('update', 't4', ['t3', 't2']),
+        # The next task moves above the cursor: skipped this pass, no repeats.
+        ('update', 't3', ['t2', 't1']),
+        # Deleting either task does not invalidate the token.
+        ('delete', 't4', ['t3', 't2']),
+        ('delete', 't3', ['t2', 't1']),
+    ],
+)
+async def test_list_tasks_page_token_survives_task_changes(
+    change: str, task_id: str, expected_second_page: list[str]
+) -> None:
+    """Regression test for #1280: the token is a position, not a task lookup."""
+    store = await _store_with_five_tasks()
+    first = await store.list(ListTasksRequest(page_size=2), TEST_CONTEXT)
+    assert [task.id for task in first.tasks] == ['t5', 't4']
+
+    if change == 'update':
+        task = create_minimal_task(task_id)
+        task.status.timestamp.FromSeconds(1_800_000_000)
+        await store.save(task, TEST_CONTEXT)
+    else:
+        await store.delete(task_id, TEST_CONTEXT)
+    second = await store.list(
+        ListTasksRequest(page_size=2, page_token=first.next_page_token),
+        TEST_CONTEXT,
+    )
+
+    assert [task.id for task in second.tasks] == expected_second_page
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_pages_through_tasks_without_timestamps() -> None:
+    """Tasks without a timestamp sort last and are each returned once."""
+    store = InMemoryTaskStore()
+    timestamped = create_minimal_task('dated')
+    timestamped.status.timestamp.FromSeconds(1_700_000_000)
+    for task in (
+        timestamped,
+        create_minimal_task('undated-a'),
+        create_minimal_task('undated-b'),
+        Task(id='no-status'),
+    ):
+        await store.save(task, TEST_CONTEXT)
+
+    seen: list[str] = []
+    params = ListTasksRequest(page_size=1)
+    while True:
+        page = await store.list(params, TEST_CONTEXT)
+        seen.extend(task.id for task in page.tasks)
+        if not page.next_page_token:
+            break
+        params.page_token = page.next_page_token
+
+    assert seen == ['dated', 'undated-b', 'undated-a', 'no-status']
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_rejects_malformed_cursor_token() -> None:
+    store = await _store_with_five_tasks()
+    token = urlsafe_b64encode(b'{"ts":"soon","id":"t1"}').decode().rstrip('=')
+
+    with pytest.raises(InvalidParamsError):
+        await store.list(
+            ListTasksRequest(page_size=2, page_token=token), TEST_CONTEXT
+        )
 
 
 @pytest.mark.asyncio
