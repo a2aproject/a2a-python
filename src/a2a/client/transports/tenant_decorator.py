@@ -1,3 +1,5 @@
+import copy
+
 from collections.abc import AsyncGenerator
 
 from a2a.client.client import ClientCallContext
@@ -44,6 +46,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> SendMessageResponse:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.send_message(request, context=context)
 
@@ -54,6 +57,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         async for event in self._base.send_message_streaming(
             request, context=context
@@ -67,6 +71,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.get_task(request, context=context)
 
@@ -77,6 +82,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.list_tasks(request, context=context)
 
@@ -87,6 +93,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.cancel_task(request, context=context)
 
@@ -97,6 +104,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.create_task_push_notification_config(
             request, context=context
@@ -109,6 +117,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.get_task_push_notification_config(
             request, context=context
@@ -121,6 +130,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.list_task_push_notification_configs(
             request, context=context
@@ -133,6 +143,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         await self._base.delete_task_push_notification_config(
             request, context=context
@@ -145,6 +156,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         async for event in self._base.subscribe(request, context=context):
             yield event
@@ -156,6 +168,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
+        request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.get_extended_agent_card(
             request,

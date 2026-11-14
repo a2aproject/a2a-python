@@ -174,8 +174,9 @@ async def send_http_stream_request(
                 raise e
 
             # If the response is not a stream, read it standardly (e.g., upfront JSON-RPC error payload)
-            if 'text/event-stream' not in response.headers.get(
-                'content-type', ''
+            if (
+                'text/event-stream'
+                not in response.headers.get('content-type', '').lower()
             ):
                 content = await response.aread()
                 yield content.decode('utf-8')
