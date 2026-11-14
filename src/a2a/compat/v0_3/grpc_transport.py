@@ -38,6 +38,7 @@ from a2a.compat.v0_3.extension_headers import add_legacy_extension_header
 from a2a.types import a2a_pb2
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.grpc_status import status_from_call
+from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -147,8 +148,11 @@ class CompatGrpcTransport(ClientTransport):
         which = resp_proto.WhichOneof('payload')
         if which == 'task':
             return a2a_pb2.SendMessageResponse(
-                task=conversions.to_core_task(
-                    proto_utils.FromProto.task(resp_proto.task)
+                task=apply_history_length(
+                    conversions.to_core_task(
+                        proto_utils.FromProto.task(resp_proto.task)
+                    ),
+                    request.configuration,
                 )
             )
         if which == 'msg':
@@ -186,11 +190,16 @@ class CompatGrpcTransport(ClientTransport):
             response = await stream.read()
             if response == grpc.aio.EOF:  # type: ignore[attr-defined]
                 break
-            yield conversions.to_core_stream_response(
+            event = conversions.to_core_stream_response(
                 types_v03.SendStreamingMessageSuccessResponse(
                     result=proto_utils.FromProto.stream_response(response)
                 )
             )
+            if event.HasField('task'):
+                event.task.CopyFrom(
+                    apply_history_length(event.task, request.configuration)
+                )
+            yield event
 
     @_handle_grpc_stream_exception
     async def subscribe(
@@ -234,7 +243,12 @@ class CompatGrpcTransport(ClientTransport):
             req_proto,
             metadata=self._get_grpc_metadata(context),
         )
-        return conversions.to_core_task(proto_utils.FromProto.task(resp_proto))
+        # v0.3 has no way to ask for an empty history (0 means unlimited), so
+        # the v1.0 `history_length` semantics are applied to the result here.
+        return apply_history_length(
+            conversions.to_core_task(proto_utils.FromProto.task(resp_proto)),
+            request,
+        )
 
     @_handle_grpc_exception
     async def list_tasks(

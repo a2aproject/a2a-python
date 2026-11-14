@@ -153,3 +153,81 @@ def test_compat_grpc_transport_no_extension_metadata():
 
     assert 'a2a-extensions' not in metadata
     assert 'x-a2a-extensions' not in metadata
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'history_length, expected_ids',
+    [
+        (None, ['m0', 'm1', 'm2']),
+        (0, []),
+        (1, ['m2']),
+        (3, ['m0', 'm1', 'm2']),
+        (5, ['m0', 'm1', 'm2']),
+    ],
+)
+async def test_get_task_history_length(
+    history_length: int | None, expected_ids: list[str]
+) -> None:
+    transport = CompatGrpcTransport(
+        channel=AsyncMock(spec=Channel), agent_card=None
+    )
+    task = a2a_v0_3_pb2.Task(id='task-1', context_id='ctx-1')
+    task.status.state = a2a_v0_3_pb2.TaskState.TASK_STATE_WORKING
+    for i in range(3):
+        task.history.add(message_id=f'm{i}', role=a2a_v0_3_pb2.Role.ROLE_USER)
+    transport.stub = MagicMock(GetTask=AsyncMock(return_value=task))
+    req = GetTaskRequest(id='task-1')
+    if history_length is not None:
+        req.history_length = history_length
+    result = await transport.get_task(req)
+    assert [message.message_id for message in result.history] == expected_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('history_length', [None, 0, 1, 3, 5])
+@pytest.mark.parametrize('history_size', [0, 3])
+async def test_streaming_task_history_length(
+    history_length: int | None,
+    history_size: int,
+) -> None:
+    transport = CompatGrpcTransport(
+        channel=AsyncMock(spec=Channel), agent_card=None
+    )
+    task = a2a_v0_3_pb2.Task(id='task-1', context_id='ctx-1')
+    task.status.state = a2a_v0_3_pb2.TaskState.TASK_STATE_WORKING
+    for i in range(history_size):
+        task.history.add(message_id=f'm{i}', role=a2a_v0_3_pb2.Role.ROLE_USER)
+    task_event = a2a_v0_3_pb2.StreamResponse(task=task)
+    message_event = a2a_v0_3_pb2.StreamResponse(
+        msg=a2a_v0_3_pb2.Message(
+            message_id='reply', role=a2a_v0_3_pb2.Role.ROLE_AGENT
+        )
+    )
+    stream = MagicMock(
+        read=AsyncMock(
+            side_effect=[task_event, message_event, task_event, grpc.aio.EOF]
+        )
+    )
+    transport.stub = MagicMock(
+        SendStreamingMessage=MagicMock(return_value=stream)
+    )
+    request = SendMessageRequest(
+        message=Message(message_id='request', role=Role.ROLE_USER)
+    )
+    if history_length is not None:
+        request.configuration.history_length = history_length
+    events = [
+        event async for event in transport.send_message_streaming(request)
+    ]
+    expected = [f'm{i}' for i in range(history_size)]
+    if history_length is not None:
+        expected = expected[-history_length:] if history_length else []
+    assert len(events) == 3
+    for index in (0, 2):
+        assert [
+            item.message_id for item in events[index].task.history
+        ] == expected
+        assert events[index].task.id == task.id
+    assert events[1].message.message_id == 'reply'
+    assert len(task.history) == history_size
