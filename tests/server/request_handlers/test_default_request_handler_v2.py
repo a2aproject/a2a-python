@@ -2077,6 +2077,7 @@ async def test_on_message_send_non_blocking():
     assert result is not None
     assert isinstance(result, Task)
     assert result.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert result.status.HasField('timestamp')
 
 
 @pytest.mark.asyncio

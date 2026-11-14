@@ -534,8 +534,11 @@ async def test_save_task_event_stamps_terminal_status_without_timestamp(
 
 
 @pytest.mark.asyncio
-async def test_save_task_event_preserves_provided_terminal_timestamp(
-    task_manager: TaskManager, mock_task_store: AsyncMock
+@pytest.mark.parametrize(
+    'state', [TaskState.TASK_STATE_FAILED, TaskState.TASK_STATE_WORKING]
+)
+async def test_save_task_event_preserves_provided_timestamp(
+    task_manager: TaskManager, mock_task_store: AsyncMock, state: int
 ) -> None:
     """An explicitly provided timestamp is never overwritten (#1331)."""
     initial_task = create_minimal_task()
@@ -545,9 +548,7 @@ async def test_save_task_event_preserves_provided_terminal_timestamp(
     event = TaskStatusUpdateEvent(
         task_id=MINIMAL_TASK_ID,
         context_id=MINIMAL_CONTEXT_ID,
-        status=TaskStatus(
-            state=TaskState.TASK_STATE_FAILED, timestamp=provided
-        ),
+        status=TaskStatus(state=state, timestamp=provided),
     )
 
     await task_manager.save_task_event(event)
@@ -559,37 +560,105 @@ async def test_save_task_event_preserves_provided_terminal_timestamp(
 
 
 @pytest.mark.asyncio
-async def test_save_task_event_does_not_stamp_non_terminal_status(
-    task_manager: TaskManager, mock_task_store: AsyncMock
+@pytest.mark.parametrize(
+    'state',
+    [
+        TaskState.TASK_STATE_WORKING,
+        TaskState.TASK_STATE_INPUT_REQUIRED,
+        TaskState.TASK_STATE_AUTH_REQUIRED,
+    ],
+)
+async def test_save_task_event_stamps_non_terminal_status(
+    task_manager: TaskManager, mock_task_store: AsyncMock, state: int
 ) -> None:
-    """Non-terminal states are left alone by the backstop (#1331)."""
+    """Non-terminal status updates receive timestamps too."""
     initial_task = create_minimal_task()
     mock_task_store.get.return_value = initial_task
     event = TaskStatusUpdateEvent(
         task_id=MINIMAL_TASK_ID,
         context_id=MINIMAL_CONTEXT_ID,
-        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        status=TaskStatus(state=state),
     )
 
     await task_manager.save_task_event(event)
 
     saved_task = mock_task_store.save.call_args[0][0]
-    assert saved_task.status.state == TaskState.TASK_STATE_WORKING
-    assert not saved_task.status.HasField('timestamp')
+    assert saved_task.status.state == state
+    assert saved_task.status.HasField('timestamp')
+    assert event.status.timestamp == saved_task.status.timestamp
 
 
 @pytest.mark.asyncio
-async def test_save_task_event_stamps_raw_failed_task_without_timestamp(
+async def test_ensure_task_id_stamps_initial_submitted_status(
     task_manager: TaskManager, mock_task_store: AsyncMock
 ) -> None:
-    """The raw-Task path (direct mutation failure sites) is guarded too
-    (#1331)."""
-    failing_task = create_minimal_task()
-    failing_task.status.state = TaskState.TASK_STATE_FAILED
+    mock_task_store.get.return_value = None
 
-    returned = await task_manager.save_task_event(failing_task)
+    task = await task_manager.ensure_task_id(
+        MINIMAL_TASK_ID, MINIMAL_CONTEXT_ID
+    )
 
-    assert returned.status.state == TaskState.TASK_STATE_FAILED
+    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert task.status.HasField('timestamp')
+    saved_task = mock_task_store.save.call_args[0][0]
+    assert saved_task.status.timestamp == task.status.timestamp
+
+
+@pytest.mark.asyncio
+async def test_artifact_first_stamps_initial_status(
+    task_manager: TaskManager, mock_task_store: AsyncMock
+) -> None:
+    mock_task_store.get.return_value = None
+    event = TaskArtifactUpdateEvent(
+        task_id=MINIMAL_TASK_ID,
+        context_id=MINIMAL_CONTEXT_ID,
+        artifact=Artifact(
+            artifact_id='artifact-1', parts=[Part(text='result')]
+        ),
+    )
+
+    task = await task_manager.save_task_event(event)
+
+    assert task is not None
+    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert task.status.HasField('timestamp')
+    assert (
+        mock_task_store.save.call_args[0][0].status.timestamp
+        == task.status.timestamp
+    )
+
+
+@pytest.mark.asyncio
+async def test_raw_working_task_preserves_provided_timestamp(
+    task_manager: TaskManager,
+) -> None:
+    task = create_minimal_task()
+    task.status.state = TaskState.TASK_STATE_WORKING
+    task.status.timestamp.FromDatetime(
+        datetime(2026, 1, 1, tzinfo=timezone.utc)
+    )
+    expected = Timestamp()
+    expected.CopyFrom(task.status.timestamp)
+
+    await task_manager.save_task_event(task)
+
+    assert task.status.timestamp == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'state', [TaskState.TASK_STATE_FAILED, TaskState.TASK_STATE_WORKING]
+)
+async def test_save_task_event_stamps_raw_task_without_timestamp(
+    task_manager: TaskManager, mock_task_store: AsyncMock, state: int
+) -> None:
+    """Raw task status updates receive timestamps for any state."""
+    task = create_minimal_task()
+    task.status.state = state
+
+    returned = await task_manager.save_task_event(task)
+
+    assert returned.status.state == state
     assert returned.status.HasField('timestamp')
 
 
