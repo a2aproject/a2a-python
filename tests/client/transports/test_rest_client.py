@@ -109,7 +109,7 @@ class TestRestTransport:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_lines.side_effect = httpx.TimeoutException(
+        mock_response.aiter_text.side_effect = httpx.TimeoutException(
             'Read timed out'
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
@@ -348,7 +348,7 @@ class TestRestTransportExtensions:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_response.aiter_text.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         context = ClientCallContext(
@@ -398,7 +398,7 @@ class TestRestTransportExtensions:
             request=httpx.Request('POST', 'http://test.url'),
             response=mock_response,
         )
-        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_response.aiter_text.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
@@ -548,6 +548,87 @@ class TestTaskCallback:
             f'/tasks/{task_id}/pushNotificationConfigs/config-1'
             in call_args[0][1]
         )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('status_code', 'content'),
+        [(200, b'{}'), (204, b''), (200, b'')],
+        ids=['json_object', 'no_content', 'empty_200'],
+    )
+    async def test_delete_task_push_notification_config_ignores_body(
+        self, mock_agent_card: MagicMock, status_code: int, content: bytes
+    ):
+        """Servers confirm a deletion with `{}`, 204, or a 200 with no body."""
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(status_code, content=content)
+        )
+        async with httpx.AsyncClient(transport=transport) as http_client:
+            client = RestTransport(
+                httpx_client=http_client,
+                agent_card=mock_agent_card,
+                url='http://agent.example.com/api',
+            )
+            await client.delete_task_push_notification_config(
+                DeleteTaskPushNotificationConfigRequest(
+                    task_id='task-1', id='config-1'
+                )
+            )
+
+    @pytest.mark.asyncio
+    async def test_delete_task_push_notification_config_maps_errors(
+        self, mock_agent_card: MagicMock
+    ):
+        """An error response still raises the mapped A2A error."""
+        body = {
+            'error': {
+                'code': 404,
+                'status': 'NOT_FOUND',
+                'message': 'Task task-1 not found',
+                'details': [
+                    {
+                        '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                        'reason': 'TASK_NOT_FOUND',
+                        'domain': 'a2a-protocol.org',
+                    }
+                ],
+            }
+        }
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(404, json=body)
+        )
+        async with httpx.AsyncClient(transport=transport) as http_client:
+            client = RestTransport(
+                httpx_client=http_client,
+                agent_card=mock_agent_card,
+                url='http://agent.example.com/api',
+            )
+            with pytest.raises(TaskNotFoundError):
+                await client.delete_task_push_notification_config(
+                    DeleteTaskPushNotificationConfigRequest(
+                        task_id='task-1', id='config-1'
+                    )
+                )
+
+    @pytest.mark.asyncio
+    async def test_delete_task_push_notification_config_closed_client(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        """A closed HTTP client raises before anything is sent."""
+        mock_httpx_client.is_closed = True
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        with pytest.raises(A2AClientError, match='HTTP client is closed'):
+            await client.delete_task_push_notification_config(
+                DeleteTaskPushNotificationConfigRequest(
+                    task_id='task-1', id='config-1'
+                )
+            )
+
+        mock_httpx_client.send.assert_not_called()
 
 
 class TestRestTransportTenant:
@@ -752,7 +833,7 @@ class TestRestTransportTenant:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_response.aiter_text.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         # 3. Call the method
@@ -905,8 +986,8 @@ class TestRestUnrecognizedResponseFields:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_lines.return_value = async_iterable_from_list(
-            [f'data: {json.dumps(payload)}', '']
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            [f'data: {json.dumps(payload)}\n\n']
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
@@ -945,3 +1026,86 @@ class TestRestUnrecognizedResponseFields:
 
         with pytest.raises(json_format.ParseError, match='JSON object'):
             await client.get_task(GetTaskRequest(id='task-1'))
+
+
+_TASK_NOT_FOUND_BODY = {
+    'error': {
+        'code': 404,
+        'status': 'NOT_FOUND',
+        'message': 'Task t1 not found',
+        'details': [
+            {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                'reason': 'TASK_NOT_FOUND',
+                'domain': 'a2a-protocol.org',
+            }
+        ],
+    }
+}
+
+
+class TestRestStreamErrors:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'sse_text',
+        [
+            f'event: error\ndata: {json.dumps(_TASK_NOT_FOUND_BODY)}\n\n',
+            f'data: {json.dumps(_TASK_NOT_FOUND_BODY)}\n\n',
+        ],
+        ids=['error_event', 'data_event'],
+    )
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_stream_error_raises_mapped_error(
+        self,
+        mock_sse_source: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        sse_text: str,
+    ):
+        """An error body raises whether or not the event is named `error`."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            [sse_text]
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        with pytest.raises(TaskNotFoundError, match='Task t1 not found'):
+            async for _ in client.subscribe(SubscribeToTaskRequest(id='t1')):
+                pass
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_stream_event_of_unknown_type_is_still_yielded(
+        self,
+        mock_sse_source: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        """An event with no known payload and no error stays a lenient parse."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_text.return_value = async_iterable_from_list(
+            [f'data: {json.dumps({"someNewEvent": {"id": "e1"}})}\n\n']
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        events = [
+            event
+            async for event in client.subscribe(SubscribeToTaskRequest(id='t1'))
+        ]
+
+        assert len(events) == 1
+        assert events[0].WhichOneof('payload') is None

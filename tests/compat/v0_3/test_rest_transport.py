@@ -1,13 +1,22 @@
 import json
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import pytest_asyncio
 
 from a2a.client.errors import A2AClientError
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.rest_transport import CompatRestTransport
+from a2a.server.context import ServerCallContext
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_rest_routes
+from a2a.server.tasks import (
+    InMemoryPushNotificationConfigStore,
+    InMemoryTaskStore,
+)
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -27,9 +36,11 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
+    TaskState,
     TaskStatus,
 )
 from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
+from starlette.applications import Starlette
 
 
 @pytest.fixture
@@ -682,6 +693,86 @@ async def test_compat_rest_transport_send_message_with_configuration(
 
 
 @pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_uses_json_names(transport):
+    """The v0.3 spec requires json_name keys in HTTP+JSON bodies."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(
+            message_id='msg-1',
+            context_id='ctx-1',
+            task_id='task-1',
+            role=Role.ROLE_USER,
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert 'request' not in sent
+    assert sent['message']['messageId'] == 'msg-1'
+    assert sent['message']['contextId'] == 'ctx-1'
+    assert sent['message']['taskId'] == 'task-1'
+    assert sent['configuration']['acceptedOutputModes'] == ['text/plain']
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_streaming_uses_json_names(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_send_stream_request(method, path, context=None, json=None):
+        sent.update(json)
+        yield StreamResponse(message=Message(message_id='msg-123'))
+
+    transport._send_stream_request = mock_send_stream_request
+
+    req = SendMessageRequest(
+        message=Message(
+            message_id='msg-1', context_id='ctx-1', role=Role.ROLE_USER
+        )
+    )
+    _ = [event async for event in transport.send_message_streaming(req)]
+
+    assert 'request' not in sent
+    assert sent['message']['messageId'] == 'msg-1'
+    assert sent['message']['contextId'] == 'ctx-1'
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_create_task_push_notification_config_uses_json_names(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {
+            'name': 'tasks/task-123/pushNotificationConfigs/push-123',
+            'pushNotificationConfig': {'url': 'http://push', 'id': 'push-123'},
+        }
+
+    transport._execute_request = mock_execute_request
+
+    req = TaskPushNotificationConfig(
+        task_id='task-123', id='push-123', url='http://push'
+    )
+    await transport.create_task_push_notification_config(req)
+
+    assert sent['configId'] == 'push-123'
+    assert sent['config']['pushNotificationConfig']['id'] == 'push-123'
+    assert 'config_id' not in sent
+
+
+@pytest.mark.asyncio
 async def test_compat_rest_transport_get_task_no_history(transport):
     async def mock_execute_request(method, path, context=None, params=None):
         assert 'historyLength' not in params
@@ -826,3 +917,71 @@ async def test_compat_rest_transport_execute_request(
     mock_send_http_request.assert_called_once_with(
         transport.httpx_client, mock_request, transport._handle_http_error
     )
+
+
+class TestCompatRestTransportPathEncoding:
+    """Ids with reserved URL characters reach their own resource.
+
+    Runs a real request handler behind the v0.3 REST routes, so a wrong path
+    reads the wrong resource.
+    """
+
+    @pytest_asyncio.fixture
+    async def transport(self) -> AsyncGenerator[CompatRestTransport, None]:
+        task_store = InMemoryTaskStore()
+        await task_store.save(
+            Task(
+                id='t1',
+                context_id='c1',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            ),
+            ServerCallContext(),
+        )
+        agent_card = AgentCard(
+            capabilities=AgentCapabilities(push_notifications=True)
+        )
+        request_handler = DefaultRequestHandler(
+            None,
+            task_store,
+            agent_card,
+            push_config_store=InMemoryPushNotificationConfigStore(),
+        )
+        app = Starlette(
+            routes=create_rest_routes(
+                request_handler=request_handler, enable_v0_3_compat=True
+            )
+        )
+        httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+        transport = CompatRestTransport(
+            httpx_client, agent_card, 'http://agent'
+        )
+        yield transport
+        await transport.close()
+
+    @pytest.mark.asyncio
+    async def test_get_push_config_does_not_return_config_named_by_prefix(
+        self, transport: CompatRestTransport
+    ):
+        for config_id, url in (
+            ('alerts', 'https://hooks.example.com/alerts'),
+            ('alerts#ops', 'https://hooks.example.com/ops'),
+        ):
+            await transport.create_task_push_notification_config(
+                TaskPushNotificationConfig(task_id='t1', id=config_id, url=url)
+            )
+
+        config = await transport.get_task_push_notification_config(
+            GetTaskPushNotificationConfigRequest(task_id='t1', id='alerts#ops')
+        )
+
+        assert config.id == 'alerts#ops'
+        assert config.url == 'https://hooks.example.com/ops'
+
+    @pytest.mark.asyncio
+    async def test_get_task_does_not_return_task_named_by_id_prefix(
+        self, transport: CompatRestTransport
+    ):
+        # The v0.3 client maps the server's 404 for an unknown task to
+        # MethodNotFoundError.
+        with pytest.raises(MethodNotFoundError):
+            await transport.get_task(GetTaskRequest(id='t1?x'))
