@@ -5,6 +5,7 @@ import pytest
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types.a2a_pb2 import AgentCard, ListTasksResponse, Task
+from a2a.utils.errors import TaskNotFoundError
 from starlette.applications import Starlette
 from starlette.routing import BaseRoute
 from starlette.testclient import TestClient
@@ -178,4 +179,29 @@ def test_list_tasks_response_uses_the_a2a_media_type(agent_card, mock_handler):
 
     response = client.get('/tasks', headers={'A2A-Version': '1.0'})
 
+    assert response.headers['content-type'].startswith('application/a2a+json')
+
+
+def test_error_response_uses_the_a2a_media_type(agent_card, mock_handler):
+    """Error responses are labelled application/a2a+json too (spec 11.1)."""
+    mock_handler.on_get_task.side_effect = TaskNotFoundError()
+    client = TestClient(Starlette(routes=create_rest_routes(mock_handler)))
+
+    response = client.get('/tasks/missing', headers={'A2A-Version': '1.0'})
+
+    assert response.status_code == 404
+    assert response.headers['content-type'].startswith('application/a2a+json')
+
+
+def test_stream_error_response_uses_the_a2a_media_type(
+    agent_card, mock_handler
+):
+    """An error raised before the first stream event is labelled the same way."""
+    client = TestClient(Starlette(routes=create_rest_routes(mock_handler)))
+
+    response = client.post(
+        '/message:stream', json={}, headers={'A2A-Version': '9.9'}
+    )
+
+    assert response.status_code == 400
     assert response.headers['content-type'].startswith('application/a2a+json')
