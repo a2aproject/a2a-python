@@ -63,6 +63,7 @@ from a2a.utils.constants import (
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
     InternalError,
+    InvalidAgentResponseError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
@@ -427,6 +428,9 @@ class DefaultRequestHandlerV2(RequestHandler):
                         f'context {task.context_id} of task {original_task_id}'
                     )
                 )
+            # Agents must infer the contextId from the task when the message
+            # names only a taskId.
+            original_context_id = original_context_id or task.context_id
 
         # Build context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(
@@ -479,10 +483,14 @@ class DefaultRequestHandlerV2(RequestHandler):
         # A resumed turn starts from an interrupted state (e.g. input
         # required). If the executor re-emits the inherited task snapshot
         # at turn start, that replayed event must not end the blocking
-        # wait before the new turn has done any work: ignore the first
-        # event when it is an interrupted task snapshot. The turn's real
-        # outcome is returned once the executor reports it, or via the
-        # get_task() fallback below if the turn ends without one.
+        # wait before the new turn has done any work: skip the first
+        # event only when it still carries the inherited status. A fresh
+        # interrupted state reported by the new turn (e.g. requires_auth
+        # for out-of-band auth, or a re-asked requires_input) carries a
+        # new timestamp from TaskUpdater.update_status, so it ends the
+        # wait as the spec requires. The turn's real outcome is returned
+        # once the executor reports it, or via the get_task() fallback
+        # below if the turn ends without one.
         first_event = True
 
         async for raw_event in active_task.subscribe(
@@ -503,13 +511,24 @@ class DefaultRequestHandlerV2(RequestHandler):
                 or event.status.state
                 in (TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES)
             ):
+                # The producer sets request_context.current_task before the
+                # executor runs, so by the time the first event arrives it
+                # holds the inherited task (None for a new task). Only a
+                # first event that still carries that inherited status is
+                # a replayed snapshot; a fresh status differs by timestamp.
+                prior_status = (
+                    request_context.current_task.status
+                    if is_first_event
+                    and request_context.current_task is not None
+                    else None
+                )
                 if (
                     not params.configuration.return_immediately
-                    and is_first_event
-                    and event.status.state in INTERRUPTED_TASK_STATES
+                    and prior_status is not None
+                    and event.status == prior_status
                 ):
-                    # Initial replayed snapshot of the inherited
-                    # interrupted state; keep waiting for the new turn.
+                    # Replayed snapshot of the inherited interrupted
+                    # state; keep waiting for the new turn.
                     continue
                 self._validate_task_id_match(task_id, event.id)
                 result = event
@@ -533,6 +552,11 @@ class DefaultRequestHandlerV2(RequestHandler):
                 # pushed after a Message.
 
         if result is None:
+            if not active_task.task_created:
+                # A silent executor means get_task() would block forever.
+                raise InvalidAgentResponseError(
+                    message='Agent execution produced no events'
+                )
             logger.debug('Missing result for task %s', request_context.task_id)
             result = await active_task.get_task()
 
