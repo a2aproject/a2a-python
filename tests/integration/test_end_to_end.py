@@ -544,6 +544,21 @@ async def test_end_to_end_list_tasks(transport_setups):
 
 
 @pytest.mark.asyncio
+async def test_end_to_end_list_tasks_rejects_unknown_status(
+    transport_setups,
+) -> None:
+    client = transport_setups.client
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await client.list_tasks(request=ListTasksRequest(status=99))
+
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == {'status'}
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_end_to_end_input_required(transport_setups):
     client = transport_setups.client
 

@@ -69,6 +69,7 @@ from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
     validate_page_size,
+    validate_task_state_filter,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -195,6 +196,8 @@ class LegacyRequestHandler(RequestHandler):
         validate_history_length(params)
         if params.HasField('page_size'):
             validate_page_size(params.page_size)
+        if params.status:
+            validate_task_state_filter(params.status)
 
         page = await self.task_store.list(params, context)
         for task in page.tasks:

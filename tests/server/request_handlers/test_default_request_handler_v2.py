@@ -1628,6 +1628,25 @@ async def test_on_list_tasks_page_size_too_small():
 
 
 @pytest.mark.asyncio
+async def test_on_list_tasks_unknown_status_error():
+    """Test on_list_tasks rejects a status that is not a TaskState."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = ListTasksRequest(status=99)
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await request_handler.on_list_tasks(params, context)
+
+    assert 'Invalid status filter' in exc_info.value.message
+    mock_task_store.list.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_on_list_tasks_page_size_too_large():
     """Test on_list_tasks raises error for page_size > 100."""
     mock_task_store = AsyncMock(spec=TaskStore)
