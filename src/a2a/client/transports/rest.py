@@ -3,6 +3,7 @@ import logging
 
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
+from urllib.parse import quote
 
 import httpx
 
@@ -13,6 +14,7 @@ from a2a.client.errors import A2AClientError
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
     get_http_args,
+    handle_http_exceptions,
     send_http_request,
     send_http_stream_request,
 )
@@ -89,6 +91,11 @@ def _parse_rest_error(
     return None
 
 
+def _quote_id(value: str) -> str:
+    """Percent-encodes an id so it stays a single URL path segment."""
+    return quote(value, safe='')
+
+
 @trace_class(kind=SpanKind.CLIENT)
 class RestTransport(ClientTransport):
     """A REST transport for the A2A client."""
@@ -158,7 +165,7 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.id}',
+            f'/tasks/{_quote_id(request.id)}',
             request.tenant,
             context=context,
             params=params,
@@ -198,7 +205,7 @@ class RestTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/tasks/{request.id}:cancel',
+            f'/tasks/{_quote_id(request.id)}:cancel',
             request.tenant,
             context=context,
             json=MessageToDict(request),
@@ -215,7 +222,7 @@ class RestTransport(ClientTransport):
         """Sets or updates the push notification configuration for a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             request.tenant,
             context=context,
             json=MessageToDict(request),
@@ -242,7 +249,8 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             request.tenant,
             context=context,
             params=params,
@@ -267,7 +275,7 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             request.tenant,
             context=context,
             params=params,
@@ -292,13 +300,24 @@ class RestTransport(ClientTransport):
         if 'tenant' in params:
             del params['tenant']
 
-        await self._execute_request(
-            'DELETE',
-            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+        path = self._get_path(
+            f'/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             request.tenant,
-            context=context,
-            params=params,
         )
+        http_request = self.httpx_client.build_request(
+            'DELETE',
+            f'{self.url}{path}',
+            params=params,
+            **get_http_args(context),
+        )
+        if self.httpx_client.is_closed:
+            raise A2AClientError('HTTP client is closed')
+        # The body is not read: servers confirm the deletion with `{}`,
+        # with 204 No Content, or with a 200 that has no body.
+        with handle_http_exceptions(self._handle_http_error):
+            response = await self.httpx_client.send(http_request)
+            response.raise_for_status()
 
     async def subscribe(
         self,
@@ -309,7 +328,7 @@ class RestTransport(ClientTransport):
         """Reconnects to get task updates."""
         async for event in self._send_stream_request(
             'POST',
-            f'/tasks/{request.id}:subscribe',
+            f'/tasks/{_quote_id(request.id)}:subscribe',
             request.tenant,
             context=context,
         ):
@@ -399,7 +418,21 @@ class RestTransport(ClientTransport):
             **http_kwargs,
         ):
             event: StreamResponse = parse_lenient(sse_data, StreamResponse())
+            if event.WhichOneof('payload') is None:
+                self._raise_in_band_error(sse_data)
             yield event
+
+    def _raise_in_band_error(self, sse_data: str) -> None:
+        """Raises the error carried by a data event, if it carries one.
+
+        The HTTP+JSON binding defines no SSE event type for errors, so a
+        server may send the ``google.rpc.Status`` body as an ordinary data
+        event instead of an ``event: error`` one. ``StreamResponse`` has no
+        ``error`` field, so that body parses to an event with no payload.
+        """
+        payload = json.loads(sse_data)
+        if isinstance(payload, dict) and 'error' in payload:
+            self._handle_sse_error(sse_data)
 
     async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
         return await send_http_request(

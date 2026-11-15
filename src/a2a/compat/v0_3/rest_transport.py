@@ -4,6 +4,7 @@ import logging
 
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
+from urllib.parse import quote
 
 import httpx
 
@@ -58,6 +59,11 @@ _A2A_ERROR_NAME_TO_CLS = {
 }
 
 
+def _quote_id(value: str) -> str:
+    """Percent-encodes an id so it stays a single URL path segment."""
+    return quote(value, safe='')
+
+
 @trace_class(kind=SpanKind.CLIENT)
 class CompatRestTransport(ClientTransport):
     """A backward compatible REST transport for A2A v0.3."""
@@ -101,7 +107,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             '/v1/message:send',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         )
 
         resp_proto = ParseDict(
@@ -146,7 +152,7 @@ class CompatRestTransport(ClientTransport):
             'POST',
             '/v1/message:stream',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         ):
             yield event
 
@@ -163,7 +169,7 @@ class CompatRestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/v1/tasks/{request.id}',
+            f'/v1/tasks/{_quote_id(request.id)}',
             context=context,
             params=params,
         )
@@ -192,7 +198,7 @@ class CompatRestTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/v1/tasks/{request.id}:cancel',
+            f'/v1/tasks/{_quote_id(request.id)}:cancel',
             context=context,
         )
         resp_proto = ParseDict(
@@ -221,9 +227,9 @@ class CompatRestTransport(ClientTransport):
         )
         response_data = await self._execute_request(
             'POST',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/v1/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             context=context,
-            json=MessageToDict(req_proto, preserving_proto_field_name=True),
+            json=MessageToDict(req_proto),
         )
         resp_proto = ParseDict(
             response_data,
@@ -243,7 +249,8 @@ class CompatRestTransport(ClientTransport):
         """Retrieves the push notification configuration for a specific task."""
         response_data = await self._execute_request(
             'GET',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/v1/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             context=context,
         )
         resp_proto = ParseDict(
@@ -264,7 +271,7 @@ class CompatRestTransport(ClientTransport):
         """Lists push notification configurations for a specific task."""
         response_data = await self._execute_request(
             'GET',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/v1/tasks/{_quote_id(request.task_id)}/pushNotificationConfigs',
             context=context,
         )
         resp_proto = ParseDict(
@@ -285,8 +292,10 @@ class CompatRestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
-        raise NotImplementedError(
-            'delete_task_push_notification_config not supported in v0.3 REST'
+        await self._execute_request(
+            'DELETE',
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            context=context,
         )
 
     async def subscribe(
@@ -308,7 +317,7 @@ class CompatRestTransport(ClientTransport):
         try:
             async for event in self._send_stream_request(
                 subscribe_method,
-                f'/v1/tasks/{request.id}:subscribe',
+                f'/v1/tasks/{_quote_id(request.id)}:subscribe',
                 context=context,
             ):
                 yield event
