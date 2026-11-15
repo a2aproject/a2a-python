@@ -91,7 +91,9 @@ def _attach_route(
     if not (isinstance(route, Route) and route.methods):
         app.routes.append(route)
         return
-    # Drop HEAD: Starlette adds it alongside GET, but FastAPI registers duplicate operation IDs.
+    # Drop HEAD from the APIRoute: Starlette adds it alongside GET, but
+    # FastAPI would register duplicate operation IDs. HEAD is served by the
+    # original route, mounted below.
     methods = sorted(m for m in route.methods if m != 'HEAD')
     if require_version_header:
         extra = dict(openapi_extra or {})
@@ -106,6 +108,10 @@ def _attach_route(
             openapi_extra=openapi_extra,
         )
     )
+    if 'HEAD' in route.methods:
+        # APIRoute does not answer HEAD for a GET route. The original route
+        # is not an APIRoute, so it serves HEAD without entering the schema.
+        app.routes.append(route)
 
 
 def add_a2a_routes_to_fastapi(

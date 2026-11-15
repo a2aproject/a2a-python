@@ -85,6 +85,44 @@ def test_routes_dispatch_under_fastapi(
     assert rest_response.json()['task']['id'] == 'task-123'
 
 
+def test_get_routes_still_answer_head(
+    agent_card: AgentCard, mock_handler: AsyncMock
+) -> None:
+    """GET routes answer HEAD, without a HEAD operation in the schema."""
+    mock_handler.on_get_task.return_value = Task(id='task-123')
+
+    app = _build_app(agent_card, mock_handler)
+    client = TestClient(app)
+
+    card_response = client.head(AGENT_CARD_WELL_KNOWN_PATH)
+    assert card_response.status_code == 200
+    assert card_response.content == b''
+    assert (
+        card_response.headers['etag']
+        == client.get(AGENT_CARD_WELL_KNOWN_PATH).headers['etag']
+    )
+
+    task_response = client.head(
+        '/tasks/task-123', headers={VERSION_HEADER: PROTOCOL_VERSION_1_0}
+    )
+    assert task_response.status_code == 200
+    assert task_response.content == b''
+    mock_handler.on_get_task.assert_awaited_once()
+
+    paths = app.openapi()['paths']
+    assert 'head' not in paths[AGENT_CARD_WELL_KNOWN_PATH]
+    assert 'head' not in paths['/tasks/{id}']
+
+    card_only = FastAPI()
+    add_a2a_routes_to_fastapi(
+        card_only, agent_card_routes=create_agent_card_routes(agent_card)
+    )
+    assert (
+        TestClient(card_only).head(AGENT_CARD_WELL_KNOWN_PATH).status_code
+        == 200
+    )
+
+
 def test_tenant_mount_still_dispatches(mock_handler: AsyncMock) -> None:
     """`Mount` entries (tenant routing) keep dispatching after registration."""
     mock_handler.on_message_send.return_value = Task(id='tenant-task')
