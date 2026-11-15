@@ -2,6 +2,7 @@ import json
 import logging
 
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any, NoReturn
 from urllib.parse import quote
 
@@ -141,14 +142,17 @@ class RestTransport(ClientTransport):
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         payload = MessageToDict(request)
 
-        async for event in self._send_stream_request(
-            'POST',
-            '/message:stream',
-            request.tenant,
-            context=context,
-            json=payload,
-        ):
-            yield event
+        async with aclosing(
+            self._send_stream_request(
+                'POST',
+                '/message:stream',
+                request.tenant,
+                context=context,
+                json=payload,
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_task(
         self,
@@ -326,13 +330,16 @@ class RestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
-        async for event in self._send_stream_request(
-            'POST',
-            f'/tasks/{_quote_id(request.id)}:subscribe',
-            request.tenant,
-            context=context,
-        ):
-            yield event
+        async with aclosing(
+            self._send_stream_request(
+                'POST',
+                f'/tasks/{_quote_id(request.id)}:subscribe',
+                request.tenant,
+                context=context,
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_extended_agent_card(
         self,
@@ -408,19 +415,24 @@ class RestTransport(ClientTransport):
         path = self._get_path(target, tenant)
         http_kwargs = get_http_args(context)
 
-        async for sse_data in send_http_stream_request(
-            self.httpx_client,
-            method,
-            f'{self.url}{path}',
-            self._handle_http_error,
-            self._handle_sse_error,
-            json=json,
-            **http_kwargs,
-        ):
-            event: StreamResponse = parse_lenient(sse_data, StreamResponse())
-            if event.WhichOneof('payload') is None:
-                self._raise_in_band_error(sse_data)
-            yield event
+        async with aclosing(
+            send_http_stream_request(
+                self.httpx_client,
+                method,
+                f'{self.url}{path}',
+                self._handle_http_error,
+                self._handle_sse_error,
+                json=json,
+                **http_kwargs,
+            )
+        ) as data:
+            async for sse_data in data:
+                event: StreamResponse = parse_lenient(
+                    sse_data, StreamResponse()
+                )
+                if event.WhichOneof('payload') is None:
+                    self._raise_in_band_error(sse_data)
+                yield event
 
     def _raise_in_band_error(self, sse_data: str) -> None:
         """Raises the error carried by a data event, if it carries one.

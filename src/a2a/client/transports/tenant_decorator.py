@@ -1,6 +1,7 @@
 import copy
 
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 
 from a2a.client.client import ClientCallContext
 from a2a.client.transports.base import ClientTransport
@@ -59,10 +60,11 @@ class TenantTransportDecorator(ClientTransport):
         """Sends a streaming message request to the agent and yields responses."""
         request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
-        async for event in self._base.send_message_streaming(
-            request, context=context
-        ):
-            yield event
+        async with aclosing(
+            self._base.send_message_streaming(request, context=context)
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_task(
         self,
@@ -158,8 +160,11 @@ class TenantTransportDecorator(ClientTransport):
         """Reconnects to get task updates."""
         request = copy.deepcopy(request)
         request.tenant = self._resolve_tenant(request.tenant)
-        async for event in self._base.subscribe(request, context=context):
-            yield event
+        async with aclosing(
+            self._base.subscribe(request, context=context)
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_extended_agent_card(
         self,

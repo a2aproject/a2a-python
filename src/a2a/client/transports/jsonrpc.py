@@ -2,6 +2,7 @@ import json
 import logging
 
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any, NoReturn
 from uuid import uuid4
 
@@ -98,11 +99,14 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        async for event in self._send_stream_request(
-            dict(rpc_request.data),
-            context,
-        ):
-            yield event
+        async with aclosing(
+            self._send_stream_request(
+                dict(rpc_request.data),
+                context,
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_task(
         self,
@@ -246,11 +250,14 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        async for event in self._send_stream_request(
-            dict(rpc_request.data),
-            context,
-        ):
-            yield event
+        async with aclosing(
+            self._send_stream_request(
+                dict(rpc_request.data),
+                context,
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_extended_agent_card(
         self,
@@ -365,26 +372,29 @@ class JsonRpcTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         http_kwargs = get_http_args(context)
 
-        async for sse_data in send_http_stream_request(
-            self.httpx_client,
-            'POST',
-            self.url,
-            None,
-            self._handle_sse_error,
-            json=rpc_request_payload,
-            **http_kwargs,
-        ):
-            try:
-                response_data = json.loads(sse_data)
-            except json.JSONDecodeError as e:
-                raise A2AClientError(
-                    f'Invalid JSON-RPC response in SSE stream: {e}'
-                ) from e
-            response_data = self._check_jsonrpc_response(response_data)
-            response: StreamResponse = parse_lenient(
-                response_data['result'], StreamResponse()
+        async with aclosing(
+            send_http_stream_request(
+                self.httpx_client,
+                'POST',
+                self.url,
+                None,
+                self._handle_sse_error,
+                json=rpc_request_payload,
+                **http_kwargs,
             )
-            yield response
+        ) as data:
+            async for sse_data in data:
+                try:
+                    response_data = json.loads(sse_data)
+                except json.JSONDecodeError as e:
+                    raise A2AClientError(
+                        f'Invalid JSON-RPC response in SSE stream: {e}'
+                    ) from e
+                response_data = self._check_jsonrpc_response(response_data)
+                response: StreamResponse = parse_lenient(
+                    response_data['result'], StreamResponse()
+                )
+                yield response
 
     def _handle_sse_error(self, sse_data: str) -> NoReturn:
         """Handles SSE error events by parsing JSON-RPC error payload and raising the appropriate domain error."""
