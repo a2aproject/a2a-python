@@ -10,6 +10,7 @@ import gc
 import json
 
 from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any, cast
 from uuid import uuid4
 
@@ -20,6 +21,7 @@ from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.client.interceptors import AfterArgs, BeforeArgs, ClientCallInterceptor
+from a2a.compat.v0_3 import proto_utils, types as types_v03
 from a2a.plugins.base import ClientPlugin
 from a2a.plugins.manager import SequentialPluginManager
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -40,7 +42,11 @@ from a2a.types import (
     SubscribeToTaskRequest,
 )
 from a2a.utils import TransportProtocol
+from google.protobuf.json_format import MessageToDict
 from starlette.applications import Starlette
+
+
+pytestmark = pytest.mark.timeout(10)
 
 
 class _MessageExecutor(AgentExecutor):
@@ -163,53 +169,73 @@ class _RejectResponse(ClientCallInterceptor):
         raise RuntimeError('response rejected')
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('binding', ['JSONRPC', 'HTTP+JSON'])
-@pytest.mark.parametrize('tenant', ['', 'tenant'])
-@pytest.mark.parametrize('plugins_enabled', [False, True])
-@pytest.mark.parametrize(
-    'ending',
-    [
-        'close_send',
-        'close_subscribe',
-        'message',
-        'interceptor_error',
-        'cancel_read',
-    ],
-)
-async def test_http_stream_is_closed_before_call_returns(
+@asynccontextmanager
+async def _streaming_client(
     binding: str,
-    tenant: str,
-    plugins_enabled: bool,
-    ending: str,
+    version: str,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    event: dict[str, Any] = {
-        'task': {
-            'id': 'task',
-            'contextId': 'context',
-            'status': {'state': 'TASK_STATE_WORKING'},
-        }
+    *,
+    tenant: str = '',
+    plugins_enabled: bool = False,
+    message_reply: bool = False,
+    reject_response: bool = False,
+    subscribe_fallback: bool = False,
+) -> AsyncIterator[tuple[BaseClient, httpx.AsyncClient, _OpenResponseStream]]:
+    legacy = version == '0.3'
+    task = {
+        'id': 'task',
+        'contextId': 'context',
+        'status': {'state': 'working' if legacy else 'TASK_STATE_WORKING'},
     }
-    if ending == 'message':
-        event = {
-            'message': {
-                'messageId': 'reply',
-                'role': 'ROLE_AGENT',
-                'parts': [{'text': 'done'}],
-            }
-        }
-    if binding == 'JSONRPC':
-        event = {'jsonrpc': '2.0', 'id': 'stream', 'result': event}
-    response_stream = _OpenResponseStream(
-        f'data: {json.dumps(event)}\n\n'.encode()
+    message = {
+        'messageId': 'reply',
+        'role': 'agent' if legacy else 'ROLE_AGENT',
+        'parts': [{'kind': 'text', 'text': 'done'}]
+        if legacy
+        else [{'text': 'done'}],
+    }
+    event: dict[str, Any] = (
+        {'message': message} if message_reply else {'task': task}
     )
+    if legacy and binding == 'JSONRPC':
+        event = (
+            dict(message, kind='message')
+            if message_reply
+            else dict(task, kind='task')
+        )
+    elif legacy:
+        event = (
+            {
+                'message': MessageToDict(
+                    proto_utils.ToProto.message(
+                        types_v03.Message.model_validate(message)
+                    )
+                )
+            }
+            if message_reply
+            else {
+                'task': MessageToDict(
+                    proto_utils.ToProto.task(
+                        types_v03.Task.model_validate(dict(task, kind='task'))
+                    )
+                )
+            }
+        )
+    response_stream = _OpenResponseStream(b'')
+    methods: list[str] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
+        methods.append(request.method)
+        if subscribe_fallback and request.method == 'POST':
+            return httpx.Response(405)
+        data = event
         if binding == 'JSONRPC':
-            payload = json.loads(request.content)
-            event['id'] = payload['id']
-            response_stream.payload = f'data: {json.dumps(event)}\n\n'.encode()
+            data = {
+                'jsonrpc': '2.0',
+                'id': json.loads(request.content)['id'],
+                'result': event,
+            }
+        response_stream.payload = f'data: {json.dumps(data)}\n\n'.encode()
         return httpx.Response(
             200,
             headers={'Content-Type': 'text/event-stream'},
@@ -231,7 +257,7 @@ async def test_http_stream_is_closed_before_call_returns(
             AgentInterface(
                 url='http://agent',
                 protocol_binding=binding,
-                protocol_version='1.0',
+                protocol_version=version,
                 tenant=tenant,
             )
         ],
@@ -243,44 +269,187 @@ async def test_http_stream_is_closed_before_call_returns(
             ClientConfig(
                 httpx_client=http, supported_protocol_bindings=[binding]
             )
-        ).create(
-            card, [_RejectResponse()] if ending == 'interceptor_error' else []
-        )
+        ).create(card, [_RejectResponse()] if reject_response else [])
+        yield client, http, response_stream
+        assert response_stream.closed
+        assert not http.is_closed
+        if subscribe_fallback:
+            assert methods == ['POST', 'GET']
+
+
+def _send(client: BaseClient) -> AsyncGenerator[StreamResponse]:
+    return cast(
+        'AsyncGenerator[StreamResponse]',
+        client.send_message(
+            SendMessageRequest(
+                message=Message(
+                    message_id='request',
+                    role=Role.ROLE_USER,
+                    parts=[Part(text='hi')],
+                )
+            )
+        ),
+    )
+
+
+@asynccontextmanager
+async def _bounded_events(
+    events: AsyncGenerator[StreamResponse],
+) -> AsyncIterator[AsyncGenerator[StreamResponse]]:
+    try:
+        yield events
+    finally:
+        await asyncio.wait_for(events.aclose(), timeout=2)
+
+
+@pytest.fixture(params=['JSONRPC', 'HTTP+JSON'])
+def binding(request: pytest.FixtureRequest) -> str:
+    return str(request.param)
+
+
+@pytest.fixture(params=['1.0', '0.3'])
+def version(request: pytest.FixtureRequest) -> str:
+    return str(request.param)
+
+
+@pytest.mark.asyncio
+async def test_http_send_stream_closes(
+    binding: str,
+    version: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with _streaming_client(binding, version, monkeypatch) as (
+        client,
+        _,
+        response,
+    ):
+        async with _bounded_events(_send(client)) as events:
+            assert (
+                await asyncio.wait_for(anext(events), timeout=2)
+            ).task.id == 'task'
+            assert not response.closed
+        assert response.closed
+
+
+@pytest.mark.asyncio
+async def test_http_subscribe_stream_closes(
+    binding: str,
+    version: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with _streaming_client(binding, version, monkeypatch) as (
+        client,
+        _,
+        response,
+    ):
         events = cast(
             'AsyncGenerator[StreamResponse]',
-            client.subscribe(SubscribeToTaskRequest(id='task'))
-            if ending == 'close_subscribe'
-            else client.send_message(
-                SendMessageRequest(
-                    message=Message(
-                        message_id='request',
-                        role=Role.ROLE_USER,
-                        parts=[Part(text='hi')],
-                    )
-                )
-            ),
+            client.subscribe(SubscribeToTaskRequest(id='task')),
         )
-        try:
-            if ending == 'interceptor_error':
-                with pytest.raises(RuntimeError, match='response rejected'):
-                    await anext(events)
-            elif ending == 'message':
-                replies = [event async for event in events]
-                assert len(replies) == 1
-                assert replies[0].message.parts[0].text == 'done'
-            else:
-                first = await anext(events)
-                assert first.task.id == 'task'
-                assert not response_stream.closed
-                if ending == 'cancel_read':
-                    read = asyncio.create_task(anext(events))
-                    await asyncio.wait_for(response_stream.waiting.wait(), 1)
-                    read.cancel()
-                    with pytest.raises(asyncio.CancelledError):
-                        await read
-                else:
-                    await events.aclose()
-            assert response_stream.closed
-            assert not http.is_closed
-        finally:
-            await events.aclose()
+        async with _bounded_events(events):
+            assert (
+                await asyncio.wait_for(anext(events), timeout=2)
+            ).task.id == 'task'
+            assert not response.closed
+        assert response.closed
+
+
+@pytest.mark.asyncio
+async def test_http_message_reply_closes(
+    binding: str,
+    version: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with _streaming_client(
+        binding, version, monkeypatch, message_reply=True
+    ) as (client, _, response):
+        async with _bounded_events(_send(client)) as events:
+            reply = await asyncio.wait_for(anext(events), timeout=2)
+            assert reply.message.parts[0].text == 'done'
+            with pytest.raises(StopAsyncIteration):
+                await asyncio.wait_for(anext(events), timeout=2)
+            assert response.closed
+
+
+@pytest.mark.asyncio
+async def test_http_interceptor_error_closes(
+    binding: str,
+    version: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with _streaming_client(
+        binding, version, monkeypatch, reject_response=True
+    ) as (client, _, response):
+        async with _bounded_events(_send(client)) as events:
+            with pytest.raises(RuntimeError, match='response rejected'):
+                await asyncio.wait_for(anext(events), timeout=2)
+            assert response.closed
+
+
+@pytest.mark.asyncio
+async def test_http_cancelled_read_closes(
+    binding: str,
+    version: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with _streaming_client(binding, version, monkeypatch) as (
+        client,
+        _,
+        response,
+    ):
+        async with _bounded_events(_send(client)) as events:
+            assert (
+                await asyncio.wait_for(anext(events), timeout=2)
+            ).task.id == 'task'
+            read = asyncio.create_task(anext(events))
+            try:
+                await asyncio.wait_for(response.waiting.wait(), timeout=2)
+            finally:
+                read.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(read, timeout=2)
+            assert response.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('tenant', 'plugins_enabled'),
+    [('tenant', False), ('', True), ('tenant', True)],
+)
+async def test_http_stream_closes_with_tenant_and_plugins(
+    binding: str,
+    version: str,
+    tenant: str,
+    plugins_enabled: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with _streaming_client(
+        binding,
+        version,
+        monkeypatch,
+        tenant=tenant,
+        plugins_enabled=plugins_enabled,
+    ) as (client, _, response):
+        async with _bounded_events(_send(client)) as events:
+            assert (
+                await asyncio.wait_for(anext(events), timeout=2)
+            ).task.id == 'task'
+        assert response.closed
+
+
+@pytest.mark.asyncio
+async def test_http_legacy_subscribe_fallback_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with _streaming_client(
+        'HTTP+JSON', '0.3', monkeypatch, subscribe_fallback=True
+    ) as (client, _, response):
+        events = cast(
+            'AsyncGenerator[StreamResponse]',
+            client.subscribe(SubscribeToTaskRequest(id='task')),
+        )
+        async with _bounded_events(events):
+            assert (
+                await asyncio.wait_for(anext(events), timeout=2)
+            ).task.id == 'task'
+        assert response.closed
