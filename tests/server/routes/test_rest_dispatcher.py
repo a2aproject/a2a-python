@@ -326,6 +326,27 @@ class TestRestDispatcherEndpoints:
         if artifacts_expected:
             assert task['artifacts'][0]['artifactId'] == 'test-artifact'
 
+    async def test_list_tasks_omits_unset_task_fields(
+        self,
+        rest_dispatcher_instance: RestDispatcher,
+        mock_handler: AsyncMock,
+    ) -> None:
+        mock_handler.on_list_tasks.return_value = ListTasksResponse(
+            tasks=[Task(id='t1', context_id='c1')], page_size=1
+        )
+        req = make_mock_request(
+            method='GET', query_params=QueryParams({'historyLength': '0'})
+        )
+
+        response = await rest_dispatcher_instance.list_tasks(req)
+
+        assert json.loads(response.body) == {
+            'tasks': [{'id': 't1', 'contextId': 'c1'}],
+            'nextPageToken': '',
+            'pageSize': 1,
+            'totalSize': 0,
+        }
+
     @pytest.mark.parametrize(
         'value', ['garbage', '', '0', '1', ' ', ' true ', 'private-query-value']
     )
