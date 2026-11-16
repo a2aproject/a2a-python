@@ -165,16 +165,24 @@ def _create_error_response(
 
 
 def rest_error_handler(
-    func: Callable[..., Awaitable[Response]],
+    func: Callable[..., Awaitable[Response]] | None = None,
     *,
     media_type: str = JSON_MEDIA_TYPE,
-) -> Callable[..., Awaitable[Response]]:
+) -> Callable:
     """Decorator to catch A2AError and map it to an appropriate JSONResponse.
 
+    Use it as ``@rest_error_handler``, or as
+    ``@rest_error_handler(media_type=...)`` to set the error Content-Type.
+
     Args:
-        func: The handler to wrap.
+        func: The handler to wrap. None when called with arguments only.
         media_type: The Content-Type of the error response.
+
+    Returns:
+        The wrapped handler, or a partial decorator if ``func`` is None.
     """
+    if func is None:
+        return functools.partial(rest_error_handler, media_type=media_type)
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Response:
@@ -187,16 +195,27 @@ def rest_error_handler(
 
 
 def rest_stream_error_handler(
-    func: Callable[..., Coroutine[Any, Any, Any]],
+    func: Callable[..., Coroutine[Any, Any, Any]] | None = None,
     *,
     media_type: str = JSON_MEDIA_TYPE,
-) -> Callable[..., Coroutine[Any, Any, Any]]:
+) -> Callable:
     """Decorator to catch A2AError for a streaming method. Maps synchronous errors to JSONResponse and logs streaming errors.
 
+    Use it as ``@rest_stream_error_handler``, or as
+    ``@rest_stream_error_handler(media_type=...)`` to set the error
+    Content-Type.
+
     Args:
-        func: The handler to wrap.
+        func: The handler to wrap. None when called with arguments only.
         media_type: The Content-Type of a synchronous error response.
+
+    Returns:
+        The wrapped handler, or a partial decorator if ``func`` is None.
     """
+    if func is None:
+        return functools.partial(
+            rest_stream_error_handler, media_type=media_type
+        )
 
     def _log_error(error: Exception) -> None:
         if isinstance(error, A2AError):
