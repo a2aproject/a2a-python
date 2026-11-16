@@ -62,12 +62,12 @@ Each claim is anchored to current `main`. Re-read the file before quoting.
    task to `FAILED`.
 5. **Every request must produce at least one event.** With zero events,
    `on_message_send` falls through to `active_task.get_task()`
-   (`src/a2a/server/request_handlers/default_request_handler_v2.py:518-520`),
+   (`src/a2a/server/request_handlers/default_request_handler_v2.py:522-527`),
    which awaits `_task_created` with no timeout
    (`src/a2a/server/agent_execution/active_task.py:1130`) and hangs the
    request, producer, and consumer forever. Guard before awaiting (the
-   `on_message_send` caller has done so since #1345), or the fallback
-   must be bounded.
+   `on_message_send` and streaming callers have done so since #1345
+   and #1460), or the fallback must be bounded.
 6. **Store and stream must agree.** A blocking call may return a shared
    snapshot while later events land on the store — the copy-on-yield caveat
    is documented in-code at
