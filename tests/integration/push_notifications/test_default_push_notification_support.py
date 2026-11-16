@@ -392,7 +392,7 @@ def _make_user_a2a_client(agent_server: str, user_name: str):
     """Builds an A2A client that identifies as user_name on every request.
 
     Identity is conveyed via a default header on the underlying
-    httpx_lib.AsyncClient; the multi-user agent app's context builder
+    AsyncClient; the multi-user agent app's context builder
     reads that header to populate ServerCallContext.user.
     """
     httpx_client = httpx_lib.AsyncClient(headers={_TEST_USER_HEADER: user_name})

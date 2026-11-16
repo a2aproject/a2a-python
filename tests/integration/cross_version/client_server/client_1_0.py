@@ -212,7 +212,9 @@ async def test_get_extended_agent_card(client):
 
     if card.name == 'Server 1.0':
         assert len(card.supported_interfaces) == 4
-        assert card.capabilities.extended_agent_card in (False, None)
+        assert card.capabilities.extended_agent_card is True
+        flows = card.security_schemes['oauth'].oauth2_security_scheme.flows
+        assert flows.device_code.token_url == 'https://auth.example.com/token'
     else:
         assert len(card.supported_interfaces) > 0
         assert card.capabilities.extended_agent_card in (False, None)

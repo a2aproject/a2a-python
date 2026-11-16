@@ -1,3 +1,5 @@
+from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -92,18 +94,27 @@ class TestTenantTransportDecorator:
     )
     @pytest.mark.asyncio
     async def test_methods(
-        self, mock_transport: AsyncMock, method_name, request_obj
+        self, mock_transport: AsyncMock, method_name: str, request_obj: Any
     ) -> None:
         """Test that tenant is set on the request for all methods."""
         tenant_id = 'test-tenant'
         decorator = TenantTransportDecorator(mock_transport, tenant_id)
         mock_method = getattr(mock_transport, method_name)
 
+        original = request_obj.SerializeToString()
         await getattr(decorator, method_name)(request_obj)
+        other = TenantTransportDecorator(mock_transport, 'other-tenant')
+        await getattr(other, method_name)(request_obj)
 
-        mock_method.assert_called_once()
+        assert mock_method.await_count == 2
         assert mock_transport.mock_calls[0][0] == method_name
-        assert request_obj.tenant == tenant_id
+        assert [
+            call.args[0].tenant for call in mock_method.await_args_list
+        ] == [
+            tenant_id,
+            'other-tenant',
+        ]
+        assert request_obj.SerializeToString() == original
 
     @pytest.mark.asyncio
     async def test_streaming_methods(self, mock_transport: AsyncMock) -> None:
@@ -111,19 +122,25 @@ class TestTenantTransportDecorator:
         tenant_id = 'test-tenant'
         decorator = TenantTransportDecorator(mock_transport, tenant_id)
 
-        async def mock_stream(*args, **kwargs):
+        tenants: list[str] = []
+
+        async def mock_stream(
+            request: Any, **kwargs: Any
+        ) -> AsyncGenerator[StreamResponse]:
+            tenants.append(request.tenant)
             yield StreamResponse()
 
-        # Test subscribe
-        mock_transport.subscribe.return_value = mock_stream()
-        request_sub = SubscribeToTaskRequest(id='t1')
-        async for _ in decorator.subscribe(request_sub):
-            pass
-        assert request_sub.tenant == tenant_id
-
-        # Test send_message_streaming
-        mock_transport.send_message_streaming.return_value = mock_stream()
-        request_msg = SendMessageRequest()
-        async for _ in decorator.send_message_streaming(request_msg):
-            pass
-        assert request_msg.tenant == tenant_id
+        mock_transport.subscribe.side_effect = mock_stream
+        mock_transport.send_message_streaming.side_effect = mock_stream
+        other = TenantTransportDecorator(mock_transport, 'other-tenant')
+        for method, request in [
+            ('subscribe', SubscribeToTaskRequest(id='t1')),
+            ('send_message_streaming', SendMessageRequest()),
+        ]:
+            original = request.SerializeToString()
+            async for _ in getattr(decorator, method)(request):
+                pass
+            async for _ in getattr(other, method)(request):
+                pass
+            assert request.SerializeToString() == original
+        assert tenants == [tenant_id, 'other-tenant', tenant_id, 'other-tenant']
