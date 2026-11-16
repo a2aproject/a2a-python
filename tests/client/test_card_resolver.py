@@ -727,6 +727,51 @@ class TestParseAgentCard:
             'scheme'
         )
 
+    def test_parse_030_agent_card_oauth2_with_several_flows(self) -> None:
+        flows = {
+            'authorizationCode': {
+                'authorizationUrl': 'https://auth.example.com/authorize',
+                'tokenUrl': 'https://auth.example.com/token',
+                'scopes': {'read': 'Read access'},
+            },
+            'clientCredentials': {
+                'tokenUrl': 'https://auth.example.com/token',
+                'scopes': {'read': 'Read access'},
+            },
+        }
+        data = {
+            'protocolVersion': '0.3.0',
+            'name': 'OAuth Agent',
+            'description': 'Lists two OAuth flows',
+            'url': 'http://agent.example.com/api',
+            'version': '1.0',
+            'securitySchemes': {
+                'oauth': {'type': 'oauth2', 'flows': copy.deepcopy(flows)}
+            },
+        }
+
+        card = parse_agent_card(data)
+
+        scheme = card.security_schemes['oauth'].oauth2_security_scheme
+        assert scheme.flows.WhichOneof('flow') == 'client_credentials'
+        assert (
+            scheme.flows.client_credentials.token_url
+            == 'https://auth.example.com/token'
+        )
+
+        # A 1.0 card must still carry a single flow.
+        with pytest.raises(ParseError):
+            parse_agent_card(
+                {
+                    'name': 'OAuth Agent',
+                    'description': 'Lists two OAuth flows',
+                    'version': '1.0',
+                    'securitySchemes': {
+                        'oauth': {'oauth2SecurityScheme': {'flows': flows}}
+                    },
+                }
+            )
+
     def test_parse_030_agent_card_route_planner(self) -> None:
         data = {
             'protocolVersion': '0.3',

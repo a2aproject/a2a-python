@@ -88,6 +88,40 @@ def _map_legacy_security(
     ]
 
 
+# v0.3 OAuthFlows fields in the order `to_core_oauth_flows` applies them.
+_LEGACY_OAUTH_FLOWS = (
+    'authorizationCode',
+    'clientCredentials',
+    'implicit',
+    'password',
+)
+
+
+def _keep_single_legacy_oauth_flow(scheme: dict[str, Any]) -> None:
+    """Reduce a v0.3 OAuthFlows object to the single flow 1.0.0 allows.
+
+    In v0.3 every flow is an optional field, so a card may list several. In
+    1.0.0 `OAuthFlows` is a oneof. Keep the flow the v0.3 compat conversion
+    keeps (the last one in `_LEGACY_OAUTH_FLOWS`) so both paths agree.
+    """
+    flows = scheme.get('flows')
+    if not isinstance(flows, dict):
+        return
+    present = [
+        name for name in _LEGACY_OAUTH_FLOWS if flows.get(name) is not None
+    ]
+    if len(present) <= 1:
+        return
+    kept = present[-1]
+    logger.warning(
+        'Legacy OAuth2 security scheme lists flows %s; keeping only %r.',
+        present,
+        kept,
+    )
+    for name in present[:-1]:
+        del flows[name]
+
+
 def _handle_security_compatibility(agent_card_data: dict[str, Any]) -> None:
     """Map legacy security requirements and schemas to their 1.0.0 Protobuf equivalents."""
     legacy_security = agent_card_data.pop('security', None)
@@ -121,6 +155,8 @@ def _handle_security_compatibility(agent_card_data: dict[str, Any]) -> None:
                 # Map legacy 'in' to modern 'location'
                 if scheme_type == 'apiKey' and 'in' in scheme:
                     scheme['location'] = scheme.pop('in')
+                if scheme_type == 'oauth2':
+                    _keep_single_legacy_oauth_flow(scheme)
 
                 mapped_name = type_mapping[scheme_type]
                 new_scheme_wrapper = {mapped_name: scheme.copy()}
