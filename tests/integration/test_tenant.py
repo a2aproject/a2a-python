@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from a2a.client import ClientConfig, ClientFactory
@@ -19,9 +18,12 @@ from a2a.types.a2a_pb2 import (
     SendMessageRequest,
     Task,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import TransportProtocol
-from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
+
+
+pytestmark = pytest.mark.httpx2
 
 
 class TestTenantDecorator:
@@ -50,7 +52,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_rest(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -86,7 +88,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_jsonrpc(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -142,7 +144,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_explicit_override(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -220,8 +222,8 @@ class TestJSONRPCTenantIntegration:
         """
         # 1. Setup the client using the server app as the transport
         # We use ASGITransport so httpx calls go directly to the Starlette app
-        transport = ASGITransport(app=server_app)
-        async with AsyncClient(
+        transport = httpx_lib.ASGITransport(app=server_app)
+        async with httpx_lib.AsyncClient(
             transport=transport, base_url='http://testserver'
         ) as httpx_client:
             # Create the A2A client properly configured
@@ -255,9 +257,9 @@ class TestJSONRPCTenantIntegration:
 async def test_reused_request_uses_each_clients_default_tenant() -> None:
     paths: list[str] = []
 
-    async def respond(request: httpx.Request) -> httpx.Response:
+    async def respond(request: httpx_lib.Request) -> httpx_lib.Response:
         paths.append(request.url.path)
-        return httpx.Response(
+        return httpx_lib.Response(
             200,
             json={
                 'id': 'task',
@@ -267,8 +269,8 @@ async def test_reused_request_uses_each_clients_default_tenant() -> None:
         )
 
     request = GetTaskRequest(id='task')
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(respond)
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(respond)
     ) as http:
         factory = ClientFactory(
             ClientConfig(

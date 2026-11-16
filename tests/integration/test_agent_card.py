@@ -1,4 +1,3 @@
-import httpx
 import pytest
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -16,9 +15,13 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import VERSION_HEADER, TransportProtocol
 from fastapi import FastAPI
 from starlette.applications import Starlette
+
+
+pytestmark = pytest.mark.httpx2
 
 
 class DummyAgentExecutor(AgentExecutor):
@@ -115,8 +118,8 @@ async def test_agent_card_integration(header_val: str | None) -> None:
         headers[VERSION_HEADER] = header_val
 
     # 3. Use direct http client (ASGITransport) to fetch and assert
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app), base_url='http://testserver'
     ) as client:
         # Fetch from JSONRPC endpoint
         resp_jsonrpc = await client.get(

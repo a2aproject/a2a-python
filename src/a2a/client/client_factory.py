@@ -33,6 +33,7 @@ from a2a.utils.constants import (
 
 if TYPE_CHECKING:
     from a2a.client.interceptors import ClientCallInterceptor
+    from a2a.utils._httpx_compat import AsyncClient
 
 
 try:
@@ -96,7 +97,7 @@ class ClientFactory:
         self._registry: dict[str, TransportProducer] = {}
         self._register_defaults(config.supported_protocol_bindings)
 
-    def _resolve_http_client(self) -> tuple[httpx.AsyncClient, bool]:
+    def _resolve_http_client(self) -> tuple[AsyncClient, bool]:
         """Returns an HTTP client and whether it is shared across clients."""
         if self._config.httpx_client:
             return self._config.httpx_client, True
