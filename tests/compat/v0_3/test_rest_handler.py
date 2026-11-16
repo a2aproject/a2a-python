@@ -371,6 +371,26 @@ async def test_list_push_notifications(
     assert called_req.params.id == 'task-1'
 
 
+@pytest.mark.anyio
+async def test_delete_push_notification(
+    rest_handler, mock_request, mock_context
+):
+    mock_request.path_params = {'id': 'task-1', 'push_id': 'push-1'}
+    rest_handler.handler03.on_delete_task_push_notification_config.return_value = None
+
+    result = await rest_handler.delete_push_notification(
+        mock_request, mock_context
+    )
+
+    assert result == {}
+    rest_handler.handler03.on_delete_task_push_notification_config.assert_called_once()
+    called_req = rest_handler.handler03.on_delete_task_push_notification_config.call_args[
+        0
+    ][0]
+    assert called_req.params.id == 'task-1'
+    assert called_req.params.push_notification_config_id == 'push-1'
+
+
 # Add our new translation method test
 @pytest.mark.anyio
 async def test_on_get_extended_agent_card_success(

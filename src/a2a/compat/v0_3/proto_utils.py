@@ -574,7 +574,9 @@ class ToProto:
                     token_url=flows.password.token_url,
                 ),
             )
-        raise ValueError('Unknown oauth flow definition')
+        # No v0.3 flow is set, e.g. for a v1.0 device code flow, which v0.3
+        # does not have.
+        return a2a_pb2.OAuthFlows()
 
     @classmethod
     def skill(cls, skill: types.AgentSkill) -> a2a_pb2.AgentSkill:
@@ -1058,13 +1060,15 @@ class FromProto:
                     scopes=dict(flows.implicit.scopes.items()),
                 ),
             )
-        return types.OAuthFlows(
-            password=types.PasswordOAuthFlow(
-                refresh_url=flows.password.refresh_url,
-                scopes=dict(flows.password.scopes.items()),
-                token_url=flows.password.token_url,
-            ),
-        )
+        if flows.HasField('password'):
+            return types.OAuthFlows(
+                password=types.PasswordOAuthFlow(
+                    refresh_url=flows.password.refresh_url,
+                    scopes=dict(flows.password.scopes.items()),
+                    token_url=flows.password.token_url,
+                ),
+            )
+        return types.OAuthFlows()
 
     @classmethod
     def stream_response(
