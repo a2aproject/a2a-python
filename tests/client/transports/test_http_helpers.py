@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 import httpx
 import pytest
 
@@ -21,7 +23,7 @@ def test_default_sse_error_handler():
 
 @pytest.mark.asyncio
 async def test_parse_sse_stream_edge_cases():
-    async def mock_aiter_lines():
+    async def mock_aiter_text():
         yield ': comment line (should be ignored)\n'
         yield 'event: custom_event\n'
         yield 'data:  hello\n'
@@ -32,13 +34,67 @@ async def test_parse_sse_stream_edge_cases():
         yield '\n'
 
     response = httpx.Response(200)
-    response.aiter_lines = mock_aiter_lines  # type: ignore
+    response.aiter_text = mock_aiter_text  # type: ignore
 
     events = [e async for e in parse_sse_stream(response)]
     assert events == [
         ('custom_event', ' hello\nworld'),
         ('message', ''),
     ]
+
+
+async def _byte_chunks(chunks: list[bytes]) -> AsyncIterator[bytes]:
+    for chunk in chunks:
+        yield chunk
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('chunks', 'expected'),
+    [
+        pytest.param(
+            ['data: a b c\x85d\n\n'.encode()],
+            [('message', 'a b c\x85d')],
+            id='unicode-line-separators-stay-in-data',
+        ),
+        pytest.param(
+            [b'data: a\xe2\x80', b'\xa8b\r', b'\ndata: c\r\r'],
+            [('message', 'a b\nc')],
+            id='crlf-and-character-split-across-chunks',
+        ),
+        pytest.param(
+            [b'data: a\r'],
+            [],
+            id='event-without-blank-line-is-not-dispatched',
+        ),
+    ],
+)
+async def test_parse_sse_stream_ends_lines_only_at_cr_or_lf(
+    chunks: list[bytes], expected: list[tuple[str, str]]
+) -> None:
+    """Only CRLF, LF and CR end a line, as the SSE specification requires."""
+    response = httpx.Response(200, content=_byte_chunks(chunks))
+
+    events = [e async for e in parse_sse_stream(response)]
+
+    assert events == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_parse_sse_stream_long_data_line_over_many_chunks() -> None:
+    """A multi-megabyte data: line read in small chunks stays linear."""
+    payload = 'x' * (2 * 1024 * 1024)
+    body = f'data: {payload}\r\n\r\n'.encode()
+    chunk_size = 512
+    chunks = [body[i : i + chunk_size] for i in range(0, len(body), chunk_size)]
+    response = httpx.Response(200, content=_byte_chunks(chunks))
+
+    # Re-joining and re-scanning the whole line on every chunk took tens of
+    # seconds here; the linear version takes well under a second.
+    events = [e async for e in parse_sse_stream(response)]
+
+    assert events == [('message', payload)]
 
 
 @pytest.mark.asyncio

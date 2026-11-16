@@ -307,9 +307,11 @@ class ToProto:
     @classmethod
     def message_send_configuration(
         cls, config: types.MessageSendConfiguration | None
-    ) -> a2a_pb2.SendMessageConfiguration:
+    ) -> a2a_pb2.SendMessageConfiguration | None:
+        # An empty configuration reads as blocking=false, so send none and
+        # leave the server on its blocking default.
         if not config:
-            return a2a_pb2.SendMessageConfiguration()
+            return None
         return a2a_pb2.SendMessageConfiguration(
             accepted_output_modes=config.accepted_output_modes,
             push_notification=cls.push_notification_config(
@@ -572,7 +574,9 @@ class ToProto:
                     token_url=flows.password.token_url,
                 ),
             )
-        raise ValueError('Unknown oauth flow definition')
+        # No v0.3 flow is set, e.g. for a v1.0 device code flow, which v0.3
+        # does not have.
+        return a2a_pb2.OAuthFlows()
 
     @classmethod
     def skill(cls, skill: types.AgentSkill) -> a2a_pb2.AgentSkill:
@@ -1056,13 +1060,15 @@ class FromProto:
                     scopes=dict(flows.implicit.scopes.items()),
                 ),
             )
-        return types.OAuthFlows(
-            password=types.PasswordOAuthFlow(
-                refresh_url=flows.password.refresh_url,
-                scopes=dict(flows.password.scopes.items()),
-                token_url=flows.password.token_url,
-            ),
-        )
+        if flows.HasField('password'):
+            return types.OAuthFlows(
+                password=types.PasswordOAuthFlow(
+                    refresh_url=flows.password.refresh_url,
+                    scopes=dict(flows.password.scopes.items()),
+                    token_url=flows.password.token_url,
+                ),
+            )
+        return types.OAuthFlows()
 
     @classmethod
     def stream_response(
