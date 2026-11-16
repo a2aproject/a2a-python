@@ -3689,3 +3689,29 @@ async def test_on_message_send_raises_when_agent_produces_no_events():
         await request_handler.on_message_send(
             params, create_server_call_context()
         )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_raises_when_agent_produces_no_events():
+    """A silent executor must not end the stream without any event."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=SilentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_silent_stream',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    with pytest.raises(InvalidAgentResponseError, match='no events'):
+        async for _ in request_handler.on_message_send_stream(
+            params, create_server_call_context()
+        ):
+            pass
