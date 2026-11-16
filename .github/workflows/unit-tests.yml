@@ -124,7 +124,8 @@ jobs:
     if: github.repository == 'a2aproject/a2a-python'
     strategy:
       matrix:
-        python-version: ['3.13']
+        # Starts at 3.11, the floor httpx2 supports; 3.10 has no httpx2 to test.
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v6
