@@ -306,7 +306,7 @@ class RestTransport(ClientTransport):
             f'/pushNotificationConfigs/{_quote_id(request.id)}',
             request.tenant,
         )
-        http_request = self.httpx_client.build_request(
+        http_request: Request = self.httpx_client.build_request(
             'DELETE',
             f'{self.url}{path}',
             params=params,

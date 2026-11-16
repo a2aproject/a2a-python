@@ -3,7 +3,7 @@ import re
 
 from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
@@ -208,6 +208,9 @@ class _SSEEventSource:
     Coroutine-based context managers are not async generators and avoid this
     collision (see https://bugs.python.org/issue38559).
     """
+
+    if TYPE_CHECKING:
+        _request: Request
 
     def __init__(
         self,

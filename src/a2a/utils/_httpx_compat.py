@@ -5,21 +5,22 @@ Although both packages share the same API, their classes are distinct types, so
 `httpx2` is installed.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 
-AsyncClient = httpx.AsyncClient
-Request = httpx.Request
-Response = httpx.Response
-
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     import httpx2  # ty: ignore[unresolved-import]
 
     httpx_lib = httpx
 
-    HTTPStatusError = httpx.HTTPStatusError | httpx2.HTTPStatusError
+    AsyncClient: TypeAlias = httpx.AsyncClient | httpx2.AsyncClient
+    Response: TypeAlias = httpx.Response | httpx2.Response
+    HTTPStatusError: TypeAlias = httpx.HTTPStatusError | httpx2.HTTPStatusError
+    Request: TypeAlias = Any  # For unions, Request could be httpx2 and be expected to return httpx
 
     HTTP_STATUS_ERROR: tuple[
         type[httpx.HTTPStatusError], type[httpx2.HTTPStatusError]
@@ -38,6 +39,9 @@ else:
 
         httpx_lib = httpx2
 
+        AsyncClient = httpx.AsyncClient | httpx2.AsyncClient
+        Request = httpx.Request | httpx2.Request
+        Response = httpx.Response | httpx2.Response
         HTTPStatusError = httpx.HTTPStatusError | httpx2.HTTPStatusError
 
         HTTP_STATUS_ERROR = (
@@ -60,9 +64,13 @@ else:
             httpx.ResponseNotRead,
             httpx2.ResponseNotRead,
         )
+
     except ImportError:
         httpx_lib = httpx
 
+        AsyncClient = httpx.AsyncClient
+        Request = httpx.Request
+        Response = httpx.Response
         HTTPStatusError = httpx.HTTPStatusError
 
         HTTP_STATUS_ERROR = (httpx.HTTPStatusError,)
