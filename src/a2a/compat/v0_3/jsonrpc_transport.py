@@ -88,7 +88,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        result_dict = self._get_jsonrpc_result(response_data)
+        result_dict = response_data['result']
         if not isinstance(result_dict, dict):
             return SendMessageResponse()
 
@@ -159,7 +159,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        result = self._get_jsonrpc_result(response_data)
+        result = response_data['result']
         return conversions.to_core_task(types_v03.Task.model_validate(result))
 
     async def list_tasks(
@@ -194,7 +194,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        result = self._get_jsonrpc_result(response_data)
+        result = response_data['result']
 
         return conversions.to_core_task(types_v03.Task.model_validate(result))
 
@@ -220,7 +220,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        result = self._get_jsonrpc_result(response_data)
+        result = response_data['result']
 
         return conversions.to_core_task_push_notification_config(
             types_v03.TaskPushNotificationConfig.model_validate(result)
@@ -248,7 +248,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        result = self._get_jsonrpc_result(response_data)
+        result = response_data['result']
 
         return conversions.to_core_task_push_notification_config(
             types_v03.TaskPushNotificationConfig.model_validate(result)
@@ -276,7 +276,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        configs_data = self._get_jsonrpc_result(response_data)
+        configs_data = response_data['result']
         if not isinstance(configs_data, list):
             return ListTaskPushNotificationConfigsResponse()
 
@@ -310,10 +310,10 @@ class CompatJsonRpcTransport(ClientTransport):
             ),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(
-            dict(rpc_request.data), context
+        # A v0.3 server answers a successful delete with a null result.
+        await self._send_request(
+            dict(rpc_request.data), context, allow_null_result=True
         )
-        self._get_jsonrpc_result(response_data, result_required=False)
 
     async def subscribe(
         self,
@@ -357,7 +357,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        result = self._get_jsonrpc_result(response_data)
+        result = response_data['result']
 
         card = conversions.to_core_agent_card(
             types_v03.AgentCard.model_validate(result)
@@ -392,18 +392,12 @@ class CompatJsonRpcTransport(ClientTransport):
 
         return A2AClientError(message)
 
-    def _get_jsonrpc_result(
-        self, response_data: Any, *, result_required: bool = True
-    ) -> Any:
-        """Returns the result of a JSON-RPC success response, raising for anything else.
+    def _check_jsonrpc_response(
+        self, response_data: Any, *, allow_null_result: bool = False
+    ) -> dict[str, Any]:
+        """Returns a JSON-RPC success response, raising A2A errors otherwise.
 
-        An error response raises the A2A error mapped from its code, even when
-        the error object lacks a ``message`` or carries extra members. A body
-        that is not a JSON-RPC 2.0 response object (a list, a string, an object
-        with neither ``result`` nor ``error``, or an ``error`` that is not an
-        object) raises ``A2AClientError`` instead of leaking a ``TypeError`` or
-        ``ValueError`` from the ``json-rpc`` package. With
-        ``result_required=False``, a body with neither member returns ``None``.
+        A missing or null ``result`` is accepted only with ``allow_null_result``.
         """
         if not isinstance(response_data, dict):
             raise A2AClientError(
@@ -418,11 +412,11 @@ class CompatJsonRpcTransport(ClientTransport):
                     f'{error!r}'
                 )
             raise self._create_jsonrpc_error(error)
-        if result_required and 'result' not in response_data:
+        if response_data.get('result') is None and not allow_null_result:
             raise A2AClientError(
-                "Invalid JSON-RPC response: it has neither 'result' nor 'error'"
+                "Invalid JSON-RPC response: 'result' is missing or null"
             )
-        return response_data.get('result')
+        return response_data
 
     def _handle_http_error(self, e: HTTPStatusError) -> NoReturn:
         """Handles HTTP errors for standard requests."""
@@ -494,8 +488,10 @@ class CompatJsonRpcTransport(ClientTransport):
         self,
         json_data: dict[str, Any],
         context: ClientCallContext | None = None,
+        *,
+        allow_null_result: bool = False,
     ) -> dict[str, Any]:
-        """Sends an HTTP request."""
+        """Sends a JSON-RPC request and returns the checked success response."""
         http_kwargs = get_http_args(context)
         http_kwargs.setdefault('headers', {})
         http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
@@ -507,6 +503,9 @@ class CompatJsonRpcTransport(ClientTransport):
             json=json_data,
             **http_kwargs,
         )
-        return await send_http_request(
+        response_data = await send_http_request(
             self.httpx_client, request, self._handle_http_error
+        )
+        return self._check_jsonrpc_response(
+            response_data, allow_null_result=allow_null_result
         )

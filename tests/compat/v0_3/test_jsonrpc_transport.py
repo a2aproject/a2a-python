@@ -590,6 +590,7 @@ async def test_compat_jsonrpc_transport_mirrors_extension_header(
         ),
         ({'jsonrpc': '2.0', 'id': '1', 'error': 'boom'}, A2AClientError),
         ({'jsonrpc': '2.0', 'id': '1'}, A2AClientError),
+        ({'jsonrpc': '2.0', 'id': '1', 'result': None}, A2AClientError),
         (['not', 'a', 'response'], A2AClientError),
     ],
 )
@@ -605,11 +606,66 @@ async def test_compat_jsonrpc_transport_malformed_response(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'call',
+    [
+        lambda t: t.send_message(
+            SendMessageRequest(
+                message=Message(message_id='msg-1', role=Role.ROLE_USER)
+            )
+        ),
+        lambda t: t.cancel_task(CancelTaskRequest(id='task-123')),
+        lambda t: t.create_task_push_notification_config(
+            TaskPushNotificationConfig(task_id='task-123', id='push-123')
+        ),
+        lambda t: t.get_task_push_notification_config(
+            GetTaskPushNotificationConfigRequest(
+                task_id='task-123', id='push-123'
+            )
+        ),
+        lambda t: t.list_task_push_notification_configs(
+            ListTaskPushNotificationConfigsRequest(task_id='task-123')
+        ),
+        lambda t: t.get_extended_agent_card(GetExtendedAgentCardRequest()),
+    ],
+    ids=[
+        'send_message',
+        'cancel_task',
+        'create_push_config',
+        'get_push_config',
+        'list_push_configs',
+        'get_extended_agent_card',
+    ],
+)
 @patch('a2a.compat.v0_3.jsonrpc_transport.send_http_request')
-async def test_compat_jsonrpc_transport_delete_push_config_without_result(
-    mock_send_http_request, transport
+async def test_compat_jsonrpc_transport_null_result(
+    mock_send_http_request, transport, call
 ):
-    mock_send_http_request.return_value = {'jsonrpc': '2.0', 'id': '1'}
+    """A null result is only valid for delete, so other methods reject it."""
+    mock_send_http_request.return_value = {
+        'jsonrpc': '2.0',
+        'id': '1',
+        'result': None,
+    }
+
+    with pytest.raises(A2AClientError, match="'result' is missing or null"):
+        await call(transport)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'response_data',
+    [
+        {'jsonrpc': '2.0', 'id': '1', 'result': None},
+        {'jsonrpc': '2.0', 'id': '1'},
+    ],
+    ids=['null_result', 'no_result'],
+)
+@patch('a2a.compat.v0_3.jsonrpc_transport.send_http_request')
+async def test_compat_jsonrpc_transport_delete_push_config_null_result(
+    mock_send_http_request, transport, response_data
+):
+    mock_send_http_request.return_value = response_data
 
     req = DeleteTaskPushNotificationConfigRequest(
         task_id='task-123', id='push-123'
