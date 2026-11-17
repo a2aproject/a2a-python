@@ -54,7 +54,7 @@ class ServerPlugin(Plugin):
         request: ServerRequest,
         call: Callable[[], Awaitable[Any]],
     ) -> Any:
-        """Runs around each call into the handler.TODO wire."""
+        """Runs around each call the handler makes for a request."""
         return await call()
 
 
