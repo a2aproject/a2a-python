@@ -34,6 +34,17 @@ from a2a.types.a2a_pb2 import (
 )
 
 
+class _StreamEnd:
+    """Marker for a stream with no more events.
+
+    Used instead of ``None`` because an interceptor can set a stream event to
+    ``None``, which would otherwise look like the end of the stream.
+    """
+
+
+_END = _StreamEnd()
+
+
 class BaseClient(Client):
     """Base implementation of the A2A client, containing transport-independent logic.
 
@@ -530,12 +541,12 @@ class BaseClient(Client):
                 )
             ) as events:
                 while True:
-                    # None marks the end of the stream, so StopAsyncIteration
-                    # never passes through plugin code.
+                    # A marker ends the loop, so StopAsyncIteration never
+                    # passes through plugin code.
                     event = await plugins.wrap_client_call(
-                        request, lambda: anext(events, None)
+                        request, lambda: anext(events, _END)
                     )
-                    if event is None:
+                    if isinstance(event, _StreamEnd):
                         break
                     await plugins.after_client_request(
                         ClientResponse(

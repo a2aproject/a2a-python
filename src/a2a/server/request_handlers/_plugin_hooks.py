@@ -33,6 +33,17 @@ class _PluginHost(Protocol):
 _F = TypeVar('_F', bound='Callable[..., Any]')
 
 
+class _StreamEnd:
+    """Marker for a stream with no more events.
+
+    Used instead of ``None`` so that no handler value can be mistaken for
+    the end of the stream.
+    """
+
+
+_END = _StreamEnd()
+
+
 def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
     """Runs `before_handler_run` / `after_handler_run` around a handler method.
 
@@ -74,13 +85,12 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                         func(self, params, context, *args, **kwargs)
                     ) as events:
                         while True:
-                            # None marks the end of the stream, so
-                            # StopAsyncIteration never passes through plugin
-                            # code.
+                            # A marker ends the loop, so StopAsyncIteration
+                            # never passes through plugin code.
                             event = await plugins.wrap_server_call(
-                                request, lambda: anext(events, None)
+                                request, lambda: anext(events, _END)
                             )
-                            if event is None:
+                            if isinstance(event, _StreamEnd):
                                 break
                             await plugins.after_handler_run(
                                 ServerResponse(
