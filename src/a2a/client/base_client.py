@@ -17,6 +17,7 @@ from a2a.plugins.manager import PluginManager, get_global
 from a2a.plugins.types import ClientRequest, ClientResponse
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    AgentInterface,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
@@ -41,13 +42,14 @@ class BaseClient(Client):
     the interceptors, ``after_client_request`` after them.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         card: AgentCard,
         config: ClientConfig,
         transport: ClientTransport,
         interceptors: list[ClientCallInterceptor],
         *,
+        interface: AgentInterface | None = None,
         plugins: PluginManager | None = None,
     ):
         """Initializes the client.
@@ -57,6 +59,10 @@ class BaseClient(Client):
             config: The client configuration.
             transport: The transport used for calls.
             interceptors: Interceptors applied to every call.
+            interface: The card interface this client talks to, as selected
+                by `ClientFactory`. A card can list several, so plugins
+                cannot tell which is in use from the card alone. Defaults to
+                None for clients built without the factory.
             plugins: Plugin manager whose client hooks run for every call.
                 Defaults to the global manager at construction time.
         """
@@ -65,6 +71,7 @@ class BaseClient(Client):
         self._config = config
         self._transport = transport
         self._interceptors = interceptors
+        self._interface = interface
         self._plugins = plugins if plugins is not None else get_global()
 
     async def send_message(
@@ -411,6 +418,7 @@ class BaseClient(Client):
             payload=input_data,
             agent_card=self._card,
             context=context if context is not None else ClientCallContext(),
+            interface=self._interface,
         )
 
     async def _execute_with_interceptors(

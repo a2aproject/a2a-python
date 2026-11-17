@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from a2a.server.tasks.push_notification_sender import (
         PushNotificationEvent,
     )
-    from a2a.types.a2a_pb2 import AgentCard, Task, TaskState
+    from a2a.types.a2a_pb2 import AgentCard, AgentInterface, Task, TaskState
 
 
 @dataclass
@@ -77,12 +77,16 @@ class ClientRequest:
         agent_card: The card of the remote agent.
         context: The call context. ``service_parameters`` holds the outgoing
             headers.
+        interface: The Agent Card interface the client selected, which gives
+            the URL, protocol binding and protocol version actually in use.
+            ``None`` for clients not built by `ClientFactory`.
     """
 
     method: str
     payload: Any
     agent_card: AgentCard
     context: ClientCallContext
+    interface: AgentInterface | None = None
 
 
 @dataclass
