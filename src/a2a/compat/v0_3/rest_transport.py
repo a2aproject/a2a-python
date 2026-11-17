@@ -294,7 +294,8 @@ class CompatRestTransport(ClientTransport):
         """Deletes the push notification configuration for a specific task."""
         await self._execute_request(
             'DELETE',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/v1/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             context=context,
         )
 
