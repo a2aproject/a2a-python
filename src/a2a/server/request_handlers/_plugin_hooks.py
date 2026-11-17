@@ -68,10 +68,11 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                     method, params, context, self.agent_card
                 )
                 await plugins.before_handler_run(request)
-                events = func(self, params, context, *args, **kwargs)
                 error: BaseException | None = None
                 try:
-                    try:
+                    async with aclosing(
+                        func(self, params, context, *args, **kwargs)
+                    ) as events:
                         while True:
                             # None marks the end of the stream, so
                             # StopAsyncIteration never passes through plugin
@@ -91,8 +92,6 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                                 )
                             )
                             yield event
-                    finally:
-                        await plugins.wrap_server_call(request, events.aclose)
                 except (Exception, asyncio.CancelledError) as e:
                     error = e
                     raise

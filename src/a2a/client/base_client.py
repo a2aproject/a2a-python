@@ -522,12 +522,13 @@ class BaseClient(Client):
 
         request = self._client_request(input_data, method, context)
         await plugins.before_client_request(request)
-        events = self._stream_through_interceptors(
-            request.payload, method, request.context, transport_call
-        )
         error: BaseException | None = None
         try:
-            try:
+            async with aclosing(
+                self._stream_through_interceptors(
+                    request.payload, method, request.context, transport_call
+                )
+            ) as events:
                 while True:
                     # None marks the end of the stream, so StopAsyncIteration
                     # never passes through plugin code.
@@ -546,8 +547,6 @@ class BaseClient(Client):
                         )
                     )
                     yield event
-            finally:
-                await plugins.wrap_client_call(request, events.aclose)
         except Exception as e:
             error = e
             raise

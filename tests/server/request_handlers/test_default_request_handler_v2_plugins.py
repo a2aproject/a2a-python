@@ -347,12 +347,12 @@ async def test_streaming_reports_each_event_and_a_final_call():
     assert final.error is None
 
     # Every step is wrapped separately and closes before the consumer sees
-    # the event: one step per event, one for the end of the stream, one for
-    # the close.
+    # the event: one step per event, plus one for the end of the stream.
+    # Closing the stream is not wrapped.
     expected = ['before_handler_run']
     for _ in streamed:
         expected += ['wrap_enter', 'wrap_exit', 'after_handler_run', 'consumer']
-    expected += ['wrap_enter', 'wrap_exit'] * 2 + ['after_handler_run']
+    expected += ['wrap_enter', 'wrap_exit', 'after_handler_run']
     assert recorder.wrap_names() == expected
 
 
@@ -369,14 +369,12 @@ async def test_stream_closed_early_still_gets_final_call():
     assert final.is_final
     assert final.error is None
     # Abandoning the stream leaves no wrap open: one step for the consumed
-    # event, one for the close.
+    # event, and the close itself is not wrapped.
     assert recorder.wrap_names() == [
         'before_handler_run',
         'wrap_enter',
         'wrap_exit',
         'after_handler_run',
-        'wrap_enter',
-        'wrap_exit',
         'after_handler_run',
     ]
 
@@ -426,11 +424,9 @@ async def test_stream_error_reaches_final_call():
     final = recorder.hooks('after_handler_run')[-1]
     assert isinstance(final.error, TaskNotFoundError)
     # The failure lands on the first step, so no event is ever reported:
-    # one wrap for that step, one for the close.
+    # one wrap for that step, and the close is not wrapped.
     assert recorder.wrap_names() == [
         'before_handler_run',
-        'wrap_enter',
-        'wrap_exit',
         'wrap_enter',
         'wrap_exit',
         'after_handler_run',
@@ -879,7 +875,8 @@ async def test_wraps_nest_in_registration_order(streaming):
 
     step = ['a-enter', 'b-enter', 'b-exit', 'a-exit']
     assert log[: len(step)] == step
-    assert len(log) == len(step) * (3 if streaming else 1)
+    # A one-event stream is two steps: the event and the end of the stream.
+    assert len(log) == len(step) * (2 if streaming else 1)
 
 
 @pytest.mark.asyncio

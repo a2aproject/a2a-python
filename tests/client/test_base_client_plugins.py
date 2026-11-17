@@ -212,8 +212,8 @@ async def test_streaming_reports_events_and_final_call():
     assert responses[-1].payload is None
     assert responses[-1].error is None
     # Every step is wrapped separately, and each wrap closes before the
-    # consumer sees the event: one step per event, one for the end of the
-    # stream, one for the close.
+    # consumer sees the event: one step per event, plus one for the end of
+    # the stream. Closing the stream is not wrapped.
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
@@ -224,8 +224,6 @@ async def test_streaming_reports_events_and_final_call():
         'wrap_exit',
         'after_client_request',
         'consumer',
-        'wrap_enter',
-        'wrap_exit',
         'wrap_enter',
         'wrap_exit',
         'after_client_request',
@@ -248,14 +246,12 @@ async def test_stream_stopped_early_gets_final_call():
 
     assert recorder.hooks('after_client_request')[-1].is_final
     # Abandoning the stream leaves no wrap open: one step for the consumed
-    # event, one for the close.
+    # event, and the close itself is not wrapped.
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
         'wrap_exit',
         'after_client_request',
-        'wrap_enter',
-        'wrap_exit',
         'after_client_request',
     ]
 
@@ -291,14 +287,12 @@ async def test_transport_errors_reach_after_client_request():
     assert isinstance(
         recorder.hooks('after_client_request')[-1].error, ConnectionError
     )
-    # The step that raises exits its wrap, as does the close.
+    # The step that raises still exits its wrap before the final hook.
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
         'wrap_exit',
         'after_client_request',
-        'wrap_enter',
-        'wrap_exit',
         'wrap_enter',
         'wrap_exit',
         'after_client_request',
@@ -505,7 +499,8 @@ async def test_wraps_nest_in_registration_order(streaming):
 
     step = ['a-enter', 'b-enter', 'b-exit', 'a-exit']
     assert log[: len(step)] == step
-    assert len(log) == len(step) * (3 if streaming else 1)
+    # A one-event stream is two steps: the event and the end of the stream.
+    assert len(log) == len(step) * (2 if streaming else 1)
 
 
 @pytest.mark.asyncio
