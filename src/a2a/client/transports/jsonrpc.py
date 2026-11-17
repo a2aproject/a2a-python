@@ -6,8 +6,6 @@ from contextlib import aclosing
 from typing import Any, NoReturn
 from uuid import uuid4
 
-import httpx
-
 from google.protobuf import json_format
 from jsonrpc.jsonrpc2 import JSONRPC20Request
 
@@ -37,6 +35,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils._httpx_compat import AsyncClient
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -56,7 +55,7 @@ class JsonRpcTransport(ClientTransport):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: AsyncClient,
         agent_card: AgentCard,
         url: str,
         is_shared_httpx: bool = False,

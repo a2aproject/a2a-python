@@ -14,7 +14,6 @@ from contextlib import asynccontextmanager
 from typing import Any, cast
 from uuid import uuid4
 
-import httpx
 import pytest
 
 from a2a.client.base_client import BaseClient
@@ -42,11 +41,12 @@ from a2a.types import (
     SubscribeToTaskRequest,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils._httpx_compat import httpx_lib
 from google.protobuf.json_format import MessageToDict
 from starlette.applications import Starlette
 
 
-pytestmark = pytest.mark.timeout(10)
+pytestmark = [pytest.mark.timeout(10), pytest.mark.httpx2]
 
 
 class _MessageExecutor(AgentExecutor):
@@ -101,8 +101,8 @@ def client():
     )
     return ClientFactory(
         config=ClientConfig(
-            httpx_client=httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            httpx_client=httpx_lib.AsyncClient(
+                transport=httpx_lib.ASGITransport(app=app),
                 base_url='http://test',
             )
         )
@@ -146,7 +146,7 @@ async def test_stream_message_no_athrow(client: BaseClient) -> None:
         await client.close()
 
 
-class _OpenResponseStream(httpx.AsyncByteStream):
+class _OpenResponseStream(httpx_lib.AsyncByteStream):
     def __init__(self, payload: bytes) -> None:
         self.payload = payload
         self.closed = False
@@ -180,7 +180,9 @@ async def _streaming_client(
     message_reply: bool = False,
     reject_response: bool = False,
     subscribe_fallback: bool = False,
-) -> AsyncIterator[tuple[BaseClient, httpx.AsyncClient, _OpenResponseStream]]:
+) -> AsyncIterator[
+    tuple[BaseClient, httpx_lib.AsyncClient, _OpenResponseStream]
+]:
     legacy = version == '0.3'
     task = {
         'id': 'task',
@@ -224,10 +226,10 @@ async def _streaming_client(
     response_stream = _OpenResponseStream(b'')
     methods: list[str] = []
 
-    def respond(request: httpx.Request) -> httpx.Response:
+    def respond(request: httpx_lib.Request) -> httpx_lib.Response:
         methods.append(request.method)
         if subscribe_fallback and request.method == 'POST':
-            return httpx.Response(405)
+            return httpx_lib.Response(405)
         data = event
         if binding == 'JSONRPC':
             data = {
@@ -236,7 +238,7 @@ async def _streaming_client(
                 'result': event,
             }
         response_stream.payload = f'data: {json.dumps(data)}\n\n'.encode()
-        return httpx.Response(
+        return httpx_lib.Response(
             200,
             headers={'Content-Type': 'text/event-stream'},
             stream=response_stream,
@@ -262,8 +264,8 @@ async def _streaming_client(
             )
         ],
     )
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(respond)
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(respond)
     ) as http:
         client = ClientFactory(
             ClientConfig(

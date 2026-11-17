@@ -240,11 +240,13 @@ class JSONRPC03Adapter:
         else:
             raise ValueError(f'Unsupported method {method}')
 
-        return JSONResponse(
-            content=result.model_dump(
-                mode='json', by_alias=True, exclude_none=True
-            )
+        content = result.model_dump(
+            mode='json', by_alias=True, exclude_none=True
         )
+        # exclude_none also drops the null result of a successful delete, but
+        # JSON-RPC 2.0 requires the result member in every success response.
+        content.setdefault('result', None)
+        return JSONResponse(content=content)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def _process_streaming_request(

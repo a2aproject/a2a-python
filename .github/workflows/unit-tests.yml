@@ -129,3 +129,39 @@ jobs:
 
       - name: Show coverage summary in log
         run: uv run coverage report
+
+  # httpx2 testing - Running test on httpx2 for marked tests
+  httpx2:
+    name: Test with httpx2 (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    if: github.repository == 'a2aproject/a2a-python'
+
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+
+      - name: Install uv for Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Add uv to PATH
+        run: |
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: uv sync --locked --group httpx2
+
+      # httpx_lib silently falls back to httpx when httpx2 is missing, thus installing httpx2 is required
+      - name: Verify httpx2 is the installed flavor
+        run: |
+          uv run python -c "
+          from a2a.utils._httpx_compat import httpx_lib
+          assert httpx_lib.__name__ == 'httpx2', httpx_lib.__name__
+          "
+
+      - name: Run tests
+        run: uv run pytest -m httpx2

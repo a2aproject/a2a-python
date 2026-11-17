@@ -37,6 +37,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils._httpx_compat import AsyncClient, HTTPStatusError, Request
 from a2a.utils.errors import A2A_REASON_TO_ERROR, MethodNotFoundError
 from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -103,7 +104,7 @@ class RestTransport(ClientTransport):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: AsyncClient,
         agent_card: AgentCard,
         url: str,
         is_shared_httpx: bool = False,
@@ -309,7 +310,7 @@ class RestTransport(ClientTransport):
             f'/pushNotificationConfigs/{_quote_id(request.id)}',
             request.tenant,
         )
-        http_request = self.httpx_client.build_request(
+        http_request: Request = self.httpx_client.build_request(
             'DELETE',
             f'{self.url}{path}',
             params=params,
@@ -377,7 +378,7 @@ class RestTransport(ClientTransport):
         """Returns the full path, prepending the tenant if provided."""
         return f'/{tenant}{base_path}' if tenant else base_path
 
-    def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
+    def _handle_http_error(self, e: HTTPStatusError) -> NoReturn:
         """Handles HTTP status errors and raises the appropriate A2AError."""
         try:
             error_payload = e.response.json()
@@ -446,7 +447,7 @@ class RestTransport(ClientTransport):
         if isinstance(payload, dict) and 'error' in payload:
             self._handle_sse_error(sse_data)
 
-    async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
+    async def _send_request(self, request: Request) -> dict[str, Any]:
         return await send_http_request(
             self.httpx_client, request, self._handle_http_error
         )
