@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from a2a.compat.v0_3 import jsonrpc_adapter
+from a2a.compat.v0_3 import jsonrpc_adapter, types as types_v03
 from a2a.compat.v0_3.jsonrpc_adapter import JSONRPC03Adapter
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -29,6 +29,9 @@ from a2a.utils.errors import (
 )
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
+
+
+pytestmark = pytest.mark.httpx2
 
 
 logger = logging.getLogger(__name__)
@@ -160,6 +163,26 @@ def test_get_task_v03_compat(
     assert 'result' in data
     assert data['result']['id'] == 'test_task_id'
     assert data['result']['status']['state'] == 'completed'
+
+
+def test_delete_push_notification_config_v03_compat_returns_null_result(
+    client: TestClient, mock_handler: AsyncMock
+) -> None:
+    """A successful delete carries `"result": null`, as JSON-RPC 2.0 requires."""
+    mock_handler.on_delete_task_push_notification_config.return_value = None
+    request_payload = {
+        'jsonrpc': '2.0',
+        'id': '5',
+        'method': 'tasks/pushNotificationConfig/delete',
+        'params': {'id': 'test_task_id', 'pushNotificationConfigId': 'cfg'},
+    }
+
+    response = client.post('/', json=request_payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data == {'jsonrpc': '2.0', 'id': '5', 'result': None}
+    types_v03.DeleteTaskPushNotificationConfigResponse.model_validate(data)
 
 
 def test_get_extended_agent_card_v03_compat(

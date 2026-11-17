@@ -1,5 +1,3 @@
-import httpx
-
 from a2a.auth.user import UnauthenticatedUser, User
 from a2a.helpers.proto_helpers import (
     new_task_from_user_message,
@@ -26,6 +24,7 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from starlette.applications import Starlette
 from starlette.requests import Request
 
@@ -138,7 +137,7 @@ class TestAgentExecutor(AgentExecutor):
 
 
 def create_agent_app(
-    url: str, notification_client: httpx.AsyncClient
+    url: str, notification_client: httpx_lib.AsyncClient
 ) -> Starlette:
     """Creates a new HTTP+REST Starlette application for the test agent."""
     push_config_store = InMemoryPushNotificationConfigStore()
@@ -191,7 +190,7 @@ class _HeaderUserContextBuilder(DefaultServerCallContextBuilder):
 
 
 def create_multi_user_agent_app(
-    url: str, notification_client: httpx.AsyncClient
+    url: str, notification_client: httpx_lib.AsyncClient
 ) -> Starlette:
     """Creates a multi-user variant of the test agent app.
 
