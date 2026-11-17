@@ -4,8 +4,9 @@ import socket
 import sys
 import time
 
-import httpx
 import uvicorn
+
+from a2a.utils._httpx_compat import httpx_lib
 
 
 def find_free_port():
@@ -26,8 +27,8 @@ def wait_for_server_ready(
     """Polls the provided URL endpoint until the server is up."""
     start_time = time.time()
     while True:
-        with contextlib.suppress(httpx.ConnectError):
-            with httpx.Client(headers=headers) as client:
+        with contextlib.suppress(httpx_lib.ConnectError):
+            with httpx_lib.Client(headers=headers) as client:
                 response = client.get(url)
                 if response.status_code == 200:
                     return

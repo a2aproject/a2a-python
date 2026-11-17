@@ -2,7 +2,6 @@ import json
 
 from typing import Any
 
-import httpx
 import pytest
 
 from a2a.client.transports.jsonrpc import JsonRpcTransport
@@ -15,7 +14,11 @@ from a2a.types.a2a_pb2 import (
     SendMessageRequest,
     StreamResponse,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from google.protobuf.json_format import MessageToDict
+
+
+pytestmark = pytest.mark.httpx2
 
 
 @pytest.mark.asyncio
@@ -44,7 +47,7 @@ async def test_streaming_transport_accepts_media_type_case(
         )
     )
 
-    def respond(request: httpx.Request) -> httpx.Response:
+    def respond(request: httpx_lib.Request) -> httpx_lib.Response:
         payload: dict[str, Any] = MessageToDict(expected)
         if transport_class is JsonRpcTransport:
             payload = {
@@ -54,12 +57,12 @@ async def test_streaming_transport_accepts_media_type_case(
             }
         serialized = json.dumps(payload)
         body = f'data: {serialized}\n\n' if is_sse else serialized
-        return httpx.Response(
+        return httpx_lib.Response(
             200, headers={'Content-Type': content_type}, text=body
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(respond)
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(respond)
     ) as http_client:
         transport = transport_class(
             httpx_client=http_client,

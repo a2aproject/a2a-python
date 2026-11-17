@@ -22,6 +22,9 @@ from a2a.types.a2a_pb2 import (
 )
 
 
+pytestmark = pytest.mark.httpx2
+
+
 @pytest.fixture
 def mock_transport() -> AsyncMock:
     return AsyncMock(spec=ClientTransport)
