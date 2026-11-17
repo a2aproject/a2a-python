@@ -1120,6 +1120,11 @@ class ActiveTask:
                 pass
         return task
 
+    @property
+    def task_created(self) -> bool:
+        """Whether a task exists, so ``get_task()`` will not block."""
+        return self._task_created.is_set()
+
     async def get_task(self) -> Task:
         """Get task from db."""
         await self._task_created.wait()

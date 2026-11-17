@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from a2a.client import ClientConfig, ClientFactory
@@ -12,15 +11,19 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    GetTaskRequest,
     ListTasksRequest,
     ListTasksResponse,
     Message,
     SendMessageRequest,
     Task,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import TransportProtocol
-from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
+
+
+pytestmark = pytest.mark.httpx2
 
 
 class TestTenantDecorator:
@@ -49,7 +52,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_rest(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -70,8 +73,7 @@ class TestTenantDecorator:
         request = SendMessageRequest(message=Message(parts=[{'text': 'hi'}]))
         await client._transport.send_message(request)
 
-        # Check that tenant was populated in request
-        assert request.tenant == 'tenant-1'
+        assert request.tenant == ''
 
         # Check that path was prepended in the underlying transport
         mock_httpx.build_request.assert_called()
@@ -86,7 +88,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_jsonrpc(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -142,7 +144,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_explicit_override(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx_lib.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -220,8 +222,8 @@ class TestJSONRPCTenantIntegration:
         """
         # 1. Setup the client using the server app as the transport
         # We use ASGITransport so httpx calls go directly to the Starlette app
-        transport = ASGITransport(app=server_app)
-        async with AsyncClient(
+        transport = httpx_lib.ASGITransport(app=server_app)
+        async with httpx_lib.AsyncClient(
             transport=transport, base_url='http://testserver'
         ) as httpx_client:
             # Create the A2A client properly configured
@@ -249,3 +251,45 @@ class TestJSONRPCTenantIntegration:
             server_context = call_args[0][1]
             assert isinstance(server_context, ServerCallContext)
             assert server_context.tenant == 'my-test-tenant'
+
+
+@pytest.mark.asyncio
+async def test_reused_request_uses_each_clients_default_tenant() -> None:
+    paths: list[str] = []
+
+    async def respond(request: httpx_lib.Request) -> httpx_lib.Response:
+        paths.append(request.url.path)
+        return httpx_lib.Response(
+            200,
+            json={
+                'id': 'task',
+                'contextId': 'context',
+                'status': {'state': 'TASK_STATE_WORKING'},
+            },
+        )
+
+    request = GetTaskRequest(id='task')
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(respond)
+    ) as http:
+        factory = ClientFactory(
+            ClientConfig(
+                httpx_client=http,
+                supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
+            )
+        )
+        for tenant in ('alpha', 'beta'):
+            card = AgentCard(
+                supported_interfaces=[
+                    AgentInterface(
+                        url='https://agent.example/a2a',
+                        protocol_binding=TransportProtocol.HTTP_JSON,
+                        tenant=tenant,
+                    )
+                ]
+            )
+            client = factory.create(card)
+            await client.get_task(request)
+
+    assert paths == ['/a2a/alpha/tasks/task', '/a2a/beta/tasks/task']
+    assert request.tenant == ''

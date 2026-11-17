@@ -63,6 +63,7 @@ from a2a.utils.constants import (
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
     InternalError,
+    InvalidAgentResponseError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
@@ -427,6 +428,9 @@ class DefaultRequestHandlerV2(RequestHandler):
                         f'context {task.context_id} of task {original_task_id}'
                     )
                 )
+            # Agents must infer the contextId from the task when the message
+            # names only a taskId.
+            original_context_id = original_context_id or task.context_id
 
         # Build context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(
@@ -516,6 +520,11 @@ class DefaultRequestHandlerV2(RequestHandler):
                 # pushed after a Message.
 
         if result is None:
+            if not active_task.task_created:
+                # A silent executor means get_task() would block forever.
+                raise InvalidAgentResponseError(
+                    message='Agent execution produced no events'
+                )
             logger.debug('Missing result for task %s', request_context.task_id)
             result = await active_task.get_task()
 
@@ -546,10 +555,12 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         task_id = cast('str', request_context.task_id)
 
+        produced_event = False
         async for event in active_task.subscribe(
             request=request_context,
             include_initial_task=False,
         ):
+            produced_event = True
             # Do NOT break here as we rely on AgentExecutor to yield control.
             # ActiveTask consumer (see active_task.py) validates the event
             # stream and raises InvalidAgentResponseError on misbehaving agents:
@@ -561,6 +572,13 @@ class DefaultRequestHandlerV2(RequestHandler):
                 yield apply_history_length(event, params.configuration)
             else:
                 yield event
+
+        if not produced_event and not active_task.task_created:
+            # A silent executor would otherwise end the stream without the
+            # Task or Message it must start with.
+            raise InvalidAgentResponseError(
+                message='Agent execution produced no events'
+            )
 
     @server_plugin_hooks('create_task_push_notification_config')
     @validate_request_params

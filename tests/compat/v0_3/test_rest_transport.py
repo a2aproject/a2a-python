@@ -1,12 +1,21 @@
 import json
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
+import pytest_asyncio
 
 from a2a.client.errors import A2AClientError
+from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.rest_transport import CompatRestTransport
+from a2a.server.context import ServerCallContext
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_rest_routes
+from a2a.server.tasks import (
+    InMemoryPushNotificationConfigStore,
+    InMemoryTaskStore,
+)
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -19,20 +28,27 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     Message,
     Role,
+    SendMessageConfiguration,
     SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
+    TaskState,
     TaskStatus,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
+from starlette.applications import Starlette
+
+
+pytestmark = pytest.mark.httpx2
 
 
 @pytest.fixture
 def mock_httpx_client():
-    client = AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx_lib.AsyncClient)
     client.is_closed = False
     return client
 
@@ -55,7 +71,7 @@ def transport(mock_httpx_client, agent_card):
 async def test_compat_rest_transport_send_message_response_msg_parsing(
     transport,
 ):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.json.return_value = {
         'msg': {'messageId': 'msg-123', 'role': 'agent'}
     }
@@ -79,7 +95,7 @@ async def test_compat_rest_transport_send_message_response_msg_parsing(
 
 @pytest.mark.asyncio
 async def test_compat_rest_transport_send_message_task(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.json.return_value = {'task': {'id': 'task-123'}}
 
     async def mock_send_request(*args, **kwargs):
@@ -192,6 +208,56 @@ async def test_compat_rest_transport_get_extended_agent_card(transport):
 
 
 @pytest.mark.asyncio
+async def test_compat_rest_transport_get_extended_agent_card_keeps_security(
+    transport,
+):
+    """v0.3 servers send the card as JSON, not as the v0.3 proto."""
+    card = types_v03.AgentCard(
+        name='ExtendedAgent',
+        description='Extended',
+        version='1.0.0',
+        url='http://example.com',
+        capabilities=types_v03.AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            types_v03.AgentSkill(
+                id='skill-1',
+                name='Skill',
+                description='Skill',
+                tags=['tag'],
+                security=[{'bearer': []}],
+            )
+        ],
+        security_schemes={
+            'bearer': types_v03.SecurityScheme(
+                root=types_v03.HTTPAuthSecurityScheme(scheme='bearer')
+            )
+        },
+        security=[{'bearer': []}],
+        supports_authenticated_extended_card=True,
+    )
+
+    async def mock_send_request(*args, **kwargs):
+        # Same serialization as REST03Handler.on_get_extended_agent_card.
+        return card.model_dump(mode='json', exclude_none=True)
+
+    transport._send_request = mock_send_request
+
+    response = await transport.get_extended_agent_card(
+        GetExtendedAgentCardRequest()
+    )
+
+    scheme = response.security_schemes['bearer']
+    assert scheme.WhichOneof('scheme') == 'http_auth_security_scheme'
+    assert scheme.http_auth_security_scheme.scheme == 'bearer'
+    assert list(response.security_requirements[0].schemes) == ['bearer']
+    assert list(response.skills[0].security_requirements[0].schemes) == [
+        'bearer'
+    ]
+
+
+@pytest.mark.asyncio
 async def test_compat_rest_transport_get_extended_agent_card_not_supported(
     transport,
 ):
@@ -233,31 +299,31 @@ async def test_compat_rest_transport_send_message_streaming(transport):
 
 
 def create_405_error():
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.status_code = 405
     mock_response.json.return_value = {
         'type': 'MethodNotAllowed',
         'message': 'Method Not Allowed',
     }
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx_lib.Request)
     mock_request.url = 'http://example.com/v1/tasks/task-123:subscribe'
 
-    status_error = httpx.HTTPStatusError(
+    status_error = httpx_lib.HTTPStatusError(
         '405 Method Not Allowed', request=mock_request, response=mock_response
     )
     raise A2AClientError('HTTP Error 405') from status_error
 
 
 def create_500_error():
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.status_code = 500
     mock_response.json.return_value = {
         'type': 'InternalError',
         'message': 'Internal Error',
     }
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx_lib.Request)
 
-    status_error = httpx.HTTPStatusError(
+    status_error = httpx_lib.HTTPStatusError(
         '500 Internal Error', request=mock_request, response=mock_response
     )
     raise A2AClientError('HTTP Error 500') from status_error
@@ -448,17 +514,17 @@ async def test_compat_rest_transport_subscribe_method_override_avoids_retry_post
 
 
 def test_compat_rest_transport_handle_http_error(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.status_code = 400
     mock_response.json.return_value = {
         'type': 'InvalidParamsError',
         'message': 'Invalid parameters',
     }
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx_lib.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx_lib.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -469,14 +535,14 @@ def test_compat_rest_transport_handle_http_error(transport):
 
 
 def test_compat_rest_transport_handle_http_error_not_found(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.status_code = 404
     mock_response.json.side_effect = json.JSONDecodeError('msg', 'doc', 0)
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx_lib.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx_lib.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -485,14 +551,14 @@ def test_compat_rest_transport_handle_http_error_not_found(transport):
 
 
 def test_compat_rest_transport_handle_http_error_generic(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.status_code = 500
     mock_response.json.side_effect = json.JSONDecodeError('msg', 'doc', 0)
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx_lib.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx_lib.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -553,10 +619,21 @@ async def test_compat_rest_transport_list_task_push_notification_configs(
 async def test_compat_rest_transport_delete_task_push_notification_config(
     transport,
 ):
-    with pytest.raises(NotImplementedError):
-        await transport.delete_task_push_notification_config(
-            DeleteTaskPushNotificationConfigRequest()
+    mock_execute_request = AsyncMock(return_value={})
+    transport._execute_request = mock_execute_request
+
+    response = await transport.delete_task_push_notification_config(
+        DeleteTaskPushNotificationConfigRequest(
+            task_id='task-123', id='push-123'
         )
+    )
+
+    mock_execute_request.assert_awaited_once_with(
+        'DELETE',
+        '/v1/tasks/task-123/pushNotificationConfigs/push-123',
+        context=None,
+    )
+    assert response is None
 
 
 @pytest.mark.asyncio
@@ -572,6 +649,130 @@ async def test_compat_rest_transport_send_message_empty(transport):
 
     response = await transport.send_message(req)
     assert response == SendMessageResponse()
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_without_configuration(
+    transport,
+):
+    """No configuration is sent, so the server keeps its blocking default."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER)
+    )
+    await transport.send_message(req)
+
+    assert 'configuration' not in sent
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_with_configuration(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert sent['configuration']['blocking'] is True
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_uses_json_names(transport):
+    """The v0.3 spec requires json_name keys in HTTP+JSON bodies."""
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {}
+
+    transport._execute_request = mock_execute_request
+
+    req = SendMessageRequest(
+        message=Message(
+            message_id='msg-1',
+            context_id='ctx-1',
+            task_id='task-1',
+            role=Role.ROLE_USER,
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+    await transport.send_message(req)
+
+    assert 'request' not in sent
+    assert sent['message']['messageId'] == 'msg-1'
+    assert sent['message']['contextId'] == 'ctx-1'
+    assert sent['message']['taskId'] == 'task-1'
+    assert sent['configuration']['acceptedOutputModes'] == ['text/plain']
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_send_message_streaming_uses_json_names(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_send_stream_request(method, path, context=None, json=None):
+        sent.update(json)
+        yield StreamResponse(message=Message(message_id='msg-123'))
+
+    transport._send_stream_request = mock_send_stream_request
+
+    req = SendMessageRequest(
+        message=Message(
+            message_id='msg-1', context_id='ctx-1', role=Role.ROLE_USER
+        )
+    )
+    _ = [event async for event in transport.send_message_streaming(req)]
+
+    assert 'request' not in sent
+    assert sent['message']['messageId'] == 'msg-1'
+    assert sent['message']['contextId'] == 'ctx-1'
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_create_task_push_notification_config_uses_json_names(
+    transport,
+):
+    sent: dict = {}
+
+    async def mock_execute_request(method, path, context=None, json=None):
+        sent.update(json)
+        return {
+            'name': 'tasks/task-123/pushNotificationConfigs/push-123',
+            'pushNotificationConfig': {'url': 'http://push', 'id': 'push-123'},
+        }
+
+    transport._execute_request = mock_execute_request
+
+    req = TaskPushNotificationConfig(
+        task_id='task-123', id='push-123', url='http://push'
+    )
+    await transport.create_task_push_notification_config(req)
+
+    assert sent['configId'] == 'push-123'
+    assert sent['config']['pushNotificationConfig']['id'] == 'push-123'
+    assert 'config_id' not in sent
 
 
 @pytest.mark.asyncio
@@ -603,17 +804,17 @@ async def test_compat_rest_transport_get_task_with_history(transport):
 
 
 def test_compat_rest_transport_handle_http_error_invalid_error_type(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.status_code = 500
     mock_response.json.return_value = {
         'type': 123,
         'message': 'Invalid parameters',
     }
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx_lib.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx_lib.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -632,14 +833,14 @@ def test_compat_rest_transport_handle_http_error_invalid_error_type(transport):
 def test_compat_rest_transport_handle_http_error_non_object_body(
     transport, status_code, body, expected_error
 ):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.status_code = status_code
     mock_response.json.return_value = body
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx_lib.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx_lib.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -648,17 +849,17 @@ def test_compat_rest_transport_handle_http_error_non_object_body(
 
 
 def test_compat_rest_transport_handle_http_error_unknown_error_type(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx_lib.Response)
     mock_response.status_code = 500
     mock_response.json.return_value = {
         'type': 'SomeUnknownErrorClass',
         'message': 'Unknown',
     }
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx_lib.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx_lib.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -700,7 +901,7 @@ async def test_compat_rest_transport_execute_request(
     mock_send_http_request, transport
 ):
     mock_send_http_request.return_value = {'ok': True}
-    mock_request = httpx.Request('POST', 'http://example.com')
+    mock_request = httpx_lib.Request('POST', 'http://example.com')
     transport.httpx_client.build_request.return_value = mock_request
 
     res = await transport._execute_request(
@@ -719,3 +920,73 @@ async def test_compat_rest_transport_execute_request(
     mock_send_http_request.assert_called_once_with(
         transport.httpx_client, mock_request, transport._handle_http_error
     )
+
+
+class TestCompatRestTransportPathEncoding:
+    """Ids with reserved URL characters reach their own resource.
+
+    Runs a real request handler behind the v0.3 REST routes, so a wrong path
+    reads the wrong resource.
+    """
+
+    @pytest_asyncio.fixture
+    async def transport(self) -> AsyncGenerator[CompatRestTransport, None]:
+        task_store = InMemoryTaskStore()
+        await task_store.save(
+            Task(
+                id='t1',
+                context_id='c1',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            ),
+            ServerCallContext(),
+        )
+        agent_card = AgentCard(
+            capabilities=AgentCapabilities(push_notifications=True)
+        )
+        request_handler = DefaultRequestHandler(
+            None,
+            task_store,
+            agent_card,
+            push_config_store=InMemoryPushNotificationConfigStore(),
+        )
+        app = Starlette(
+            routes=create_rest_routes(
+                request_handler=request_handler, enable_v0_3_compat=True
+            )
+        )
+        httpx_client = httpx_lib.AsyncClient(
+            transport=httpx_lib.ASGITransport(app=app)
+        )
+        transport = CompatRestTransport(
+            httpx_client, agent_card, 'http://agent'
+        )
+        yield transport
+        await transport.close()
+
+    @pytest.mark.asyncio
+    async def test_get_push_config_does_not_return_config_named_by_prefix(
+        self, transport: CompatRestTransport
+    ):
+        for config_id, url in (
+            ('alerts', 'https://hooks.example.com/alerts'),
+            ('alerts#ops', 'https://hooks.example.com/ops'),
+        ):
+            await transport.create_task_push_notification_config(
+                TaskPushNotificationConfig(task_id='t1', id=config_id, url=url)
+            )
+
+        config = await transport.get_task_push_notification_config(
+            GetTaskPushNotificationConfigRequest(task_id='t1', id='alerts#ops')
+        )
+
+        assert config.id == 'alerts#ops'
+        assert config.url == 'https://hooks.example.com/ops'
+
+    @pytest.mark.asyncio
+    async def test_get_task_does_not_return_task_named_by_id_prefix(
+        self, transport: CompatRestTransport
+    ):
+        # The v0.3 client maps the server's 404 for an unknown task to
+        # MethodNotFoundError.
+        with pytest.raises(MethodNotFoundError):
+            await transport.get_task(GetTaskRequest(id='t1?x'))

@@ -3545,3 +3545,59 @@ async def test_push_sender_failure_does_not_propagate(agent_card):
     await request_handler._send_push_notification_if_needed(event.id, event)
 
     mock_push_sender.send_notification.assert_awaited_once_with(event.id, event)
+
+
+class _ContextRecordingAgent(AgentExecutor):
+    """Records the context id each execution is handed."""
+
+    def __init__(self) -> None:
+        self.seen_context_ids: list[str | None] = []
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.seen_context_ids.append(context.context_id)
+        updater = TaskUpdater(
+            event_queue,
+            context.task_id,  # type: ignore[arg-type]
+            context.context_id,  # type: ignore[arg-type]
+        )
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_task_only_message_infers_context_id_from_task(agent_card):
+    """A2A 3.4.3: a message naming only a taskId inherits the task's context."""
+    agent = _ContextRecordingAgent()
+    task_store = InMemoryTaskStore()
+    call_context = create_server_call_context()
+    task = create_sample_task(
+        task_id='task-awaiting-input',
+        status_state=TaskState.TASK_STATE_INPUT_REQUIRED,
+        context_id='ctx-from-stored-task',
+    )
+    await task_store.save(task, call_context)
+    handler = DefaultRequestHandler(
+        agent_executor=agent,
+        task_store=task_store,
+        agent_card=agent_card,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            message_id='msg-follow-up',
+            role=Role.ROLE_USER,
+            parts=[Part(text='Friday')],
+            task_id=task.id,
+        )
+    )
+
+    result = await handler.on_message_send(params, call_context)
+
+    assert agent.seen_context_ids == [task.context_id]
+    assert result.context_id == task.context_id
+    assert params.message.context_id == task.context_id

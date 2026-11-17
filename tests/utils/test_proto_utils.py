@@ -7,7 +7,6 @@ import logging
 
 from typing import Any, cast
 
-import httpx
 import pytest
 
 from a2a.types.a2a_pb2 import (
@@ -24,12 +23,16 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import proto_utils
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.errors import InvalidParamsError
 from google.protobuf.descriptor import FieldDescriptor
 from google.protobuf.json_format import MessageToDict, Parse, ParseError
 from google.protobuf.message import Message as ProtobufMessage
 from google.protobuf.timestamp_pb2 import Timestamp
 from starlette.datastructures import QueryParams
+
+
+pytestmark = pytest.mark.httpx2
 
 
 class TestToStreamResponse:
@@ -317,7 +320,7 @@ class TestRestParams:
     def _message_to_rest_params(self, message: ProtobufMessage) -> QueryParams:
         """Converts a message to REST query parameters."""
         rest_dict = MessageToDict(message)
-        return httpx.Request(
+        return httpx_lib.Request(
             'GET', 'http://api.example.com', params=rest_dict
         ).url.params
 
@@ -482,3 +485,20 @@ class TestParseLenient:
         """Bytes that are not UTF-8 are malformed JSON, not an internal error."""
         with pytest.raises(ParseError):
             proto_utils.parse_lenient(b'{"messageId": "\xff"}', Message())
+
+    @pytest.mark.parametrize(
+        'data',
+        [[], None, 0, True],
+        ids=['empty-list', 'none', 'int', 'bool'],
+    )
+    def test_decoded_value_that_is_not_an_object_raises(
+        self, data: Any
+    ) -> None:
+        """A decoded value that is not a dict is not read as an empty message."""
+        with pytest.raises(ParseError, match='Expected a JSON object'):
+            proto_utils.parse_lenient(data, Task())
+
+    def test_str_is_parsed_as_text_not_as_decoded_value(self) -> None:
+        """A str is raw ProtoJSON text, so it never reaches the object check."""
+        with pytest.raises(ParseError, match='Failed to load JSON'):
+            proto_utils.parse_lenient('id', Task())

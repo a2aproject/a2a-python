@@ -1,13 +1,21 @@
 import json
+import re
 
 from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, NoReturn
-
-import httpx
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
+from a2a.utils._httpx_compat import (
+    HTTP_STATUS_ERROR,
+    REQUEST_ERROR,
+    TIMEOUT_EXCEPTION,
+    AsyncClient,
+    HTTPStatusError,
+    Request,
+    Response,
+)
 
 
 def _default_sse_error_handler(sse_data: str) -> NoReturn:
@@ -16,25 +24,24 @@ def _default_sse_error_handler(sse_data: str) -> NoReturn:
 
 @contextmanager
 def handle_http_exceptions(
-    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
-    | None = None,
+    status_error_handler: Callable[[HTTPStatusError], NoReturn] | None = None,
 ) -> Iterator[None]:
     """Handles common HTTP exceptions for REST and JSON-RPC transports.
 
     Args:
-        status_error_handler: Optional handler for `httpx.HTTPStatusError`.
+        status_error_handler: Optional handler for an HTTP status error.
             If provided, this handler should raise an appropriate domain-specific exception.
             If not provided, a default `A2AClientError` will be raised.
     """
     try:
         yield
-    except httpx.TimeoutException as e:
+    except TIMEOUT_EXCEPTION as e:
         raise A2AClientTimeoutError('Client Request timed out') from e
-    except httpx.HTTPStatusError as e:
+    except HTTP_STATUS_ERROR as e:
         if status_error_handler:
             status_error_handler(e)
         raise A2AClientError(f'HTTP Error {e.response.status_code}: {e}') from e
-    except httpx.RequestError as e:
+    except REQUEST_ERROR as e:
         raise A2AClientError(f'Network communication error: {e}') from e
     except json.JSONDecodeError as e:
         raise A2AClientError(f'JSON Decode Error: {e}') from e
@@ -51,10 +58,9 @@ def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
 
 
 async def send_http_request(
-    httpx_client: httpx.AsyncClient,
-    request: httpx.Request,
-    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
-    | None = None,
+    httpx_client: AsyncClient,
+    request: Request,
+    status_error_handler: Callable[[HTTPStatusError], NoReturn] | None = None,
 ) -> dict[str, Any]:
     """Sends an HTTP request and parses the JSON response, handling common exceptions."""
     if httpx_client.is_closed:
@@ -65,19 +71,50 @@ async def send_http_request(
         return response.json()
 
 
+_SSE_LINE_END = re.compile(r'\r\n|\r|\n')
+
+
+async def _aiter_sse_lines(
+    response: Response,
+) -> AsyncGenerator[str, None]:
+    """Yields lines ended only by CRLF, LF or CR, unlike `aiter_lines()`.
+
+    The unfinished line is kept as a list of pieces and joined once, and
+    only the new chunk is scanned, so a long `data:` line that spans many
+    chunks costs linear rather than quadratic time.
+    """
+    pieces: list[str] = []
+    held_cr = False
+    async for chunk in response.aiter_text():
+        text = '\r' + chunk if held_cr else chunk
+        # Hold a trailing CR back: the next chunk may start with its LF.
+        held_cr = text.endswith('\r')
+        *lines, rest = _SSE_LINE_END.split(text[:-1] if held_cr else text)
+        if lines:
+            lines[0] = ''.join(pieces) + lines[0]
+            pieces = []
+            for line in lines:
+                yield line
+        if rest:
+            pieces.append(rest)
+    tail = ''.join(pieces)
+    # A held CR at end of stream still ends a line, even an empty one. That
+    # blank line is what dispatches the last event, so yield it too.
+    if held_cr or tail:
+        yield tail
+
+
 async def parse_sse_stream(
-    response: httpx.Response,
+    response: Response,
 ) -> AsyncGenerator[tuple[str, str], None]:
-    """Yields (event_name, data) from a streaming httpx.Response.
+    """Yields (event_name, data) from a streaming response.
 
     Conforms to the W3C Server-Sent Events specification.
     """
     event_name = 'message'
     payload_chunks: list[str] = []
 
-    async for line in response.aiter_lines():
-        raw_line = line.rstrip('\r\n')
-
+    async for raw_line in _aiter_sse_lines(response):
         # Empty line denotes the completion of the current event block
         if not raw_line:
             if payload_chunks:
@@ -106,11 +143,10 @@ async def parse_sse_stream(
 
 
 async def send_http_stream_request(
-    httpx_client: httpx.AsyncClient,
+    httpx_client: AsyncClient,
     method: str,
     url: str,
-    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
-    | None = None,
+    status_error_handler: Callable[[HTTPStatusError], NoReturn] | None = None,
     sse_error_handler: Callable[[str], NoReturn] = _default_sse_error_handler,
     **kwargs: Any,
 ) -> AsyncGenerator[str]:
@@ -135,15 +171,16 @@ async def send_http_stream_request(
         ) as response:
             try:
                 response.raise_for_status()
-            except httpx.HTTPStatusError as e:
+            except HTTP_STATUS_ERROR as e:
                 # Read upfront streaming error content immediately, otherwise lower-level handlers
                 # (e.g. response.json()) crash with 'ResponseNotRead' Access errors.
                 await response.aread()
                 raise e
 
             # If the response is not a stream, read it standardly (e.g., upfront JSON-RPC error payload)
-            if 'text/event-stream' not in response.headers.get(
-                'content-type', ''
+            if (
+                'text/event-stream'
+                not in response.headers.get('content-type', '').lower()
             ):
                 content = await response.aread()
                 yield content.decode('utf-8')
@@ -172,9 +209,12 @@ class _SSEEventSource:
     collision (see https://bugs.python.org/issue38559).
     """
 
+    if TYPE_CHECKING:
+        _request: Request
+
     def __init__(
         self,
-        client: httpx.AsyncClient,
+        client: AsyncClient,
         method: str,
         url: str,
         **kwargs: Any,
@@ -189,9 +229,9 @@ class _SSEEventSource:
             method, url, headers=headers, **kwargs
         )
         self._client = client
-        self._response: httpx.Response | None = None
+        self._response: Response | None = None
 
-    async def __aenter__(self) -> httpx.Response:
+    async def __aenter__(self) -> Response:
         self._response = await self._client.send(self._request, stream=True)
         return self._response
 
