@@ -14,6 +14,8 @@ from a2a.client.errors import A2AClientError
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
     get_http_args,
+    get_http_params,
+    get_http_url,
     handle_http_exceptions,
     send_http_request,
     send_http_stream_request,
@@ -109,7 +111,7 @@ class RestTransport(ClientTransport):
         is_shared_httpx: bool = False,
     ):
         """Initializes the RestTransport."""
-        self.url = url.removesuffix('/')
+        self.url = get_http_url(url, '')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
         self.is_shared_httpx = is_shared_httpx
@@ -308,8 +310,8 @@ class RestTransport(ClientTransport):
         )
         http_request: Request = self.httpx_client.build_request(
             'DELETE',
-            f'{self.url}{path}',
-            params=params,
+            get_http_url(self.url, path),
+            params=get_http_params(self.url, params),
             **get_http_args(context),
         )
         if self.httpx_client.is_closed:
@@ -409,10 +411,13 @@ class RestTransport(ClientTransport):
         path = self._get_path(target, tenant)
         http_kwargs = get_http_args(context)
 
+        if params := get_http_params(self.url):
+            http_kwargs['params'] = params
+
         async for sse_data in send_http_stream_request(
             self.httpx_client,
             method,
-            f'{self.url}{path}',
+            get_http_url(self.url, path),
             self._handle_http_error,
             self._handle_sse_error,
             json=json,
@@ -455,9 +460,9 @@ class RestTransport(ClientTransport):
 
         request = self.httpx_client.build_request(
             method,
-            f'{self.url}{path}',
+            get_http_url(self.url, path),
             json=json,
-            params=params,
+            params=get_http_params(self.url, params),
             **http_kwargs,
         )
         return await self._send_request(request)
