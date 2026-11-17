@@ -10,6 +10,9 @@ from starlette.routing import BaseRoute
 from starlette.testclient import TestClient
 
 
+pytestmark = pytest.mark.httpx2
+
+
 @pytest.fixture
 def agent_card():
     return AgentCard()

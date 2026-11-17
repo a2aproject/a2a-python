@@ -22,13 +22,16 @@ from a2a.types.a2a_pb2 import (
     TaskState as TaskState10,
     TaskStatus as TaskStatus10,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.errors import TaskNotFoundError
 from fastapi import FastAPI
 from google.protobuf import json_format
-from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 from starlette.datastructures import Headers
 from starlette.requests import Request
+
+
+pytestmark = pytest.mark.httpx2
 
 
 logger = logging.getLogger(__name__)
@@ -100,15 +103,15 @@ async def app(
 
 
 @pytest.fixture
-async def client(app: FastAPI) -> AsyncClient:
-    return AsyncClient(
-        transport=ASGITransport(app=app), base_url='http://testapp'
+async def client(app: FastAPI) -> httpx_lib.AsyncClient:
+    return httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app), base_url='http://testapp'
     )
 
 
 @pytest.mark.anyio
 async def test_send_message_success_message_v03(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     expected_response = a2a_v0_3_pb2.SendMessageResponse(
         msg=a2a_v0_3_pb2.Message(
@@ -143,7 +146,7 @@ async def test_send_message_success_message_v03(
 
 @pytest.mark.anyio
 async def test_send_message_success_task_v03(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     expected_response = a2a_v0_3_pb2.SendMessageResponse(
         task=a2a_v0_3_pb2.Task(
@@ -178,7 +181,7 @@ async def test_send_message_success_task_v03(
 
 @pytest.mark.anyio
 async def test_get_task_v03(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     expected_response = a2a_v0_3_pb2.Task(
         id='test_task_id',
@@ -205,7 +208,7 @@ async def test_get_task_v03(
 
 @pytest.mark.anyio
 async def test_get_task_v03_non_integer_history_length(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     response = await client.get('/v1/tasks/test_task_id?historyLength=abc')
 
@@ -220,7 +223,7 @@ async def test_get_task_v03_non_integer_history_length(
     ['/v1/message:send', '/v1/tasks/test_task_id/pushNotificationConfigs'],
 )
 async def test_invalid_utf8_body_v03_is_bad_request(
-    client: AsyncClient, path: str
+    client: httpx_lib.AsyncClient, path: str
 ) -> None:
     response = await client.post(
         path, content=b'{"message": {"messageId": "\xff"}}'
@@ -232,7 +235,7 @@ async def test_invalid_utf8_body_v03_is_bad_request(
 
 @pytest.mark.anyio
 async def test_delete_push_notification_config_v03(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     request_handler.on_delete_task_push_notification_config.return_value = None
 
@@ -253,7 +256,7 @@ async def test_delete_push_notification_config_v03(
 
 @pytest.mark.anyio
 async def test_delete_push_notification_config_v03_unknown_task_returns_404(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     request_handler.on_delete_task_push_notification_config.side_effect = (
         TaskNotFoundError
@@ -269,7 +272,7 @@ async def test_delete_push_notification_config_v03_unknown_task_returns_404(
 
 @pytest.mark.anyio
 async def test_compat_rest_client_deletes_push_notification_config(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     request_handler.on_delete_task_push_notification_config.return_value = None
     transport = CompatRestTransport(
@@ -303,7 +306,7 @@ async def test_list_tasks_not_in_v03_adapter_routes(
 
 @pytest.mark.anyio
 async def test_cancel_task_v03(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     expected_response = a2a_v0_3_pb2.Task(
         id='test_task_id',
@@ -369,7 +372,7 @@ async def test_v03_streaming_does_not_ascii_escape_non_ascii(
 
 @pytest.mark.anyio
 async def test_v03_message_stream_malformed_json_returns_400(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     response = await client.post(
         '/v1/message:stream',
@@ -385,7 +388,7 @@ async def test_v03_message_stream_malformed_json_returns_400(
 
 @pytest.mark.anyio
 async def test_v03_subscribe_unknown_task_returns_404(
-    client: AsyncClient, request_handler: MagicMock
+    client: httpx_lib.AsyncClient, request_handler: MagicMock
 ) -> None:
     async def not_found(*args: object, **kwargs: object) -> AsyncIterator[None]:
         raise TaskNotFoundError
