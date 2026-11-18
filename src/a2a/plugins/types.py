@@ -77,9 +77,7 @@ class ClientRequest:
         agent_card: The card of the remote agent.
         context: The call context. ``service_parameters`` holds the outgoing
             headers.
-        interface: The Agent Card interface the client selected, which gives
-            the URL, protocol binding and protocol version actually in use.
-            ``None`` for clients not built by `ClientFactory`.
+        interface: The Agent Card interface the client selected.
     """
 
     method: str

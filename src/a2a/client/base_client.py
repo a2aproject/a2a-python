@@ -59,10 +59,7 @@ class BaseClient(Client):
             config: The client configuration.
             transport: The transport used for calls.
             interceptors: Interceptors applied to every call.
-            interface: The card interface this client talks to, as selected
-                by `ClientFactory`. A card can list several, so plugins
-                cannot tell which is in use from the card alone. Defaults to
-                None for clients built without the factory.
+            interface: The card interface this client talks to.
             plugins: Plugin manager whose client hooks run for every call.
                 Defaults to the global manager at construction time.
         """
