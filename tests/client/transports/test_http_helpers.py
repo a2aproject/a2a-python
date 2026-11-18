@@ -66,6 +66,16 @@ async def _byte_chunks(chunks: list[bytes]) -> AsyncIterator[bytes]:
             id='crlf-and-character-split-across-chunks',
         ),
         pytest.param(
+            [b'data: a\r', b'\n', b'data: b\r', b'\n\r', b'\n'],
+            [('message', 'a\nb')],
+            id='split-crlf-is-one-line-ending',
+        ),
+        pytest.param(
+            [b'data: a\r', b'data: b\r', b'\r'],
+            [('message', 'a\nb')],
+            id='cr-separated-data-lines',
+        ),
+        pytest.param(
             [b'data: a\r'],
             [],
             id='event-without-blank-line-is-not-dispatched',

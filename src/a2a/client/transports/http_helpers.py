@@ -84,12 +84,15 @@ async def _aiter_sse_lines(
     chunks costs linear rather than quadratic time.
     """
     pieces: list[str] = []
-    held_cr = False
+    skip_lf = False
     async for chunk in response.aiter_text():
-        text = '\r' + chunk if held_cr else chunk
-        # Hold a trailing CR back: the next chunk may start with its LF.
-        held_cr = text.endswith('\r')
-        *lines, rest = _SSE_LINE_END.split(text[:-1] if held_cr else text)
+        if not chunk:
+            continue
+        # CR already ends the line. Only swallow its optional following LF,
+        # so a complete event can be delivered without waiting for more data.
+        text = chunk.removeprefix('\n') if skip_lf else chunk
+        skip_lf = text.endswith('\r')
+        *lines, rest = _SSE_LINE_END.split(text)
         if lines:
             lines[0] = ''.join(pieces) + lines[0]
             pieces = []
@@ -98,9 +101,7 @@ async def _aiter_sse_lines(
         if rest:
             pieces.append(rest)
     tail = ''.join(pieces)
-    # A held CR at end of stream still ends a line, even an empty one. That
-    # blank line is what dispatches the last event, so yield it too.
-    if held_cr or tail:
+    if tail:
         yield tail
 
 
