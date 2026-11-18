@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from a2a.plugins.base import (
     ClientPlugin,
@@ -18,7 +19,7 @@ from a2a.plugins.types import ClientResponse, ServerResponse
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Callable
 
     from a2a.plugins.types import (
         ClientRequest,
@@ -95,6 +96,12 @@ def _select(
     ]
 
 
+def _overriding(plugins: list[_P], base: type[_P], hook: str) -> list[_P]:
+    """Returns the plugins that override ``base.hook``."""
+    default = getattr(base, hook)
+    return [p for p in plugins if getattr(type(p), hook) is not default]
+
+
 class SequentialPluginManager(PluginManager):
     """Runs plugins one after another in registration order.
 
@@ -105,6 +112,8 @@ class SequentialPluginManager(PluginManager):
       swallowed.
     - Observer hooks (``on_*``) run in registration order. Their exceptions
       are logged and swallowed.
+    - ``run_*_call`` hooks nest: the first registered plugin is the
+      outermost. Their exceptions propagate.
     """
 
     name = 'sequential'
@@ -128,6 +137,13 @@ class SequentialPluginManager(PluginManager):
         )
         self._push: list[PushPlugin] = _select(
             plugins, PushPlugin, 'has_push_hooks'
+        )
+        # Only plugins that override the call hooks add a wrapping layer.
+        self._server_calls = _overriding(
+            self._server, ServerPlugin, 'run_handler_call'
+        )
+        self._client_calls = _overriding(
+            self._client, ClientPlugin, 'run_client_call'
         )
 
     @property
@@ -181,6 +197,15 @@ class SequentialPluginManager(PluginManager):
                 plugin, 'after_handler_run', plugin.after_handler_run(response)
             )
 
+    async def run_handler_call(  # noqa: D102
+        self,
+        request: ServerRequest,
+        call: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        for plugin in reversed(self._server_calls):
+            call = functools.partial(plugin.run_handler_call, request, call)
+        return await call()
+
     # --- client ---
 
     async def before_client_request(self, request: ClientRequest) -> None:  # noqa: D102
@@ -208,6 +233,15 @@ class SequentialPluginManager(PluginManager):
                 'after_client_request',
                 plugin.after_client_request(response),
             )
+
+    async def run_client_call(  # noqa: D102
+        self,
+        request: ClientRequest,
+        call: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        for plugin in reversed(self._client_calls):
+            call = functools.partial(plugin.run_client_call, request, call)
+        return await call()
 
     # --- execution ---
 
