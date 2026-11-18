@@ -211,9 +211,6 @@ async def test_streaming_reports_events_and_final_call():
     assert responses[-1].is_final
     assert responses[-1].payload is None
     assert responses[-1].error is None
-    # Every step is wrapped separately, and each wrap closes before the
-    # consumer sees the event: one step per event, plus one for the end of
-    # the stream. Closing the stream is not wrapped.
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
@@ -245,8 +242,6 @@ async def test_stream_stopped_early_gets_final_call():
     await events.aclose()
 
     assert recorder.hooks('after_client_request')[-1].is_final
-    # Abandoning the stream leaves no wrap open: one step for the consumed
-    # event, and the close itself is not wrapped.
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
@@ -267,7 +262,6 @@ async def test_transport_errors_reach_after_client_request():
 
     (response,) = recorder.hooks('after_client_request')
     assert isinstance(response.error, ConnectionError)
-    # A failing call still exits its wrap before the after hook runs.
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
@@ -287,7 +281,6 @@ async def test_transport_errors_reach_after_client_request():
     assert isinstance(
         recorder.hooks('after_client_request')[-1].error, ConnectionError
     )
-    # The step that raises still exits its wrap before the final hook.
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
