@@ -8,7 +8,6 @@ import warnings
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from a2a.auth.user import UnauthenticatedUser, User
@@ -73,7 +72,11 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import TERMINAL_TASK_STATES
+
+
+pytestmark = pytest.mark.httpx2
 
 
 def create_default_agent_card():
@@ -3224,7 +3227,7 @@ async def test_push_config_store_failure_does_not_fail_task():
         task_store=task_store,
         push_config_store=FlakyPushConfigStore(),
         push_sender=BasePushNotificationSender(
-            httpx_client=AsyncMock(spec=httpx.AsyncClient),
+            httpx_client=AsyncMock(spec=httpx_lib.AsyncClient),
             config_store=FlakyPushConfigStore(),
         ),
         agent_card=create_default_agent_card(),
@@ -3689,3 +3692,29 @@ async def test_on_message_send_raises_when_agent_produces_no_events():
         await request_handler.on_message_send(
             params, create_server_call_context()
         )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_raises_when_agent_produces_no_events():
+    """A silent executor must not end the stream without any event."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=SilentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_silent_stream',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    with pytest.raises(InvalidAgentResponseError, match='no events'):
+        async for _ in request_handler.on_message_send_stream(
+            params, create_server_call_context()
+        ):
+            pass
