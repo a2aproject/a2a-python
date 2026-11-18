@@ -7,7 +7,7 @@ from base64 import b64decode, b64encode, urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import dataclass
 from typing import Literal, Protocol, runtime_checkable
 
-from a2a.types.a2a_pb2 import Task
+from a2a.types.a2a_pb2 import Task, TaskState
 from a2a.utils.constants import MAX_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
 
@@ -83,6 +83,48 @@ def validate_page_size(page_size: int) -> None:
     if page_size > MAX_LIST_TASKS_PAGE_SIZE:
         raise InvalidParamsError(
             message=f'maximum page size is {MAX_LIST_TASKS_PAGE_SIZE}'
+        )
+
+
+# Every TaskState except TASK_STATE_UNSPECIFIED, in declaration order.
+_TASK_STATE_FILTER_NAMES = tuple(
+    value.name
+    for value in TaskState.DESCRIPTOR.values
+    if value.number != TaskState.TASK_STATE_UNSPECIFIED
+)
+_TASK_STATE_FILTER_NUMBERS = frozenset(
+    TaskState.Value(name) for name in _TASK_STATE_FILTER_NAMES
+)
+
+
+def validate_task_state_filter(status: object) -> None:
+    """Validates the `status` filter of a ListTasks request.
+
+    `status` may be the raw value from the request (a ProtoJSON enum name or
+    number) or the already parsed enum number. Transports parse requests with
+    `ignore_unknown_fields=True`, which turns an unknown enum name into
+    `TASK_STATE_UNSPECIFIED` (0), and the task stores treat 0 as "no filter".
+    Check the raw value before parsing so a bad filter is rejected instead of
+    silently returning every task.
+
+    See Also:
+        https://a2a-protocol.org/latest/specification/#65-task-listing-and-management
+    """
+    if isinstance(status, str):
+        valid = status in _TASK_STATE_FILTER_NAMES
+    elif isinstance(status, int) and not isinstance(status, bool):
+        valid = status in _TASK_STATE_FILTER_NUMBERS
+    else:
+        valid = False
+
+    if not valid:
+        message = (
+            'Invalid status filter. Expected one of: '
+            f'{", ".join(_TASK_STATE_FILTER_NAMES)}.'
+        )
+        raise InvalidParamsError(
+            message=message,
+            data={'errors': [{'field': 'status', 'message': message}]},
         )
 
 

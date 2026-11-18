@@ -22,6 +22,7 @@ from a2a.utils.task import (
     decode_page_token,
     encode_list_tasks_cursor,
     encode_page_token,
+    validate_task_state_filter,
 )
 
 
@@ -142,6 +143,47 @@ class TestApplyHistoryLength(unittest.TestCase):
             self.task, SendMessageConfiguration(history_length=0)
         )
         self.assertEqual(len(result.history), 0)
+
+
+@pytest.mark.parametrize(
+    'status',
+    [
+        'TASK_STATE_COMPLETED',
+        'TASK_STATE_WORKING',
+        TaskState.TASK_STATE_FAILED,
+        int(TaskState.TASK_STATE_AUTH_REQUIRED),
+    ],
+)
+def test_validate_task_state_filter_accepts_known_states(status):
+    validate_task_state_filter(status)
+
+
+@pytest.mark.parametrize(
+    'status',
+    [
+        'completed',
+        'TASK_STATE_RUNNING',
+        'task_state_completed',
+        'TASK_STATE_UNSPECIFIED',
+        '',
+        '3',
+        0,
+        99,
+        -1,
+        True,
+        3.0,
+        ['TASK_STATE_COMPLETED'],
+    ],
+)
+def test_validate_task_state_filter_rejects_unknown_states(status):
+    with pytest.raises(InvalidParamsError) as exc_info:
+        validate_task_state_filter(status)
+
+    assert 'TASK_STATE_COMPLETED' in exc_info.value.message
+    assert 'TASK_STATE_UNSPECIFIED' not in exc_info.value.message
+    assert exc_info.value.data == {
+        'errors': [{'field': 'status', 'message': exc_info.value.message}]
+    }
 
 
 if __name__ == '__main__':
