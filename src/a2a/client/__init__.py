@@ -1,5 +1,6 @@
 """Client-side components for interacting with an A2A agent."""
 
+from a2a.client.artifact_aggregator import ArtifactsAggregator
 from a2a.client.auth import (
     AuthInterceptor,
     CredentialService,
@@ -30,6 +31,7 @@ __all__ = [
     'A2AClientError',
     'A2AClientTimeoutError',
     'AgentCardResolutionError',
+    'ArtifactsAggregator',
     'AuthInterceptor',
     'BaseClient',
     'Client',
