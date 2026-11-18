@@ -766,7 +766,9 @@ async def main_async(http_port: int, grpc_port: int) -> None:
     )
 
     agent_card_routes = create_agent_card_routes(
-        agent_card=agent_card, card_url='/.well-known/agent-card.json'
+        agent_card=agent_card,
+        card_url='/.well-known/agent-card.json',
+        cache_control='public, max-age=3600',
     )
     jsonrpc_routes = create_jsonrpc_routes(
         request_handler=handler,
