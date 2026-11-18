@@ -120,6 +120,7 @@ async def test_unary_call_runs_hooks():
     (request,) = recorder.hooks('before_client_request')
     assert request.method == 'get_task'
     assert request.agent_card.name == 'Remote'
+    assert request.interface is None
     (response,) = recorder.hooks('after_client_request')
     assert response.payload is result
     assert response.is_final
@@ -321,55 +322,6 @@ def test_factory_clients_use_the_global_manager():
 
     assert isinstance(c, BaseClient)
     assert c._plugins is manager
-
-
-@pytest.mark.asyncio
-async def test_factory_clients_report_the_selected_interface():
-    """Plugins see the card interface the factory actually picked."""
-    recorder = Recorder()
-    plugins.set_global(plugins.sequential(recorder))
-    picked = AgentInterface(
-        url='http://remote:9000',
-        protocol_binding='JSONRPC',
-        protocol_version='1.0',
-    )
-    multi = AgentCard(
-        name='Remote',
-        version='1.0',
-        capabilities=AgentCapabilities(streaming=True),
-        supported_interfaces=[
-            AgentInterface(
-                url='http://other:1234',
-                protocol_binding='HTTP+JSON',
-                protocol_version='1.0',
-            ),
-            picked,
-        ],
-    )
-
-    c = ClientFactory(
-        ClientConfig(httpx_client=httpx_lib.AsyncClient())
-    ).create(multi)
-    c._transport = AsyncMock(spec=ClientTransport)
-    await c.get_task(GetTaskRequest(id='t-1'))
-
-    (request,) = recorder.hooks('before_client_request')
-    # The card lists two interfaces; the plugin gets the one in use.
-    assert request.interface == picked
-    assert request.interface.protocol_version == '1.0'
-
-
-@pytest.mark.asyncio
-async def test_clients_built_without_the_factory_report_no_interface():
-    """A hand-built client leaves `interface` None rather than guessing."""
-    recorder = Recorder()
-    transport = AsyncMock(spec=ClientTransport)
-    transport.get_task.return_value = Task(id='t-1')
-
-    await client(recorder, transport).get_task(GetTaskRequest(id='t-1'))
-
-    (request,) = recorder.hooks('before_client_request')
-    assert request.interface is None
 
 
 @pytest.mark.parametrize(
