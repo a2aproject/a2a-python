@@ -145,6 +145,7 @@ async def test_unary_call_runs_hooks():
     (request,) = recorder.hooks('before_client_request')
     assert request.method == 'get_task'
     assert request.agent_card.name == 'Remote'
+    assert request.interface is None
     (response,) = recorder.hooks('after_client_request')
     assert response.payload is result
     assert response.is_final
