@@ -77,7 +77,7 @@ _SSE_LINE_END = re.compile(rb'\r\n|\r|\n')
 async def _aiter_sse_lines(
     response: Response,
 ) -> AsyncGenerator[str, None]:
-    """Yields lines ended only by CRLF, LF or CR, unlike `aiter_lines()`.
+    """Yields SSE lines split on CRLF/LF/CR, decoding UTF-8 here, not via httpx.
 
     The unfinished line is kept as a list of pieces and joined once, and
     only the new chunk is scanned, so a long `data:` line that spans many
