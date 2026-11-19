@@ -441,6 +441,8 @@ class BaseClient(Client):
 
         request = self._client_request(input_data, method, context)
         await plugins.before_client_request(request)
+        result: Any = None
+        error: BaseException | None = None
         try:
             result = await plugins.wrap_client_call(
                 request,
@@ -449,13 +451,15 @@ class BaseClient(Client):
                 ),
             )
         except Exception as e:
-            await plugins.after_client_request(
-                ClientResponse(request.method, None, request.context, error=e)
-            )
+            error = e
             raise
-        await plugins.after_client_request(
-            ClientResponse(request.method, result, request.context)
-        )
+        finally:
+            # Also runs when the call is cancelled, which is not an error.
+            await plugins.after_client_request(
+                ClientResponse(
+                    request.method, result, request.context, error=error
+                )
+            )
         return result
 
     async def _call_through_interceptors(
