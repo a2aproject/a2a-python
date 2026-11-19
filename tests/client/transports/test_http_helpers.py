@@ -26,18 +26,21 @@ def test_default_sse_error_handler():
 
 @pytest.mark.asyncio
 async def test_parse_sse_stream_edge_cases():
-    async def mock_aiter_text():
-        yield ': comment line (should be ignored)\n'
-        yield 'event: custom_event\n'
-        yield 'data:  hello\n'
-        yield 'data: world\n'
-        yield '\n'
-        yield '\n'
-        yield 'data: \n'
-        yield '\n'
-
-    response = httpx_lib.Response(200)
-    response.aiter_text = mock_aiter_text  # type: ignore
+    response = httpx_lib.Response(
+        200,
+        content=_byte_chunks(
+            [
+                b': comment line (should be ignored)\n',
+                b'event: custom_event\n',
+                b'data:  hello\n',
+                b'data: world\n',
+                b'\n',
+                b'\n',
+                b'data: \n',
+                b'\n',
+            ]
+        ),
+    )
 
     events = [e async for e in parse_sse_stream(response)]
     assert events == [
@@ -49,6 +52,49 @@ async def test_parse_sse_stream_edge_cases():
 async def _byte_chunks(chunks: list[bytes]) -> AsyncIterator[bytes]:
     for chunk in chunks:
         yield chunk
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('content_type', 'default_encoding'),
+    [
+        pytest.param('text/event-stream', 'utf-8', id='utf8-control'),
+        pytest.param(
+            'text/event-stream; charset=iso-8859-1',
+            'utf-8',
+            id='response-charset',
+        ),
+        pytest.param(
+            'text/event-stream', 'iso-8859-1', id='client-default-encoding'
+        ),
+    ],
+)
+async def test_send_http_stream_request_sse_uses_utf8(
+    content_type: str, default_encoding: str
+) -> None:
+    """Decode SSE as UTF-8 even when HTTP text decoding selects another charset."""
+    body = 'data: café 東京\r\n\r\n'.encode('utf-8')
+    chunks = [body[i : i + 1] for i in range(len(body))]
+
+    def respond(request: httpx_lib.Request) -> httpx_lib.Response:
+        return httpx_lib.Response(
+            200,
+            headers={'Content-Type': content_type},
+            content=_byte_chunks(chunks),
+        )
+
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(respond),
+        default_encoding=default_encoding,
+    ) as client:
+        events = [
+            event
+            async for event in send_http_stream_request(
+                client, 'GET', 'https://agent.example'
+            )
+        ]
+
+    assert events == ['café 東京']
 
 
 @pytest.mark.asyncio

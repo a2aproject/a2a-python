@@ -71,38 +71,40 @@ async def send_http_request(
         return response.json()
 
 
-_SSE_LINE_END = re.compile(r'\r\n|\r|\n')
+_SSE_LINE_END = re.compile(rb'\r\n|\r|\n')
 
 
 async def _aiter_sse_lines(
     response: Response,
 ) -> AsyncGenerator[str, None]:
-    """Yields lines ended only by CRLF, LF or CR, unlike `aiter_lines()`.
+    """Yields SSE lines split on CRLF/LF/CR, decoding UTF-8 here, not via httpx.
 
     The unfinished line is kept as a list of pieces and joined once, and
     only the new chunk is scanned, so a long `data:` line that spans many
     chunks costs linear rather than quadratic time.
     """
-    pieces: list[str] = []
+    # SSE is always UTF-8, regardless of HTTP charset and client defaults.
+    # CR and LF cannot split a UTF-8 code point, so decode complete lines.
+    pieces: list[bytes] = []
     skip_lf = False
-    async for chunk in response.aiter_text():
+    async for chunk in response.aiter_bytes():
         if not chunk:
             continue
         # CR already ends the line. Only swallow its optional following LF,
         # so a complete event can be delivered without waiting for more data.
-        text = chunk.removeprefix('\n') if skip_lf else chunk
-        skip_lf = text.endswith('\r')
-        *lines, rest = _SSE_LINE_END.split(text)
+        data = chunk.removeprefix(b'\n') if skip_lf else chunk
+        skip_lf = data.endswith(b'\r')
+        *lines, rest = _SSE_LINE_END.split(data)
         if lines:
-            lines[0] = ''.join(pieces) + lines[0]
+            lines[0] = b''.join(pieces) + lines[0]
             pieces = []
             for line in lines:
-                yield line
+                yield line.decode('utf-8', errors='replace')
         if rest:
             pieces.append(rest)
-    tail = ''.join(pieces)
+    tail = b''.join(pieces)
     if tail:
-        yield tail
+        yield tail.decode('utf-8', errors='replace')
 
 
 async def parse_sse_stream(

@@ -88,6 +88,7 @@ def test_client_factory_selects_secondary_transport_url(
 
     assert isinstance(client._transport, RestTransport)  # type: ignore[attr-defined]
     assert client._transport.url == 'http://secondary-url.com'  # type: ignore[attr-defined]
+    assert client._interface.url == 'http://secondary-url.com'  # type: ignore[attr-defined]
 
 
 def test_client_factory_server_preference(base_agent_card: AgentCard):
