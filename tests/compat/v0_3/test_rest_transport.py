@@ -990,3 +990,27 @@ class TestCompatRestTransportPathEncoding:
         # MethodNotFoundError.
         with pytest.raises(MethodNotFoundError):
             await transport.get_task(GetTaskRequest(id='t1?x'))
+
+    @pytest.mark.asyncio
+    async def test_delete_push_config_does_not_delete_config_named_by_prefix(
+        self, transport: CompatRestTransport
+    ):
+        for config_id in ('alerts', 'alerts#ops'):
+            await transport.create_task_push_notification_config(
+                TaskPushNotificationConfig(
+                    task_id='t1',
+                    id=config_id,
+                    url='https://hooks.example.com/hook',
+                )
+            )
+
+        await transport.delete_task_push_notification_config(
+            DeleteTaskPushNotificationConfigRequest(
+                task_id='t1', id='alerts#ops'
+            )
+        )
+
+        response = await transport.list_task_push_notification_configs(
+            ListTaskPushNotificationConfigsRequest(task_id='t1')
+        )
+        assert [config.id for config in response.configs] == ['alerts']
