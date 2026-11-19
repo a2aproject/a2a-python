@@ -396,6 +396,7 @@ class ClientFactory:
             self._config,
             transport,
             interceptors or [],
+            interface=selected_interface,
         )
 
 
