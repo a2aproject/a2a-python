@@ -39,7 +39,11 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
 )
 from a2a.utils._httpx_compat import httpx_lib
-from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
+from a2a.utils.errors import (
+    InvalidParamsError,
+    MethodNotFoundError,
+    TaskNotFoundError,
+)
 from starlette.applications import Starlette
 
 
@@ -616,24 +620,64 @@ async def test_compat_rest_transport_list_task_push_notification_configs(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('status_code', 'content'),
+    [(200, b'{}'), (204, b''), (200, b'')],
+    ids=['json_object', 'no_content', 'empty_200'],
+)
 async def test_compat_rest_transport_delete_task_push_notification_config(
-    transport,
+    agent_card, status_code, content
 ):
-    mock_execute_request = AsyncMock(return_value={})
-    transport._execute_request = mock_execute_request
+    """v0.3 servers confirm a deletion with `{}`, 204, or a 200 with no body."""
+    requests: list[httpx_lib.Request] = []
 
-    response = await transport.delete_task_push_notification_config(
-        DeleteTaskPushNotificationConfigRequest(
-            task_id='task-123', id='push-123'
+    def handler(request: httpx_lib.Request) -> httpx_lib.Response:
+        requests.append(request)
+        return httpx_lib.Response(status_code, content=content)
+
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(handler)
+    ) as http_client:
+        transport = CompatRestTransport(
+            http_client, agent_card, 'http://example.com'
         )
-    )
+        response = await transport.delete_task_push_notification_config(
+            DeleteTaskPushNotificationConfigRequest(
+                task_id='task-123', id='push-123'
+            )
+        )
 
-    mock_execute_request.assert_awaited_once_with(
-        'DELETE',
-        '/v1/tasks/task-123/pushNotificationConfigs/push-123',
-        context=None,
-    )
     assert response is None
+    assert len(requests) == 1
+    assert requests[0].method == 'DELETE'
+    assert (
+        requests[0].url.raw_path
+        == b'/v1/tasks/task-123/pushNotificationConfigs/push-123'
+    )
+    assert requests[0].headers['a2a-version'] == '0.3'
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_delete_task_push_notification_config_error(
+    agent_card,
+):
+    """An error response still raises the mapped A2A error."""
+    body = {'type': 'TaskNotFoundError', 'message': 'Task not found'}
+
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(
+            lambda request: httpx_lib.Response(404, json=body)
+        )
+    ) as http_client:
+        transport = CompatRestTransport(
+            http_client, agent_card, 'http://example.com'
+        )
+        with pytest.raises(TaskNotFoundError, match='Task not found'):
+            await transport.delete_task_push_notification_config(
+                DeleteTaskPushNotificationConfigRequest(
+                    task_id='task-123', id='push-123'
+                )
+            )
 
 
 @pytest.mark.asyncio
