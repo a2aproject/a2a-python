@@ -101,9 +101,9 @@ class TaskUpdater:
                 metadata=metadata,
                 status=status,
             )
+            await self.event_queue.enqueue_event(event)
             if state in self._terminal_states:
                 self._terminal_state_reached = True
-            await self.event_queue.enqueue_event(event)
 
     async def add_artifact(  # noqa: PLR0913
         self,
