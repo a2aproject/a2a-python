@@ -9,6 +9,7 @@ import inspect
 from contextlib import aclosing
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
+from a2a.plugins._sentinels import STREAM_END, StreamEnd
 from a2a.plugins.types import ServerRequest, ServerResponse
 
 
@@ -31,17 +32,6 @@ class _PluginHost(Protocol):
 
 
 _F = TypeVar('_F', bound='Callable[..., Any]')
-
-
-class _StreamEnd:
-    """Marker for a stream with no more events.
-
-    Used instead of ``None`` so that no handler value can be mistaken for
-    the end of the stream.
-    """
-
-
-_END = _StreamEnd()
 
 
 def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
@@ -85,12 +75,10 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                         func(self, params, context, *args, **kwargs)
                     ) as events:
                         while True:
-                            # A marker ends the loop, so StopAsyncIteration
-                            # never passes through plugin code.
                             event = await plugins.wrap_server_call(
-                                request, lambda: anext(events, _END)
+                                request, lambda: anext(events, STREAM_END)
                             )
-                            if isinstance(event, _StreamEnd):
+                            if isinstance(event, StreamEnd):
                                 break
                             await plugins.after_handler_run(
                                 ServerResponse(

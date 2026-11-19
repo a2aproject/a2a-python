@@ -13,6 +13,7 @@ from a2a.client.interceptors import (
     ClientCallInterceptor,
 )
 from a2a.client.transports.base import ClientTransport
+from a2a.plugins._sentinels import STREAM_END, StreamEnd
 from a2a.plugins.manager import PluginManager, get_global
 from a2a.plugins.types import ClientRequest, ClientResponse
 from a2a.types.a2a_pb2 import (
@@ -32,17 +33,6 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-
-
-class _StreamEnd:
-    """Marker for a stream with no more events.
-
-    Used instead of ``None`` because an interceptor can set a stream event to
-    ``None``, which would otherwise look like the end of the stream.
-    """
-
-
-_END = _StreamEnd()
 
 
 class BaseClient(Client):
@@ -447,8 +437,6 @@ class BaseClient(Client):
         request = self._client_request(input_data, method, context)
         await plugins.before_client_request(request)
         try:
-            # Reads request fields at call time, so a plugin can change them
-            # before calling, and each retry makes a fresh call.
             result = await plugins.wrap_client_call(
                 request,
                 lambda: self._call_through_interceptors(
@@ -541,12 +529,10 @@ class BaseClient(Client):
                 )
             ) as events:
                 while True:
-                    # A marker ends the loop, so StopAsyncIteration never
-                    # passes through plugin code.
                     event = await plugins.wrap_client_call(
-                        request, lambda: anext(events, _END)
+                        request, lambda: anext(events, STREAM_END)
                     )
-                    if isinstance(event, _StreamEnd):
+                    if isinstance(event, StreamEnd):
                         break
                     await plugins.after_client_request(
                         ClientResponse(
