@@ -30,6 +30,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils._httpx_compat import httpx_lib
+from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, TaskNotFoundError
 from google.protobuf import json_format
 
@@ -978,3 +979,113 @@ class TestMalformedJsonRpcResponses:
                 create_send_message_request()
             ):
                 pass
+
+
+def _version_capturing_client(
+    seen: list[str | None], **kwargs
+) -> httpx_lib.AsyncClient:
+    def handler(request: httpx_lib.Request) -> httpx_lib.Response:
+        seen.append(request.headers.get(VERSION_HEADER))
+        body = json.loads(request.content)
+        if body['method'] == 'SendStreamingMessage':
+            event = {
+                'jsonrpc': '2.0',
+                'id': body['id'],
+                'result': {'task': {'id': 't1', 'contextId': 'c1'}},
+            }
+            return httpx_lib.Response(
+                200,
+                headers={'content-type': 'text/event-stream'},
+                content=f'data: {json.dumps(event)}\n\n'.encode(),
+            )
+        if body['method'] == 'GetExtendedAgentCard':
+            result = {'name': 'Extended'}
+        else:
+            result = {'id': 't1', 'contextId': 'c1'}
+        return httpx_lib.Response(
+            200, json={'jsonrpc': '2.0', 'id': body['id'], 'result': result}
+        )
+
+    return httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(handler), **kwargs
+    )
+
+
+def _version_test_transport(
+    seen: list[str | None], card: AgentCard | None = None, **kwargs
+) -> JsonRpcTransport:
+    return JsonRpcTransport(
+        httpx_client=_version_capturing_client(seen, **kwargs),
+        agent_card=card or AgentCard(),
+        url='http://agent.example.com/api',
+    )
+
+
+@pytest.mark.asyncio
+async def test_sends_version_header_without_factory_configured_client():
+    """The transport sends A2A-Version itself, like the gRPC transport."""
+    seen: list[str | None] = []
+    transport = _version_test_transport(seen)
+
+    await transport.get_task(GetTaskRequest(id='t1'))
+
+    assert seen == [PROTOCOL_VERSION_CURRENT]
+
+
+@pytest.mark.asyncio
+async def test_streaming_sends_version_header():
+    seen: list[str | None] = []
+    transport = _version_test_transport(seen)
+
+    events = [
+        event
+        async for event in transport.send_message_streaming(
+            create_send_message_request()
+        )
+    ]
+
+    assert len(events) == 1
+    assert seen == [PROTOCOL_VERSION_CURRENT]
+
+
+@pytest.mark.asyncio
+async def test_extended_card_sends_version_header():
+    seen: list[str | None] = []
+    transport = _version_test_transport(
+        seen,
+        card=AgentCard(
+            capabilities=AgentCapabilities(extended_agent_card=True)
+        ),
+    )
+
+    card = await transport.get_extended_agent_card(
+        GetExtendedAgentCardRequest()
+    )
+
+    assert card.name == 'Extended'
+    assert seen == [PROTOCOL_VERSION_CURRENT]
+
+
+@pytest.mark.asyncio
+async def test_keeps_version_header_set_on_the_httpx_client():
+    seen: list[str | None] = []
+    transport = _version_test_transport(seen, headers={VERSION_HEADER: '1.7'})
+
+    await transport.get_task(GetTaskRequest(id='t1'))
+
+    assert seen == ['1.7']
+
+
+@pytest.mark.asyncio
+async def test_keeps_version_set_in_service_parameters():
+    from a2a.client.client import ClientCallContext
+
+    seen: list[str | None] = []
+    transport = _version_test_transport(seen)
+
+    await transport.get_task(
+        GetTaskRequest(id='t1'),
+        context=ClientCallContext(service_parameters={'a2a-version': '0.3'}),
+    )
+
+    assert seen == ['0.3']

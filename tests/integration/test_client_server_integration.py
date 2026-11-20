@@ -57,11 +57,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils._httpx_compat import httpx_lib
-from a2a.utils.constants import (
-    PROTOCOL_VERSION_CURRENT,
-    VERSION_HEADER,
-    TransportProtocol,
-)
+from a2a.utils.constants import TransportProtocol
 from a2a.utils.errors import (
     ContentTypeNotSupportedError,
     ExtendedAgentCardNotConfiguredError,
@@ -727,7 +723,6 @@ async def test_json_transport_get_signed_base_card(
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx_lib.AsyncClient(
         transport=httpx_lib.ASGITransport(app=app),
-        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
     )
 
     agent_url = agent_card.supported_interfaces[0].url
@@ -804,7 +799,6 @@ async def test_client_get_signed_extended_card(
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx_lib.AsyncClient(
         transport=httpx_lib.ASGITransport(app=app),
-        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
     )
 
     transport = JsonRpcTransport(
@@ -885,7 +879,6 @@ async def test_client_get_signed_base_and_extended_cards(
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx_lib.AsyncClient(
         transport=httpx_lib.ASGITransport(app=app),
-        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
     )
 
     agent_url = agent_card.supported_interfaces[0].url
