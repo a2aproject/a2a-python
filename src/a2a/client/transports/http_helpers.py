@@ -4,6 +4,9 @@ import re
 from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, NoReturn
+from urllib.parse import urlsplit, urlunsplit
+
+import httpx
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
@@ -55,6 +58,22 @@ def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
     if context and context.timeout is not None:
         http_kwargs['timeout'] = context.timeout
     return http_kwargs
+
+
+def get_http_url(base_url: str, path: str) -> str:
+    """Appends an operation path without moving URL queries into the path."""
+    parts = urlsplit(base_url)
+    return urlunsplit(parts._replace(path=parts.path.rstrip('/') + path))
+
+
+def get_http_params(
+    base_url: str, params: dict[str, Any] | None = None
+) -> dict[str, Any] | str | None:
+    """Merges endpoint parameters with operation parameters taking precedence."""
+    query = urlsplit(base_url).query
+    if not query:
+        return params
+    return str(httpx.QueryParams(query).merge(params or {}))
 
 
 async def send_http_request(
