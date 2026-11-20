@@ -122,6 +122,37 @@ def test_client_factory_server_preference(base_agent_card: AgentCard):
     assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
 
 
+@pytest.mark.asyncio
+async def test_client_factory_skips_incompatible_server_preference(
+    base_agent_card: AgentCard,
+) -> None:
+    base_agent_card.supported_interfaces[
+        0
+    ].protocol_binding = TransportProtocol.HTTP_JSON
+    base_agent_card.supported_interfaces[0].protocol_version = '1.0'
+    base_agent_card.supported_interfaces.insert(
+        0,
+        AgentInterface(
+            protocol_binding=TransportProtocol.JSONRPC,
+            protocol_version='0.2',
+            url='http://legacy-url.com',
+        ),
+    )
+
+    async with httpx_lib.AsyncClient() as httpx_client:
+        config = ClientConfig(
+            httpx_client=httpx_client,
+            supported_protocol_bindings=[
+                TransportProtocol.HTTP_JSON,
+                TransportProtocol.JSONRPC,
+            ],
+        )
+        client = ClientFactory(config).create(base_agent_card)
+
+        assert isinstance(client._transport, RestTransport)  # type: ignore[attr-defined]
+        assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
+
+
 @pytest.mark.parametrize('v1_version', ['1.0', '1.0.0'])
 def test_client_factory_prefers_1_0_ignoring_patch_version(
     base_agent_card: AgentCard, v1_version: str
