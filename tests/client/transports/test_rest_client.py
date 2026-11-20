@@ -1112,3 +1112,83 @@ class TestRestStreamErrors:
 
         assert len(events) == 1
         assert events[0].WhichOneof('payload') is None
+
+
+def _version_capturing_client(
+    seen: list[str | None], **kwargs
+) -> httpx_lib.AsyncClient:
+    def handler(request: httpx_lib.Request) -> httpx_lib.Response:
+        seen.append(request.headers.get(VERSION_HEADER))
+        if request.url.path.endswith(':stream'):
+            event = {'task': {'id': 't1', 'contextId': 'c1'}}
+            return httpx_lib.Response(
+                200,
+                headers={'content-type': 'text/event-stream'},
+                content=f'data: {json.dumps(event)}\n\n'.encode(),
+            )
+        return httpx_lib.Response(200, json={'id': 't1', 'contextId': 'c1'})
+
+    return httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(handler), **kwargs
+    )
+
+
+def _version_test_transport(seen: list[str | None], **kwargs) -> RestTransport:
+    return RestTransport(
+        httpx_client=_version_capturing_client(seen, **kwargs),
+        agent_card=AgentCard(),
+        url='http://agent.example.com/api',
+    )
+
+
+@pytest.mark.asyncio
+async def test_sends_version_header_without_factory_configured_client():
+    """The transport sends A2A-Version itself, like the gRPC transport."""
+    seen: list[str | None] = []
+    transport = _version_test_transport(seen)
+
+    await transport.get_task(GetTaskRequest(id='t1'))
+    await transport.delete_task_push_notification_config(
+        DeleteTaskPushNotificationConfigRequest(task_id='t1', id='p1')
+    )
+
+    assert seen == [PROTOCOL_VERSION_CURRENT, PROTOCOL_VERSION_CURRENT]
+
+
+@pytest.mark.asyncio
+async def test_streaming_sends_version_header():
+    seen: list[str | None] = []
+    transport = _version_test_transport(seen)
+
+    events = [
+        event
+        async for event in transport.send_message_streaming(
+            SendMessageRequest(message=new_text_message('Hello'))
+        )
+    ]
+
+    assert len(events) == 1
+    assert seen == [PROTOCOL_VERSION_CURRENT]
+
+
+@pytest.mark.asyncio
+async def test_keeps_version_header_set_on_the_httpx_client():
+    seen: list[str | None] = []
+    transport = _version_test_transport(seen, headers={VERSION_HEADER: '1.7'})
+
+    await transport.get_task(GetTaskRequest(id='t1'))
+
+    assert seen == ['1.7']
+
+
+@pytest.mark.asyncio
+async def test_keeps_version_set_in_service_parameters():
+    seen: list[str | None] = []
+    transport = _version_test_transport(seen)
+
+    await transport.get_task(
+        GetTaskRequest(id='t1'),
+        context=ClientCallContext(service_parameters={'a2a-version': '0.3'}),
+    )
+
+    assert seen == ['0.3']
