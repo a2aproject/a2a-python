@@ -34,7 +34,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils._httpx_compat import AsyncClient
+from a2a.utils._httpx_compat import AsyncClient, HTTPStatusError
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -325,8 +325,35 @@ class JsonRpcTransport(ClientTransport):
         request = self.httpx_client.build_request(
             'POST', self.url, json=payload, **(http_kwargs or {})
         )
-        response_data = await send_http_request(self.httpx_client, request)
+        response_data = await send_http_request(
+            self.httpx_client, request, self._handle_http_error
+        )
         return self._check_jsonrpc_response(response_data)
+
+    def _handle_http_error(self, e: HTTPStatusError) -> NoReturn:
+        """Raises the A2A error carried by a non-2xx JSON-RPC response.
+
+        Some servers send a JSON-RPC error object with a non-2xx status. Only
+        a JSON-RPC 2.0 error with a known A2A code is mapped; any other body,
+        such as a gateway's own error, raises the generic HTTP error.
+        """
+        try:
+            body = e.response.json()
+        except ValueError:  # Not JSON, or not valid UTF-8.
+            body = None
+        error = (
+            body.get('error')
+            if isinstance(body, dict) and body.get('jsonrpc') == '2.0'
+            else None
+        )
+        if isinstance(error, dict):
+            code = error.get('code')
+            if (
+                isinstance(code, int)
+                and code in _JSON_RPC_ERROR_CODE_TO_A2A_ERROR
+            ):
+                raise self._create_jsonrpc_error(error) from e
+        raise A2AClientError(f'HTTP Error {e.response.status_code}: {e}') from e
 
     def _check_jsonrpc_response(self, response_data: Any) -> dict[str, Any]:
         """Returns a JSON-RPC success response, raising for anything else.
@@ -368,7 +395,7 @@ class JsonRpcTransport(ClientTransport):
             self.httpx_client,
             'POST',
             self.url,
-            None,
+            self._handle_http_error,
             self._handle_sse_error,
             json=rpc_request_payload,
             **http_kwargs,
