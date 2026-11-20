@@ -156,13 +156,16 @@ class CompatRestTransport(ClientTransport):
             metadata=proto_utils.ToProto.metadata(req_v03.params.metadata),
         )
 
-        async for event in self._send_stream_request(
-            'POST',
-            '/v1/message:stream',
-            context=context,
-            json=MessageToDict(req_proto),
-        ):
-            yield event
+        async with contextlib.aclosing(
+            self._send_stream_request(
+                'POST',
+                '/v1/message:stream',
+                context=context,
+                json=MessageToDict(req_proto),
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_task(
         self,
@@ -324,12 +327,15 @@ class CompatRestTransport(ClientTransport):
         """
         subscribe_method = self._subscribe_method_override or 'POST'
         try:
-            async for event in self._send_stream_request(
-                subscribe_method,
-                f'/v1/tasks/{_quote_id(request.id)}:subscribe',
-                context=context,
-            ):
-                yield event
+            async with contextlib.aclosing(
+                self._send_stream_request(
+                    subscribe_method,
+                    f'/v1/tasks/{_quote_id(request.id)}:subscribe',
+                    context=context,
+                )
+            ) as events:
+                async for event in events:
+                    yield event
         except A2AClientError as e:
             # Check for 405 Method Not Allowed in the cause (an HTTP status error)
             cause = e.__cause__
@@ -344,8 +350,11 @@ class CompatRestTransport(ClientTransport):
                     raise
                 else:
                     self._subscribe_method_override = 'GET'
-                    async for event in self.subscribe(request, context=context):
-                        yield event
+                    async with contextlib.aclosing(
+                        self.subscribe(request, context=context)
+                    ) as events:
+                        async for event in events:
+                            yield event
             else:
                 raise
 
@@ -430,21 +439,26 @@ class CompatRestTransport(ClientTransport):
         http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
         add_legacy_extension_header(http_kwargs['headers'])
 
-        async for sse_data in send_http_stream_request(
-            self.httpx_client,
-            method,
-            f'{self.url}{path}',
-            self._handle_http_error,
-            json=json,
-            **http_kwargs,
-        ):
-            event_proto = a2a_v0_3_pb2.StreamResponse()
-            Parse(sse_data, event_proto, ignore_unknown_fields=True)
-            yield conversions.to_core_stream_response(
-                types_v03.SendStreamingMessageSuccessResponse(
-                    result=proto_utils.FromProto.stream_response(event_proto)
-                )
+        async with contextlib.aclosing(
+            send_http_stream_request(
+                self.httpx_client,
+                method,
+                f'{self.url}{path}',
+                self._handle_http_error,
+                json=json,
+                **http_kwargs,
             )
+        ) as events:
+            async for sse_data in events:
+                event_proto = a2a_v0_3_pb2.StreamResponse()
+                Parse(sse_data, event_proto, ignore_unknown_fields=True)
+                yield conversions.to_core_stream_response(
+                    types_v03.SendStreamingMessageSuccessResponse(
+                        result=proto_utils.FromProto.stream_response(
+                            event_proto
+                        )
+                    )
+                )
 
     async def _send_request(self, request: Request) -> dict[str, Any]:
         return await send_http_request(
