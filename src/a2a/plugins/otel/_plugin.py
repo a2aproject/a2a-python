@@ -46,7 +46,7 @@ _SPAN_KEY = 'a2a.otel.span'
 _SKIP_TASK_ATTRIBUTES = frozenset({'list_tasks'})
 
 # Methods whose request `id` is the task ID. Elsewhere `id` can name something
-# else: on the push notification config requests it is the config's ID.
+# else: f.e config's ID
 _ID_IS_TASK_ID = frozenset({'get_task', 'cancel_task', 'subscribe'})
 
 

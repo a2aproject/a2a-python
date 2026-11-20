@@ -1,8 +1,4 @@
-"""A2A semantic conventions: attribute keys and value mapping.
-
-Keys are spelled out rather than imported, because no released
-``opentelemetry-semantic-conventions`` package carries the A2A attributes yet.
-"""
+"""A2A semantic conventions: attribute keys and value mapping."""
 
 from __future__ import annotations
 
@@ -57,8 +53,7 @@ def error_type(error: BaseException) -> str:
     """Returns the `error.type` value for an exception.
 
     Prefers the A2A error reason, and falls back to the canonical name of the
-    exception. The conventions also allow a protocol status code, but no
-    client exception carries one as an attribute.
+    exception.
     """
     if isinstance(error, A2AError) and (
         reason := A2A_ERROR_REASONS.get(type(error))
