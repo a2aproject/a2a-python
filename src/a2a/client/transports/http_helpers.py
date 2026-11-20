@@ -86,12 +86,15 @@ async def _aiter_sse_lines(
     # SSE is always UTF-8, regardless of HTTP charset and client defaults.
     # CR and LF cannot split a UTF-8 code point, so decode complete lines.
     pieces: list[bytes] = []
-    held_cr = False
+    skip_lf = False
     async for chunk in response.aiter_bytes():
-        data = b'\r' + chunk if held_cr else chunk
-        # Hold a trailing CR back: the next chunk may start with its LF.
-        held_cr = data.endswith(b'\r')
-        *lines, rest = _SSE_LINE_END.split(data[:-1] if held_cr else data)
+        if not chunk:
+            continue
+        # CR already ends the line. Only swallow its optional following LF,
+        # so a complete event can be delivered without waiting for more data.
+        data = chunk.removeprefix(b'\n') if skip_lf else chunk
+        skip_lf = data.endswith(b'\r')
+        *lines, rest = _SSE_LINE_END.split(data)
         if lines:
             lines[0] = b''.join(pieces) + lines[0]
             pieces = []
@@ -100,9 +103,7 @@ async def _aiter_sse_lines(
         if rest:
             pieces.append(rest)
     tail = b''.join(pieces)
-    # A held CR at end of stream still ends a line, even an empty one. That
-    # blank line is what dispatches the last event, so yield it too.
-    if held_cr or tail:
+    if tail:
         yield tail.decode('utf-8', errors='replace')
 
 

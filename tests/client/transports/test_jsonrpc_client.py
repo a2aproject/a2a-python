@@ -1,5 +1,6 @@
 """Tests for the JSON-RPC client transport."""
 
+import asyncio
 import json
 
 from collections.abc import AsyncGenerator
@@ -978,3 +979,48 @@ class TestMalformedJsonRpcResponses:
                 create_send_message_request()
             ):
                 pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ending', [b'\n', b'\r\n', b'\r'])
+async def test_streaming_message_delivered_before_next_chunk(
+    ending: bytes,
+) -> None:
+    """A complete SSE event must not wait for another event or EOF."""
+    payload = {
+        'jsonrpc': '2.0',
+        'id': '1',
+        'result': {
+            'message': {
+                'messageId': 'r1',
+                'role': 'ROLE_AGENT',
+                'parts': [{'text': 'hello'}],
+            },
+        },
+    }
+
+    class LiveBody(httpx_lib.AsyncByteStream):
+        async def __aiter__(self) -> AsyncGenerator[bytes, None]:
+            yield b'data: ' + json.dumps(payload).encode() + ending * 2
+            # The remote agent leaves its stream open until more work arrives.
+            await asyncio.Event().wait()
+
+    def respond(request: httpx_lib.Request) -> httpx_lib.Response:
+        assert json.loads(request.content)['method'] == 'SendStreamingMessage'
+        return httpx_lib.Response(
+            200,
+            headers={'Content-Type': 'text/event-stream'},
+            stream=LiveBody(),
+        )
+
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(respond)
+    ) as client:
+        transport = JsonRpcTransport(client, AgentCard(), 'http://agent')
+        stream = transport.send_message_streaming(create_send_message_request())
+        try:
+            event = await asyncio.wait_for(anext(stream), timeout=1)
+            assert event.message.message_id == 'r1'
+            assert event.message.parts[0].text == 'hello'
+        finally:
+            await stream.aclose()
