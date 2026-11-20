@@ -59,6 +59,7 @@ FastAPI
 fernet
 fetchrow
 fetchval
+fsp
 GBP
 genai
 getkwargs
@@ -94,6 +95,7 @@ lifecycles
 linting
 Llm
 lstrips
+mariadb
 mcp
 middleware
 mikeas

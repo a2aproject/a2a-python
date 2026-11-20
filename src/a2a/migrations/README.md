@@ -40,6 +40,10 @@ Always run this command after installing or upgrading the SDK to ensure your dat
 
 Revision `b5e3d1c8a2f7` creates two additive tables, `task_versions` and `task_events`, used only by the clustered multi-server stores (`a2a.server.cluster`). It leaves the `tasks` table untouched, so deployments that use the default `DatabaseTaskStore` need not run it and are unaffected. Run it only when adopting a `VersionedTaskStore` for multi-server deployment.
 
+Revision `d7ef24c86b19` changes `tasks.last_updated` to `DATETIME(6)` on MySQL and MariaDB so task listings keep microseconds on new writes. It does nothing on PostgreSQL and SQLite, which already keep microseconds. Existing rows keep their whole-second values until the tasks are saved again. Downgrading returns the column to whole-second precision.
+
+On MySQL 8 with InnoDB, changing an existing `DATETIME` column to `DATETIME(6)` rebuilds the table (`ALGORITHM=COPY`) and blocks writes to it during the copy. Schedule the migration for a maintenance window and allow space for a copy of the table and its indexes. Tables created after this change already use `DATETIME(6)` and are not rebuilt.
+
 ```bash
 uv run a2a-db
 ```
