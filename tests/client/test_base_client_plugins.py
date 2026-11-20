@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -47,6 +48,9 @@ class Recorder(plugins.ClientPlugin):
     def hooks(self, name: str) -> list[Any]:
         return [arg for hook, arg in self.calls if hook == name]
 
+    def names(self) -> list[str]:
+        return [hook for hook, _ in self.calls]
+
     async def before_client_request(self, request: ClientRequest) -> None:
         params = dict(request.context.service_parameters or {})
         params['x-trace'] = 'abc'
@@ -55,6 +59,15 @@ class Recorder(plugins.ClientPlugin):
 
     async def after_client_request(self, response: ClientResponse) -> None:
         self.calls.append(('after_client_request', response))
+
+    async def wrap_client_call(
+        self, request: ClientRequest, call: Callable[[], Awaitable[Any]]
+    ) -> Any:
+        self.calls.append(('wrap_enter', request))
+        try:
+            return await call()
+        finally:
+            self.calls.append(('wrap_exit', request))
 
 
 def card(streaming: bool = True) -> AgentCard:
@@ -99,6 +112,18 @@ def status_event(state: TaskState) -> StreamResponse:
     )
 
 
+def wrapping(label: str, log: list[str]) -> plugins.ClientPlugin:
+    class Wrapping(plugins.ClientPlugin):
+        async def wrap_client_call(self, request, call):
+            log.append(f'{label}-enter')
+            try:
+                return await call()
+            finally:
+                log.append(f'{label}-exit')
+
+    return Wrapping()
+
+
 @pytest.fixture(autouse=True)
 def restore_global():
     previous = plugins.get_global()
@@ -120,6 +145,7 @@ async def test_unary_call_runs_hooks():
     (request,) = recorder.hooks('before_client_request')
     assert request.method == 'get_task'
     assert request.agent_card.name == 'Remote'
+    assert request.interface is None
     (response,) = recorder.hooks('after_client_request')
     assert response.payload is result
     assert response.is_final
@@ -127,6 +153,13 @@ async def test_unary_call_runs_hooks():
     # The header added by the plugin reaches the transport.
     sent_context = transport.get_task.call_args.kwargs['context']
     assert sent_context.service_parameters['x-trace'] == 'abc'
+    # One wrap around the call, inside the before and after hooks.
+    assert recorder.names() == [
+        'before_client_request',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+    ]
 
 
 @pytest.mark.asyncio
@@ -165,10 +198,10 @@ async def test_streaming_reports_events_and_final_call():
 
     transport.send_message_streaming = stream
 
-    events = [
-        e
-        async for e in client(recorder, transport).send_message(send_request())
-    ]
+    events = []
+    async for e in client(recorder, transport).send_message(send_request()):
+        events.append(e)
+        recorder.calls.append(('consumer', None))
 
     assert events == streamed
     (request,) = recorder.hooks('before_client_request')
@@ -179,6 +212,20 @@ async def test_streaming_reports_events_and_final_call():
     assert responses[-1].is_final
     assert responses[-1].payload is None
     assert responses[-1].error is None
+    assert recorder.names() == [
+        'before_client_request',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+        'consumer',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+        'consumer',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+    ]
 
 
 @pytest.mark.asyncio
@@ -196,6 +243,13 @@ async def test_stream_stopped_early_gets_final_call():
     await events.aclose()
 
     assert recorder.hooks('after_client_request')[-1].is_final
+    assert recorder.names() == [
+        'before_client_request',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+        'after_client_request',
+    ]
 
 
 @pytest.mark.asyncio
@@ -209,6 +263,12 @@ async def test_transport_errors_reach_after_client_request():
 
     (response,) = recorder.hooks('after_client_request')
     assert isinstance(response.error, ConnectionError)
+    assert recorder.names() == [
+        'before_client_request',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+    ]
 
     async def failing(request, *, context=None):
         yield status_event(TaskState.TASK_STATE_WORKING)
@@ -222,6 +282,15 @@ async def test_transport_errors_reach_after_client_request():
     assert isinstance(
         recorder.hooks('after_client_request')[-1].error, ConnectionError
     )
+    assert recorder.names() == [
+        'before_client_request',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+    ]
 
 
 @pytest.mark.asyncio
@@ -388,4 +457,74 @@ async def test_subscribe_reports_method_name():
     assert recorder.hooks('before_client_request')[0].method == 'subscribe'
     assert all(
         r.method == 'subscribe' for r in recorder.hooks('after_client_request')
+    )
+
+
+@pytest.mark.parametrize('streaming', [False, True])
+@pytest.mark.asyncio
+async def test_wraps_nest_in_registration_order(streaming):
+    """Wraps nest in registration order; one without the hook adds no layer."""
+    log: list[str] = []
+    transport = AsyncMock(spec=ClientTransport)
+    transport.get_task.return_value = Task(id='t-1')
+
+    async def stream(request, *, context=None):
+        yield status_event(TaskState.TASK_STATE_WORKING)
+
+    transport.send_message_streaming = stream
+    c = BaseClient(
+        card(),
+        ClientConfig(streaming=True),
+        transport,
+        [],
+        plugins=plugins.sequential(
+            wrapping('a', log),
+            # A plugin that does not override the hook adds no layer.
+            plugins.ClientPlugin(),
+            wrapping('b', log),
+        ),
+    )
+
+    if streaming:
+        async for _ in c.send_message(send_request()):
+            pass
+    else:
+        await c.get_task(GetTaskRequest(id='t-1'))
+
+    step = ['a-enter', 'b-enter', 'b-exit', 'a-exit']
+    assert log[: len(step)] == step
+    # A one-event stream is two steps: the event and the end of the stream.
+    assert len(log) == len(step) * (2 if streaming else 1)
+
+
+@pytest.mark.asyncio
+async def test_error_raised_inside_the_wrap_reaches_the_caller():
+    """A plugin raising in its wrap skips the transport and fails the call."""
+
+    class Boom(plugins.ClientPlugin):
+        async def wrap_client_call(self, request, call):
+            raise RuntimeError('plugin bug')
+
+    recorder = Recorder()
+    transport = AsyncMock(spec=ClientTransport)
+    c = BaseClient(
+        card(),
+        ClientConfig(),
+        transport,
+        [],
+        plugins=plugins.sequential(recorder, Boom()),
+    )
+
+    with pytest.raises(RuntimeError):
+        await c.get_task(GetTaskRequest(id='t-1'))
+
+    transport.get_task.assert_not_called()
+    assert recorder.names() == [
+        'before_client_request',
+        'wrap_enter',
+        'wrap_exit',
+        'after_client_request',
+    ]
+    assert isinstance(
+        recorder.hooks('after_client_request')[-1].error, RuntimeError
     )
