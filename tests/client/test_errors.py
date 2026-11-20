@@ -7,6 +7,9 @@ from a2a.client import (
 )
 
 
+pytestmark = pytest.mark.httpx2
+
+
 class TestA2AClientError:
     """Test cases for the base A2AClientError class."""
 

@@ -4,13 +4,16 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-import httpx
-
 from google.protobuf.json_format import ParseDict, ParseError
 
 from a2a.client.errors import AgentCardResolutionError
 from a2a.types.a2a_pb2 import (
     AgentCard,
+)
+from a2a.utils._httpx_compat import (
+    HTTP_STATUS_ERROR,
+    REQUEST_ERROR,
+    AsyncClient,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
@@ -133,14 +136,15 @@ class A2ACardResolver:
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: AsyncClient,
         base_url: str,
         agent_card_path: str = AGENT_CARD_WELL_KNOWN_PATH,
     ) -> None:
         """Initializes the A2ACardResolver.
 
         Args:
-            httpx_client: An async HTTP client instance (e.g., httpx.AsyncClient).
+            httpx_client: An async HTTP client instance (`httpx.AsyncClient`
+                or `httpx2.AsyncClient`).
             base_url: The base URL of the agent's host.
             agent_card_path: The path to the agent card endpoint, relative to the base URL.
         """
@@ -200,7 +204,7 @@ class A2ACardResolver:
             agent_card = parse_agent_card(agent_card_data)
             if signature_verifier:
                 signature_verifier(agent_card)
-        except httpx.HTTPStatusError as e:
+        except HTTP_STATUS_ERROR as e:
             raise AgentCardResolutionError(
                 f'Failed to fetch agent card from {target_url} (HTTP {e.response.status_code}): {e}',
                 status_code=e.response.status_code,
@@ -209,7 +213,7 @@ class A2ACardResolver:
             raise AgentCardResolutionError(
                 f'Failed to parse JSON for agent card from {target_url}: {e}'
             ) from e
-        except httpx.RequestError as e:
+        except REQUEST_ERROR as e:
             raise AgentCardResolutionError(
                 f'Network communication error fetching agent card from {target_url}: {e}',
             ) from e

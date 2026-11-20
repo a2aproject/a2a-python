@@ -5,7 +5,6 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-import httpx
 import pytest
 
 from a2a import plugins
@@ -56,6 +55,13 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from a2a.utils._httpx_compat import (
+    HTTP_STATUS_ERROR,
+    httpx_lib,
+)
+
+
+pytestmark = pytest.mark.httpx2
 
 
 CARD = AgentCard(
@@ -63,6 +69,27 @@ CARD = AgentCard(
     version='1.0',
     capabilities=AgentCapabilities(streaming=True, push_notifications=True),
 )
+
+
+WRAP_HOOKS = (
+    'before_handler_run',
+    'wrap_enter',
+    'wrap_exit',
+    'after_handler_run',
+    'consumer',
+)
+
+
+def wrapping(label: str, log: list[str]) -> plugins.ServerPlugin:
+    class Wrapping(plugins.ServerPlugin):
+        async def wrap_server_call(self, request, call):
+            log.append(f'{label}-enter')
+            try:
+                return await call()
+            finally:
+                log.append(f'{label}-exit')
+
+    return Wrapping()
 
 
 class Recorder(CompletePlugin, ExecutionPlugin, TaskObserverPlugin, PushPlugin):
@@ -84,6 +111,17 @@ class Recorder(CompletePlugin, ExecutionPlugin, TaskObserverPlugin, PushPlugin):
 
     async def after_handler_run(self, response: ServerResponse) -> None:
         self.calls.append(('after_handler_run', response))
+
+    async def wrap_server_call(self, request: ServerRequest, call) -> Any:
+        self.calls.append(('wrap_enter', request))
+        try:
+            return await call()
+        finally:
+            self.calls.append(('wrap_exit', request))
+
+    def wrap_names(self) -> list[str]:
+        """Hook order with the execution and task hooks filtered out."""
+        return [n for n in self.names() if n in WRAP_HOOKS]
 
     async def before_execution(self, request_context: RequestContext) -> None:
         self.calls.append(('before_execution', request_context))
@@ -277,18 +315,26 @@ async def test_send_message_runs_all_server_hooks():
     assert names[0] == 'before_handler_run'
     assert names.index('before_execution') < names.index('on_execution_event')
 
+    # One wrap around the call, inside the before and after hooks.
+    assert recorder.wrap_names() == [
+        'before_handler_run',
+        'wrap_enter',
+        'wrap_exit',
+        'after_handler_run',
+    ]
+
 
 @pytest.mark.asyncio
 async def test_streaming_reports_each_event_and_a_final_call():
     recorder = Recorder()
     handler = make_handler(recorder)
 
-    streamed = [
-        event
-        async for event in handler.on_message_send_stream(
-            send_request(), ServerCallContext()
-        )
-    ]
+    streamed = []
+    async for event in handler.on_message_send_stream(
+        send_request(), ServerCallContext()
+    ):
+        streamed.append(event)
+        recorder.calls.append(('consumer', None))
 
     responses = recorder.hooks('after_handler_run')
     assert [r.payload for r in responses[:-1]] == streamed
@@ -299,6 +345,15 @@ async def test_streaming_reports_each_event_and_a_final_call():
     assert not final.is_stream_event
     assert final.payload is None
     assert final.error is None
+
+    # Every step is wrapped separately and closes before the consumer sees
+    # the event: one step per event, plus one for the end of the stream.
+    # Closing the stream is not wrapped.
+    expected = ['before_handler_run']
+    for _ in streamed:
+        expected += ['wrap_enter', 'wrap_exit', 'after_handler_run', 'consumer']
+    expected += ['wrap_enter', 'wrap_exit', 'after_handler_run']
+    assert recorder.wrap_names() == expected
 
 
 @pytest.mark.asyncio
@@ -313,6 +368,15 @@ async def test_stream_closed_early_still_gets_final_call():
     final = recorder.hooks('after_handler_run')[-1]
     assert final.is_final
     assert final.error is None
+    # Abandoning the stream leaves no wrap open: one step for the consumed
+    # event, and the close itself is not wrapped.
+    assert recorder.wrap_names() == [
+        'before_handler_run',
+        'wrap_enter',
+        'wrap_exit',
+        'after_handler_run',
+        'after_handler_run',
+    ]
 
 
 @pytest.mark.asyncio
@@ -329,6 +393,13 @@ async def test_handler_error_reaches_after_handler_run():
     assert response.method == 'get_task'
     assert isinstance(response.error, TaskNotFoundError)
     assert response.is_final
+    # A failing handler still exits its wrap before the after hook runs.
+    assert recorder.wrap_names() == [
+        'before_handler_run',
+        'wrap_enter',
+        'wrap_exit',
+        'after_handler_run',
+    ]
 
 
 @pytest.mark.asyncio
@@ -352,6 +423,14 @@ async def test_stream_error_reaches_final_call():
 
     final = recorder.hooks('after_handler_run')[-1]
     assert isinstance(final.error, TaskNotFoundError)
+    # The failure lands on the first step, so no event is ever reported:
+    # one wrap for that step, and the close is not wrapped.
+    assert recorder.wrap_names() == [
+        'before_handler_run',
+        'wrap_enter',
+        'wrap_exit',
+        'after_handler_run',
+    ]
 
 
 class BlockingTaskStore(InMemoryTaskStore):
@@ -573,17 +652,17 @@ def push_setup(
 ) -> tuple[
     InMemoryPushNotificationConfigStore,
     BasePushNotificationSender,
-    list[httpx.Request],
+    list[httpx_lib.Request],
 ]:
-    received: list[httpx.Request] = []
+    received: list[httpx_lib.Request] = []
 
-    def handle(request: httpx.Request) -> httpx.Response:
+    def handle(request: httpx_lib.Request) -> httpx_lib.Response:
         received.append(request)
-        return httpx.Response(responses.get(str(request.url), 200))
+        return httpx_lib.Response(responses.get(str(request.url), 200))
 
     config_store = InMemoryPushNotificationConfigStore()
     sender = BasePushNotificationSender(
-        httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+        httpx_lib.AsyncClient(transport=httpx_lib.MockTransport(handle)),
         config_store,
         plugins=manager,
     )
@@ -630,7 +709,7 @@ async def test_push_hooks_run_for_v2_deliveries():
     await wait_for(lambda: len(recorder.hooks('on_push_sent')) >= 1)
     failed = recorder.hooks('on_push_sent')[0]
     assert failed.status_code == 500
-    assert isinstance(failed.error, httpx.HTTPStatusError)
+    assert isinstance(failed.error, HTTP_STATUS_ERROR)
 
 
 @pytest.mark.asyncio
@@ -677,13 +756,13 @@ async def test_push_url_validator_rejection_runs_no_hooks():
     async def reject(url: str) -> bool:
         return False
 
-    received: list[httpx.Request] = []
+    received: list[httpx_lib.Request] = []
     recorder = Recorder()
     config_store = InMemoryPushNotificationConfigStore()
     sender = BasePushNotificationSender(
-        httpx.AsyncClient(
-            transport=httpx.MockTransport(
-                lambda r: received.append(r) or httpx.Response(200)
+        httpx_lib.AsyncClient(
+            transport=httpx_lib.MockTransport(
+                lambda r: received.append(r) or httpx_lib.Response(200)
             )
         ),
         config_store,
@@ -735,10 +814,10 @@ def test_push_sender_uses_global_manager_unless_given_one():
     other = plugins.sequential()
 
     default = BasePushNotificationSender(
-        httpx.AsyncClient(), InMemoryPushNotificationConfigStore()
+        httpx_lib.AsyncClient(), InMemoryPushNotificationConfigStore()
     )
     explicit = BasePushNotificationSender(
-        httpx.AsyncClient(),
+        httpx_lib.AsyncClient(),
         InMemoryPushNotificationConfigStore(),
         plugins=other,
     )
@@ -764,3 +843,71 @@ async def test_handler_plugins_do_not_reach_a_sender_with_its_own_manager():
     assert received
     assert 'x-plugin' not in received[0].headers
     assert recorder.hooks('before_push_send') == []
+
+
+@pytest.mark.parametrize('streaming', [False, True])
+@pytest.mark.asyncio
+async def test_wraps_nest_in_registration_order(streaming):
+    """Wraps nest in registration order; one without the hook adds no layer."""
+    log: list[str] = []
+    handler = DefaultRequestHandlerV2(
+        agent_executor=MessageAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=CARD,
+        plugins=plugins.sequential(
+            wrapping('a', log),
+            # A plugin that does not override the hook adds no layer.
+            plugins.ServerPlugin(),
+            wrapping('b', log),
+        ),
+    )
+
+    if streaming:
+        async for _ in handler.on_message_send_stream(
+            send_request(), ServerCallContext()
+        ):
+            pass
+    else:
+        with pytest.raises(TaskNotFoundError):
+            await handler.on_get_task(
+                GetTaskRequest(id='missing'), ServerCallContext()
+            )
+
+    step = ['a-enter', 'b-enter', 'b-exit', 'a-exit']
+    assert log[: len(step)] == step
+    # A one-event stream is two steps: the event and the end of the stream.
+    assert len(log) == len(step) * (2 if streaming else 1)
+
+
+@pytest.mark.asyncio
+async def test_error_raised_inside_the_wrap_reaches_the_caller():
+    """A plugin raising in its wrap skips the handler and fails the call."""
+
+    class Boom(plugins.ServerPlugin):
+        async def wrap_server_call(self, request, call):
+            raise RuntimeError('plugin bug')
+
+    recorder = Recorder()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=MessageAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=CARD,
+        plugins=plugins.sequential(recorder, Boom()),
+    )
+
+    # The unknown id would raise TaskNotFoundError, so a RuntimeError proves
+    # the handler never ran.
+    with pytest.raises(RuntimeError):
+        await handler.on_get_task(
+            GetTaskRequest(id='missing'), ServerCallContext()
+        )
+
+    assert recorder.wrap_names() == [
+        'before_handler_run',
+        'wrap_enter',
+        'wrap_exit',
+        'after_handler_run',
+    ]
+    assert isinstance(
+        recorder.hooks('after_handler_run')[-1].error, RuntimeError
+    )

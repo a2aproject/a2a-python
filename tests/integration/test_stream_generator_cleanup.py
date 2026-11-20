@@ -11,7 +11,6 @@ import gc
 from typing import Any
 from uuid import uuid4
 
-import httpx
 import pytest
 
 from a2a.client.base_client import BaseClient
@@ -33,7 +32,11 @@ from a2a.types import (
     SendMessageRequest,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils._httpx_compat import httpx_lib
 from starlette.applications import Starlette
+
+
+pytestmark = pytest.mark.httpx2
 
 
 class _MessageExecutor(AgentExecutor):
@@ -88,8 +91,8 @@ def client():
     )
     return ClientFactory(
         config=ClientConfig(
-            httpx_client=httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            httpx_client=httpx_lib.AsyncClient(
+                transport=httpx_lib.ASGITransport(app=app),
                 base_url='http://test',
             )
         )
