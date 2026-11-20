@@ -388,11 +388,12 @@ def trace_class(
                 continue
 
             span_name = f'{cls.__module__}.{cls.__name__}.{name}'
-            setattr(
-                cls,
-                name,
-                trace_function(span_name=span_name, kind=kind)(method),
-            )
+            traced = trace_function(span_name=span_name, kind=kind)(method)
+            # `getmembers` unwraps staticmethods into plain functions. Setting
+            # the wrapper back as-is would turn them into instance methods.
+            if isinstance(inspect.getattr_static(cls, name), staticmethod):
+                traced = staticmethod(traced)
+            setattr(cls, name, traced)
         return cls
 
     return decorator
