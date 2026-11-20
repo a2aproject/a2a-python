@@ -13,7 +13,7 @@ from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
-    get_http_args,
+    get_versioned_http_args,
     handle_http_exceptions,
     send_http_request,
     send_http_stream_request,
@@ -310,7 +310,7 @@ class RestTransport(ClientTransport):
             'DELETE',
             f'{self.url}{path}',
             params=params,
-            **get_http_args(context),
+            **get_versioned_http_args(context, self.httpx_client),
         )
         if self.httpx_client.is_closed:
             raise A2AClientError('HTTP client is closed')
@@ -407,7 +407,7 @@ class RestTransport(ClientTransport):
         json: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         path = self._get_path(target, tenant)
-        http_kwargs = get_http_args(context)
+        http_kwargs = get_versioned_http_args(context, self.httpx_client)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
@@ -451,7 +451,7 @@ class RestTransport(ClientTransport):
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         path = self._get_path(target, tenant)
-        http_kwargs = get_http_args(context)
+        http_kwargs = get_versioned_http_args(context, self.httpx_client)
 
         request = self.httpx_client.build_request(
             method,

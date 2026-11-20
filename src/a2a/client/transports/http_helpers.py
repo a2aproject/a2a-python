@@ -16,6 +16,7 @@ from a2a.utils._httpx_compat import (
     Request,
     Response,
 )
+from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
 
 
 def _default_sse_error_handler(sse_data: str) -> NoReturn:
@@ -54,6 +55,26 @@ def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
         http_kwargs['headers'] = context.service_parameters.copy()
     if context and context.timeout is not None:
         http_kwargs['timeout'] = context.timeout
+    return http_kwargs
+
+
+def get_versioned_http_args(
+    context: ClientCallContext | None, httpx_client: AsyncClient
+) -> dict[str, Any]:
+    """Like `get_http_args`, plus the `A2A-Version` header.
+
+    The spec requires the header on every request. It is added unless the
+    call's service parameters or the httpx client already set one.
+    """
+    http_kwargs = get_http_args(context)
+    headers = http_kwargs.get('headers', {})
+    if VERSION_HEADER not in httpx_client.headers and not any(
+        key.lower() == VERSION_HEADER.lower() for key in headers
+    ):
+        http_kwargs['headers'] = {
+            **headers,
+            VERSION_HEADER: PROTOCOL_VERSION_CURRENT,
+        }
     return http_kwargs
 
 

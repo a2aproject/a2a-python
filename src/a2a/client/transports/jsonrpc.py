@@ -12,7 +12,7 @@ from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
-    get_http_args,
+    get_versioned_http_args,
     send_http_request,
     send_http_stream_request,
 )
@@ -320,7 +320,7 @@ class JsonRpcTransport(ClientTransport):
         payload: dict[str, Any],
         context: ClientCallContext | None = None,
     ) -> dict[str, Any]:
-        http_kwargs = get_http_args(context)
+        http_kwargs = get_versioned_http_args(context, self.httpx_client)
 
         request = self.httpx_client.build_request(
             'POST', self.url, json=payload, **(http_kwargs or {})
@@ -362,7 +362,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request_payload: dict[str, Any],
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
-        http_kwargs = get_http_args(context)
+        http_kwargs = get_versioned_http_args(context, self.httpx_client)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
