@@ -447,6 +447,11 @@ ADDRESS_KEYS = (
             '',
             {_semconv.SERVER_ADDRESS: 'remote.example.com'},
         ),
+        (
+            AgentInterface(url='localhost:50051', protocol_binding='GRPC'),
+            '',
+            {_semconv.SERVER_ADDRESS: 'localhost', _semconv.SERVER_PORT: 50051},
+        ),
         (None, '', {}),
         (
             INTERFACE,
@@ -459,7 +464,7 @@ ADDRESS_KEYS = (
             },
         ),
     ],
-    ids=['full', 'no-port', 'no-interface', 'request-tenant-wins'],
+    ids=['full', 'no-port', 'grpc', 'no-interface', 'request-tenant-wins'],
 )
 @pytest.mark.asyncio
 async def test_interface_and_tenant_attributes(

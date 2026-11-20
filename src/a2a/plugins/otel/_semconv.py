@@ -66,5 +66,5 @@ def host_port(url: str) -> tuple[str | None, int | None]:
     """Splits an interface URL into its `server.address` and `server.port`."""
     if not url:
         return None, None
-    parsed = urlparse(url)
+    parsed = urlparse(url if '//' in url else f'//{url}')
     return parsed.hostname, parsed.port
