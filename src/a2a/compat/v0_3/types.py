@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import Field, RootModel
+from pydantic import AliasChoices, Field, RootModel
 
 from a2a._base import A2ABaseModel
 
@@ -1458,7 +1458,7 @@ class Message(A2ABaseModel):
     """
     Optional metadata for extensions. The key is an extension-specific identifier.
     """
-    parts: list[Part]
+    parts: list[Part] = Field(validation_alias=AliasChoices('parts', 'content'))
     """
     An array of content parts that form the message body. A message can be
     composed of multiple parts of different types (e.g., text and files).
