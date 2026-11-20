@@ -144,6 +144,7 @@ RUF
 Rundgren
 SECP
 SECP256R1
+semconv
 SFIXED
 signings
 SLF
