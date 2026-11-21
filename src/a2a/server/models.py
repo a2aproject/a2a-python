@@ -24,6 +24,7 @@ try:
         LargeBinary,
         String,
     )
+    from sqlalchemy.dialects.mysql import DATETIME
     from sqlalchemy.orm import (
         DeclarativeBase,
         Mapped,
@@ -57,7 +58,8 @@ class TaskMixin:
     )
     owner: Mapped[str] = mapped_column(String(255), nullable=True)
     last_updated: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
+        DateTime().with_variant(DATETIME(fsp=6), 'mysql', 'mariadb'),
+        nullable=True,
     )
     status: Mapped[TaskStatus] = mapped_column(JSON, nullable=False)
     artifacts: Mapped[list[Artifact] | None] = mapped_column(
