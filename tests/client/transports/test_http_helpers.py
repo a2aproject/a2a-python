@@ -1,6 +1,5 @@
 from collections.abc import AsyncIterator
 
-import httpx
 import pytest
 
 from a2a.client.client import ClientCallContext
@@ -12,6 +11,10 @@ from a2a.client.transports.http_helpers import (
     parse_sse_stream,
     send_http_stream_request,
 )
+from a2a.utils._httpx_compat import httpx_lib
+
+
+pytestmark = pytest.mark.httpx2
 
 
 def test_default_sse_error_handler():
@@ -23,18 +26,21 @@ def test_default_sse_error_handler():
 
 @pytest.mark.asyncio
 async def test_parse_sse_stream_edge_cases():
-    async def mock_aiter_text():
-        yield ': comment line (should be ignored)\n'
-        yield 'event: custom_event\n'
-        yield 'data:  hello\n'
-        yield 'data: world\n'
-        yield '\n'
-        yield '\n'
-        yield 'data: \n'
-        yield '\n'
-
-    response = httpx.Response(200)
-    response.aiter_text = mock_aiter_text  # type: ignore
+    response = httpx_lib.Response(
+        200,
+        content=_byte_chunks(
+            [
+                b': comment line (should be ignored)\n',
+                b'event: custom_event\n',
+                b'data:  hello\n',
+                b'data: world\n',
+                b'\n',
+                b'\n',
+                b'data: \n',
+                b'\n',
+            ]
+        ),
+    )
 
     events = [e async for e in parse_sse_stream(response)]
     assert events == [
@@ -46,6 +52,49 @@ async def test_parse_sse_stream_edge_cases():
 async def _byte_chunks(chunks: list[bytes]) -> AsyncIterator[bytes]:
     for chunk in chunks:
         yield chunk
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('content_type', 'default_encoding'),
+    [
+        pytest.param('text/event-stream', 'utf-8', id='utf8-control'),
+        pytest.param(
+            'text/event-stream; charset=iso-8859-1',
+            'utf-8',
+            id='response-charset',
+        ),
+        pytest.param(
+            'text/event-stream', 'iso-8859-1', id='client-default-encoding'
+        ),
+    ],
+)
+async def test_send_http_stream_request_sse_uses_utf8(
+    content_type: str, default_encoding: str
+) -> None:
+    """Decode SSE as UTF-8 even when HTTP text decoding selects another charset."""
+    body = 'data: café 東京\r\n\r\n'.encode('utf-8')
+    chunks = [body[i : i + 1] for i in range(len(body))]
+
+    def respond(request: httpx_lib.Request) -> httpx_lib.Response:
+        return httpx_lib.Response(
+            200,
+            headers={'Content-Type': content_type},
+            content=_byte_chunks(chunks),
+        )
+
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(respond),
+        default_encoding=default_encoding,
+    ) as client:
+        events = [
+            event
+            async for event in send_http_stream_request(
+                client, 'GET', 'https://agent.example'
+            )
+        ]
+
+    assert events == ['café 東京']
 
 
 @pytest.mark.asyncio
@@ -73,7 +122,7 @@ async def test_parse_sse_stream_ends_lines_only_at_cr_or_lf(
     chunks: list[bytes], expected: list[tuple[str, str]]
 ) -> None:
     """Only CRLF, LF and CR end a line, as the SSE specification requires."""
-    response = httpx.Response(200, content=_byte_chunks(chunks))
+    response = httpx_lib.Response(200, content=_byte_chunks(chunks))
 
     events = [e async for e in parse_sse_stream(response)]
 
@@ -88,7 +137,7 @@ async def test_parse_sse_stream_long_data_line_over_many_chunks() -> None:
     body = f'data: {payload}\r\n\r\n'.encode()
     chunk_size = 512
     chunks = [body[i : i + chunk_size] for i in range(0, len(body), chunk_size)]
-    response = httpx.Response(200, content=_byte_chunks(chunks))
+    response = httpx_lib.Response(200, content=_byte_chunks(chunks))
 
     # Re-joining and re-scanning the whole line on every chunk took tens of
     # seconds here; the linear version takes well under a second.
@@ -99,9 +148,9 @@ async def test_parse_sse_stream_long_data_line_over_many_chunks() -> None:
 
 @pytest.mark.asyncio
 async def test_send_http_stream_request_non_sse(mocker):
-    client = httpx.AsyncClient()
-    request = httpx.Request('GET', 'http://test')
-    response = httpx.Response(
+    client = httpx_lib.AsyncClient()
+    request = httpx_lib.Request('GET', 'http://test')
+    response = httpx_lib.Response(
         200,
         headers={'Content-Type': 'application/json'},
         content=b'plain error response',
@@ -128,9 +177,9 @@ def test_get_http_args_passes_timeout_through_unwrapped():
     http_kwargs = get_http_args(ClientCallContext(timeout=5.0))
 
     assert http_kwargs['timeout'] == 5.0
-    assert not isinstance(http_kwargs['timeout'], httpx.Timeout)
+    assert not isinstance(http_kwargs['timeout'], httpx_lib.Timeout)
 
-    request = httpx.AsyncClient().build_request(
+    request = httpx_lib.AsyncClient().build_request(
         'GET', 'http://test', **http_kwargs
     )
     assert request.extensions['timeout'] == {
@@ -142,7 +191,7 @@ def test_get_http_args_passes_timeout_through_unwrapped():
 
 
 def test_sse_event_source_sets_default_stream_headers():
-    source = _SSEEventSource(httpx.AsyncClient(), 'GET', 'http://test')
+    source = _SSEEventSource(httpx_lib.AsyncClient(), 'GET', 'http://test')
 
     assert source._request.headers['Accept'] == 'text/event-stream'
     assert source._request.headers['Cache-Control'] == 'no-store'
@@ -160,7 +209,7 @@ def test_sse_event_source_keeps_caller_accept_whatever_its_case(
     spelling exactly is not enough to detect that they already set one.
     """
     source = _SSEEventSource(
-        httpx.AsyncClient(),
+        httpx_lib.AsyncClient(),
         'GET',
         'http://test',
         headers={caller_spelling: 'application/json'},

@@ -143,6 +143,7 @@ class CompatGrpcTransport(ClientTransport):
         resp_proto = await self.stub.SendMessage(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
 
         which = resp_proto.WhichOneof('payload')
@@ -185,6 +186,7 @@ class CompatGrpcTransport(ClientTransport):
         stream = self.stub.SendStreamingMessage(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
         while True:
             response = await stream.read()
@@ -216,6 +218,7 @@ class CompatGrpcTransport(ClientTransport):
         stream = self.stub.TaskSubscription(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
         while True:
             response = await stream.read()
@@ -242,6 +245,7 @@ class CompatGrpcTransport(ClientTransport):
         resp_proto = await self.stub.GetTask(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
         # v0.3 has no way to ask for an empty history (0 means unlimited), so
         # the v1.0 `history_length` semantics are applied to the result here.
@@ -275,6 +279,7 @@ class CompatGrpcTransport(ClientTransport):
         resp_proto = await self.stub.CancelTask(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
         return conversions.to_core_task(proto_utils.FromProto.task(resp_proto))
 
@@ -301,6 +306,7 @@ class CompatGrpcTransport(ClientTransport):
         resp_proto = await self.stub.CreateTaskPushNotificationConfig(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
         return conversions.to_core_task_push_notification_config(
             proto_utils.FromProto.task_push_notification_config(resp_proto)
@@ -320,6 +326,7 @@ class CompatGrpcTransport(ClientTransport):
         resp_proto = await self.stub.GetTaskPushNotificationConfig(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
         return conversions.to_core_task_push_notification_config(
             proto_utils.FromProto.task_push_notification_config(resp_proto)
@@ -339,6 +346,7 @@ class CompatGrpcTransport(ClientTransport):
         resp_proto = await self.stub.ListTaskPushNotificationConfig(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
         return conversions.to_core_list_task_push_notification_config_response(
             proto_utils.FromProto.list_task_push_notification_config_response(
@@ -360,6 +368,7 @@ class CompatGrpcTransport(ClientTransport):
         await self.stub.DeleteTaskPushNotificationConfig(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
 
     @_handle_grpc_exception
@@ -374,6 +383,7 @@ class CompatGrpcTransport(ClientTransport):
         resp_proto = await self.stub.GetAgentCard(
             req_proto,
             metadata=self._get_grpc_metadata(context),
+            timeout=self._get_grpc_timeout(context),
         )
         card = conversions.to_core_agent_card(
             proto_utils.FromProto.agent_card(resp_proto)
@@ -401,3 +411,9 @@ class CompatGrpcTransport(ClientTransport):
                 metadata.append((key.lower(), value))
 
         return metadata
+
+    def _get_grpc_timeout(
+        self, context: ClientCallContext | None
+    ) -> float | None:
+        """Returns the per-call deadline in seconds, if one is set."""
+        return context.timeout if context else None

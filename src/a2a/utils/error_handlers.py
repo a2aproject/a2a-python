@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 ERROR_INFO_TYPE = 'type.googleapis.com/google.rpc.ErrorInfo'
 BAD_REQUEST_TYPE = 'type.googleapis.com/google.rpc.BadRequest'
 A2A_DOMAIN = 'a2a-protocol.org'
+JSON_MEDIA_TYPE = 'application/json'
 
 
 def _error_info(
@@ -131,7 +132,9 @@ def build_rest_error_payload(error: Exception) -> dict[str, Any]:
     )
 
 
-def _create_error_response(error: Exception) -> Response:
+def _create_error_response(
+    error: Exception, media_type: str = JSON_MEDIA_TYPE
+) -> Response:
     """Helper function to create a JSONResponse for an error."""
     if isinstance(error, A2AError):
         log_level = (
@@ -157,29 +160,62 @@ def _create_error_response(error: Exception) -> Response:
     return JSONResponse(
         content=payload,
         status_code=http_code,
-        media_type='application/json',
+        media_type=media_type,
     )
 
 
 def rest_error_handler(
-    func: Callable[..., Awaitable[Response]],
-) -> Callable[..., Awaitable[Response]]:
-    """Decorator to catch A2AError and map it to an appropriate JSONResponse."""
+    func: Callable[..., Awaitable[Response]] | None = None,
+    *,
+    media_type: str = JSON_MEDIA_TYPE,
+) -> Callable:
+    """Decorator to catch A2AError and map it to an appropriate JSONResponse.
+
+    Use it as ``@rest_error_handler``, or as
+    ``@rest_error_handler(media_type=...)`` to set the error Content-Type.
+
+    Args:
+        func: The handler to wrap. None when called with arguments only.
+        media_type: The Content-Type of the error response.
+
+    Returns:
+        The wrapped handler, or a partial decorator if ``func`` is None.
+    """
+    if func is None:
+        return functools.partial(rest_error_handler, media_type=media_type)
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Response:
         try:
             return await func(*args, **kwargs)
         except Exception as error:  # noqa: BLE001
-            return _create_error_response(error)
+            return _create_error_response(error, media_type)
 
     return wrapper
 
 
 def rest_stream_error_handler(
-    func: Callable[..., Coroutine[Any, Any, Any]],
-) -> Callable[..., Coroutine[Any, Any, Any]]:
-    """Decorator to catch A2AError for a streaming method. Maps synchronous errors to JSONResponse and logs streaming errors."""
+    func: Callable[..., Coroutine[Any, Any, Any]] | None = None,
+    *,
+    media_type: str = JSON_MEDIA_TYPE,
+) -> Callable:
+    """Decorator to catch A2AError for a streaming method. Maps synchronous errors to JSONResponse and logs streaming errors.
+
+    Use it as ``@rest_stream_error_handler``, or as
+    ``@rest_stream_error_handler(media_type=...)`` to set the error
+    Content-Type.
+
+    Args:
+        func: The handler to wrap. None when called with arguments only.
+        media_type: The Content-Type of a synchronous error response.
+
+    Returns:
+        The wrapped handler, or a partial decorator if ``func`` is None.
+    """
+    if func is None:
+        return functools.partial(
+            rest_stream_error_handler, media_type=media_type
+        )
 
     def _log_error(error: Exception) -> None:
         if isinstance(error, A2AError):
@@ -223,7 +259,7 @@ def rest_stream_error_handler(
                 response.body_iterator = error_catching_iterator()
 
         except Exception as e:  # noqa: BLE001
-            return _create_error_response(e)
+            return _create_error_response(e, media_type)
         else:
             return response
 

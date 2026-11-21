@@ -6,7 +6,6 @@ from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-import httpx
 import pytest
 
 from a2a.client.errors import A2AClientError
@@ -30,6 +29,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskState,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, TaskNotFoundError
 from google.protobuf import json_format
 
@@ -44,11 +44,11 @@ async def async_iterable_from_list(
 
 @pytest.fixture
 def mock_httpx_client():
-    """Creates a mock httpx.AsyncClient."""
-    client = AsyncMock(spec=httpx.AsyncClient)
+    """Creates a mock AsyncClient."""
+    client = AsyncMock(spec=httpx_lib.AsyncClient)
     client.is_closed = False
-    client.headers = httpx.Headers()
-    client.timeout = httpx.Timeout(30.0)
+    client.headers = httpx_lib.Headers()
+    client.timeout = httpx_lib.Timeout(30.0)
     return client
 
 
@@ -102,6 +102,9 @@ def create_send_message_request(text='Hello'):
 
 
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
+
+
+pytestmark = pytest.mark.httpx2
 
 
 def _assert_extensions_header(mock_kwargs: dict, expected_extensions: set[str]):
@@ -185,7 +188,7 @@ class TestSendMessage:
     @pytest.mark.asyncio
     async def test_send_message_timeout(self, transport, mock_httpx_client):
         """Test handling of request timeout."""
-        mock_httpx_client.send.side_effect = httpx.ReadTimeout('Timeout')
+        mock_httpx_client.send.side_effect = httpx_lib.ReadTimeout('Timeout')
 
         request = create_send_message_request()
 
@@ -197,7 +200,7 @@ class TestSendMessage:
         """Test handling of HTTP errors."""
         mock_response = MagicMock()
         mock_response.status_code = 500
-        mock_httpx_client.send.side_effect = httpx.HTTPStatusError(
+        mock_httpx_client.send.side_effect = httpx_lib.HTTPStatusError(
             'Server Error', request=MagicMock(), response=mock_response
         )
 
@@ -448,11 +451,11 @@ class TestStreamingErrors:
         transport: JsonRpcTransport,
     ):
         request = create_send_message_request()
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            ['event: error\ndata: Simulated SSE error\n\n']
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [b'event: error\ndata: Simulated SSE error\n\n']
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
@@ -468,10 +471,10 @@ class TestStreamingErrors:
         transport: JsonRpcTransport,
     ):
         request = create_send_message_request()
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.side_effect = httpx.RequestError(
+        mock_response.aiter_bytes.side_effect = httpx_lib.RequestError(
             'Simulated request error', request=MagicMock()
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
@@ -488,10 +491,12 @@ class TestStreamingErrors:
         transport: JsonRpcTransport,
     ):
         request = create_send_message_request()
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.side_effect = httpx.TimeoutException('Timeout')
+        mock_response.aiter_bytes.side_effect = httpx_lib.TimeoutException(
+            'Timeout'
+        )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError, match='timed out'):
@@ -567,15 +572,15 @@ class TestExtensions:
         )
         request = create_send_message_request(text='Error stream')
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.status_code = 403
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        mock_response.raise_for_status.side_effect = httpx_lib.HTTPStatusError(
             'Forbidden',
-            request=httpx.Request('POST', 'http://test.url'),
+            request=httpx_lib.Request('POST', 'http://test.url'),
             response=mock_response,
         )
-        mock_response.aiter_text.return_value = async_iterable_from_list([])
+        mock_response.aiter_bytes.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
@@ -804,11 +809,11 @@ class TestUnrecognizedResponseFields:
                 'someNewField': 'x',
             },
         }
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            [f'data: {json.dumps(payload)}\n\n']
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [f'data: {json.dumps(payload)}\n\n'.encode()]
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
@@ -960,11 +965,11 @@ class TestMalformedJsonRpcResponses:
     async def test_streaming_malformed_event_raises_a2a_error(
         self, mock_sse_source: AsyncMock, transport, lines, expected_error
     ):
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            [f'{line}\n' for line in lines]
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [f'{line}\n'.encode() for line in lines]
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
