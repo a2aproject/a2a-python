@@ -487,6 +487,18 @@ class DefaultRequestHandlerV2(RequestHandler):
         task_id = cast('str', request_context.task_id)
 
         result: Message | Task | None = None
+        # A resumed turn starts from an interrupted state (e.g. input
+        # required). If the executor re-emits the inherited task snapshot
+        # at turn start, that replayed event must not end the blocking
+        # wait before the new turn has done any work: skip the first
+        # event only when it still carries the inherited status. A fresh
+        # interrupted state reported by the new turn (e.g. requires_auth
+        # for out-of-band auth, or a re-asked requires_input) carries a
+        # new timestamp from TaskUpdater.update_status, so it ends the
+        # wait as the spec requires. The turn's real outcome is returned
+        # once the executor reports it, or via the get_task() fallback
+        # below if the turn ends without one.
+        first_event = True
 
         async for raw_event in active_task.subscribe(
             request=request_context,
@@ -494,6 +506,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             replace_status_update_with_task=True,
         ):
             event = raw_event
+            is_first_event, first_event = first_event, False
             logger.debug(
                 'Processing[%s] event [%s] %s',
                 params.message.task_id,
@@ -505,6 +518,25 @@ class DefaultRequestHandlerV2(RequestHandler):
                 or event.status.state
                 in (TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES)
             ):
+                # The producer sets request_context.current_task before the
+                # executor runs, so by the time the first event arrives it
+                # holds the inherited task (None for a new task). Only a
+                # first event that still carries that inherited status is
+                # a replayed snapshot; a fresh status differs by timestamp.
+                prior_status = (
+                    request_context.current_task.status
+                    if is_first_event
+                    and request_context.current_task is not None
+                    else None
+                )
+                if (
+                    not params.configuration.return_immediately
+                    and prior_status is not None
+                    and event.status == prior_status
+                ):
+                    # Replayed snapshot of the inherited interrupted
+                    # state; keep waiting for the new turn.
+                    continue
                 self._validate_task_id_match(task_id, event.id)
                 result = event
                 # A FAILED task may be followed by a producer exception. Keep

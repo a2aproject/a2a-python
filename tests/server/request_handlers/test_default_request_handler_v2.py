@@ -3180,6 +3180,33 @@ class _ContextRecordingAgent(AgentExecutor):
         pass
 
 
+class _ReplayStaleSnapshotThenCompleteAgent(AgentExecutor):
+    """Parks a task in input-required, then replays the stale snapshot.
+
+    Regression test executor for #1409: on the continuation turn it
+    re-emits ``context.current_task`` (the inherited input-required
+    snapshot) before doing the real work of completing the task.
+    """
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        if context.current_task is None:
+            task = new_task_from_user_message(context.message)
+            await event_queue.enqueue_event(task)
+            updater = TaskUpdater(event_queue, task.id, task.context_id)
+            await updater.update_status(TaskState.TASK_STATE_INPUT_REQUIRED)
+            return
+        await event_queue.enqueue_event(context.current_task)
+        updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('streaming', [False, True])
 async def test_task_only_message_infers_context_id_from_task(streaming):
@@ -3224,6 +3251,189 @@ async def test_task_only_message_infers_context_id_from_task(streaming):
     stored = await task_store.get(task.id, call_context)
     assert stored is not None
     assert stored.context_id == task.context_id
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_ignores_replayed_interrupted_snapshot():
+    """Issue #1409: a blocking continuation must not return the stale
+    input-required snapshot re-emitted by the executor at turn start."""
+    agent = _ReplayStaleSnapshotThenCompleteAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    first = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER,
+                message_id='msg-1',
+                parts=[Part(text='book a flight')],
+            )
+        ),
+        context,
+    )
+    assert isinstance(first, Task)
+    assert first.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    result = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER,
+                message_id='msg-2',
+                parts=[Part(text='Friday')],
+                task_id=first.id,
+                context_id=first.context_id,
+            )
+        ),
+        context,
+    )
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
+
+
+class _FreshInputRequiredThenReturnAgent(AgentExecutor):
+    """Parks a task in input-required, then re-asks on the next turn.
+
+    Regression test executor for the review on #1447: on the
+    continuation turn it reports a fresh requires_input() (with a new
+    timestamp) instead of replaying the inherited snapshot, then
+    returns after a delay. The blocking call must return the fresh
+    INPUT_REQUIRED from the event loop, not from the get_task()
+    fallback after the turn ends.
+    """
+
+    def __init__(self) -> None:
+        self.turn_finished = asyncio.Event()
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        if context.current_task is None:
+            task = new_task_from_user_message(context.message)
+            await event_queue.enqueue_event(task)
+            updater = TaskUpdater(event_queue, task.id, task.context_id)
+            await updater.update_status(TaskState.TASK_STATE_INPUT_REQUIRED)
+            return
+        updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+        await updater.requires_input()
+        await asyncio.sleep(1)
+        self.turn_finished.set()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_returns_fresh_input_required_from_loop():
+    """Review on #1447: a fresh requires_input() on a continuation turn
+    is a new interrupted state, not a replayed snapshot, so the blocking
+    call returns it from the event loop before the turn ends."""
+    agent = _FreshInputRequiredThenReturnAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    first = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER,
+                message_id='msg-1',
+                parts=[Part(text='book a flight')],
+            )
+        ),
+        context,
+    )
+    assert isinstance(first, Task)
+    assert first.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    result = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER,
+                message_id='msg-2',
+                parts=[Part(text='Friday')],
+                task_id=first.id,
+                context_id=first.context_id,
+            )
+        ),
+        context,
+    )
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+    # The handler returned while the turn was still running, so the
+    # result came from the event loop, not the get_task() fallback.
+    assert not agent.turn_finished.is_set()
+    await handler.aclose()
+
+
+class _AuthRequiredThenWaitAgent(AgentExecutor):
+    """Reports auth-required as its first event, then waits for auth.
+
+    Regression test executor for the review on #1447: a new task's
+    first event is a Task carrying AUTH_REQUIRED, and the executor then
+    waits on an event that is never set (out-of-band auth never
+    completes). The blocking call must return AUTH_REQUIRED instead of
+    waiting for auth. A new task must lead with a Task: the consumer
+    rejects a bare status update before any Task, and
+    create_task_if_missing only suppresses the not-found error, it does
+    not create the task, so requires_auth() cannot be the first event.
+    """
+
+    def __init__(self) -> None:
+        self.auth_completed = asyncio.Event()
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        task = new_task_from_user_message(context.message)
+        task.status.state = TaskState.TASK_STATE_AUTH_REQUIRED
+        await event_queue.enqueue_event(task)
+        await self.auth_completed.wait()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_returns_fresh_auth_required_without_waiting():
+    """Review on #1447: a new task whose first event carries
+    AUTH_REQUIRED returns it from the blocking call even though the
+    executor keeps waiting for out-of-band auth."""
+    agent = _AuthRequiredThenWaitAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    result = await asyncio.wait_for(
+        handler.on_message_send(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='msg-1',
+                    parts=[Part(text='book a flight')],
+                )
+            ),
+            create_server_call_context(),
+        ),
+        timeout=5,
+    )
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
+    assert not agent.auth_completed.is_set()
     await handler.aclose()
 
 
