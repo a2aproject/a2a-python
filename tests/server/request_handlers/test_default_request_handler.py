@@ -46,6 +46,7 @@ from a2a.server.tasks import (
 )
 from a2a.types import (
     ContentTypeNotSupportedError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
@@ -56,6 +57,7 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentExtension,
     AgentInterface,
     AgentSkill,
     Artifact,
@@ -1060,6 +1062,57 @@ async def test_on_message_send_input_mode_validation_is_opt_in(
                 params, create_server_call_context()
             )
             is not None
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('validate_required_extensions', 'requested', 'expect_rejection'),
+    [
+        (True, set(), True),
+        (True, {'https://example.com/ext/required/v1'}, False),
+        (False, set(), False),
+    ],
+)
+async def test_on_message_send_required_extension_validation_is_opt_in(
+    validate_required_extensions, requested, expect_rejection
+):
+    """The legacy handler gates the same check behind the same flag."""
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(
+                streaming=True,
+                extensions=[
+                    AgentExtension(
+                        uri='https://example.com/ext/required/v1',
+                        required=True,
+                    )
+                ],
+            ),
+        ),
+        validate_required_extensions=validate_required_extensions,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_hello',
+            parts=[Part(text='hello')],
+        )
+    )
+    context = ServerCallContext(
+        user=UnauthenticatedUser(), requested_extensions=requested
+    )
+
+    if expect_rejection:
+        with pytest.raises(ExtensionSupportRequiredError):
+            await request_handler.on_message_send(params, context)
+    else:
+        assert (
+            await request_handler.on_message_send(params, context) is not None
         )
 
 

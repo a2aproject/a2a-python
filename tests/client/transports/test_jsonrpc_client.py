@@ -30,7 +30,11 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils._httpx_compat import httpx_lib
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, TaskNotFoundError
+from a2a.utils.errors import (
+    JSON_RPC_ERROR_CODE_MAP,
+    InternalError,
+    TaskNotFoundError,
+)
 from google.protobuf import json_format
 
 
@@ -454,8 +458,8 @@ class TestStreamingErrors:
         mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            ['event: error\ndata: Simulated SSE error\n\n']
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [b'event: error\ndata: Simulated SSE error\n\n']
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
@@ -474,7 +478,7 @@ class TestStreamingErrors:
         mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.side_effect = httpx_lib.RequestError(
+        mock_response.aiter_bytes.side_effect = httpx_lib.RequestError(
             'Simulated request error', request=MagicMock()
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
@@ -494,7 +498,7 @@ class TestStreamingErrors:
         mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.side_effect = httpx_lib.TimeoutException(
+        mock_response.aiter_bytes.side_effect = httpx_lib.TimeoutException(
             'Timeout'
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
@@ -580,7 +584,7 @@ class TestExtensions:
             request=httpx_lib.Request('POST', 'http://test.url'),
             response=mock_response,
         )
-        mock_response.aiter_text.return_value = async_iterable_from_list([])
+        mock_response.aiter_bytes.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
@@ -812,8 +816,8 @@ class TestUnrecognizedResponseFields:
         mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            [f'data: {json.dumps(payload)}\n\n']
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [f'data: {json.dumps(payload)}\n\n'.encode()]
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
@@ -968,8 +972,8 @@ class TestMalformedJsonRpcResponses:
         mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            [f'{line}\n' for line in lines]
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [f'{line}\n'.encode() for line in lines]
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
@@ -978,3 +982,118 @@ class TestMalformedJsonRpcResponses:
                 create_send_message_request()
             ):
                 pass
+
+
+class TestJsonRpcErrorWithNonSuccessStatus:
+    """A JSON-RPC error body maps to its A2A error whatever the HTTP status.
+
+    Some servers (e.g. a2a-js for internal errors) send the error object with
+    a non-2xx status. Bodies that are not JSON-RPC errors keep raising the
+    generic HTTP error.
+    """
+
+    @staticmethod
+    def _error_body(code: int, message: str) -> dict[str, object]:
+        return {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'error': {'code': code, 'message': message},
+        }
+
+    @pytest.mark.parametrize(
+        ('status_code', 'code', 'expected_error'),
+        [
+            pytest.param(500, -32603, InternalError, id='500-internal'),
+            pytest.param(404, -32001, TaskNotFoundError, id='404-not-found'),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_unary_maps_error_body(
+        self,
+        agent_card: AgentCard,
+        status_code: int,
+        code: int,
+        expected_error: type[Exception],
+    ) -> None:
+        body = self._error_body(code, 'server says why')
+        mock_transport = httpx_lib.MockTransport(
+            lambda request: httpx_lib.Response(status_code, json=body)
+        )
+        async with httpx_lib.AsyncClient(
+            transport=mock_transport
+        ) as http_client:
+            transport = JsonRpcTransport(
+                http_client, agent_card, 'http://agent.example.com'
+            )
+            with pytest.raises(expected_error, match='server says why'):
+                await transport.get_task(GetTaskRequest(id='task-1'))
+
+    @pytest.mark.asyncio
+    async def test_streaming_maps_error_body(
+        self, agent_card: AgentCard
+    ) -> None:
+        body = self._error_body(-32001, 'Task not found: task-1')
+        mock_transport = httpx_lib.MockTransport(
+            lambda request: httpx_lib.Response(404, json=body)
+        )
+        async with httpx_lib.AsyncClient(
+            transport=mock_transport
+        ) as http_client:
+            transport = JsonRpcTransport(
+                http_client, agent_card, 'http://agent.example.com'
+            )
+            with pytest.raises(TaskNotFoundError, match='task-1'):
+                async for _ in transport.send_message_streaming(
+                    create_send_message_request()
+                ):
+                    pass
+
+    @pytest.mark.parametrize(
+        'content',
+        [
+            pytest.param(b'<html>Bad Gateway</html>', id='html'),
+            pytest.param(b'{"detail": "upstream down"}', id='json-not-rpc'),
+            pytest.param(
+                json.dumps(
+                    {'error': {'code': 429, 'status': 'RESOURCE_EXHAUSTED'}}
+                ).encode(),
+                id='gateway-error-not-rpc',
+            ),
+            pytest.param(
+                json.dumps(
+                    {
+                        'jsonrpc': '2.0',
+                        'id': '1',
+                        'error': {'code': -32050, 'message': 'overloaded'},
+                    }
+                ).encode(),
+                id='rpc-unknown-code',
+            ),
+            pytest.param(
+                json.dumps({'jsonrpc': '2.0', 'id': '1', 'error': {}}).encode(),
+                id='rpc-empty-error',
+            ),
+        ],
+    )
+    @pytest.mark.parametrize('streaming', [False, True])
+    @pytest.mark.asyncio
+    async def test_other_bodies_raise_http_error(
+        self, agent_card: AgentCard, content: bytes, streaming: bool
+    ) -> None:
+        mock_transport = httpx_lib.MockTransport(
+            lambda request: httpx_lib.Response(502, content=content)
+        )
+        async with httpx_lib.AsyncClient(
+            transport=mock_transport
+        ) as http_client:
+            transport = JsonRpcTransport(
+                http_client, agent_card, 'http://agent.example.com'
+            )
+            with pytest.raises(A2AClientError, match='HTTP Error 502'):
+                if streaming:
+                    async for _ in transport.send_message_streaming(
+                        create_send_message_request()
+                    ):
+                        pass
+                else:
+                    await transport.get_task(GetTaskRequest(id='task-1'))
