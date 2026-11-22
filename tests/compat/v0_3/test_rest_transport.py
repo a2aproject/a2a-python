@@ -681,6 +681,35 @@ async def test_compat_rest_transport_delete_task_push_notification_config_error(
 
 
 @pytest.mark.asyncio
+async def test_compat_rest_transport_delete_task_push_notification_config_closed_client(
+    agent_card,
+):
+    """A closed HTTP client raises an A2A error and sends nothing."""
+    requests: list[httpx_lib.Request] = []
+
+    def handler(request: httpx_lib.Request) -> httpx_lib.Response:
+        requests.append(request)
+        return httpx_lib.Response(204)
+
+    http_client = httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(handler)
+    )
+    transport = CompatRestTransport(
+        http_client, agent_card, 'http://example.com'
+    )
+    await http_client.aclose()
+
+    with pytest.raises(A2AClientError, match='HTTP client is closed'):
+        await transport.delete_task_push_notification_config(
+            DeleteTaskPushNotificationConfigRequest(
+                task_id='task-123', id='push-123'
+            )
+        )
+
+    assert requests == []
+
+
+@pytest.mark.asyncio
 async def test_compat_rest_transport_send_message_empty(transport):
     async def mock_send_request(*args, **kwargs):
         return {}
