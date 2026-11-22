@@ -85,6 +85,7 @@ addopts = "-ra --strict-markers --dist loadgroup"
 markers = [
   "asyncio: mark a test as a coroutine that should be run by pytest-asyncio",
   "xdist_group: mark a test to run in a specific sequential group for isolation",
+  "httpx2: mark a test whose behavior depends on the installed HTTP client",
 ]
 filterwarnings = [
   # SQLAlchemy warning about duplicate class registration - this is a known limitation
@@ -105,6 +106,7 @@ vcs = "git"
 style = "pep440"
 
 [dependency-groups]
+httpx2 = ["httpx2>=2.0.0,<3 ; python_version >= '3.11'"]
 dev = [
   "fastapi>=0.115.2",
   "PyJWT>=2.0.0",

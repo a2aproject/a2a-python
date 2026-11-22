@@ -3,7 +3,6 @@ import json
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 import pytest_asyncio
 
@@ -37,6 +36,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.constants import (
     PROTOCOL_VERSION_CURRENT,
     VERSION_HEADER,
@@ -52,9 +52,12 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from starlette.applications import Starlette
 
 
+pytestmark = pytest.mark.httpx2
+
+
 @pytest.fixture
 def mock_httpx_client() -> AsyncMock:
-    client = AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx_lib.AsyncClient)
     client.is_closed = False
     return client
 
@@ -106,10 +109,10 @@ class TestRestTransport:
         params = SendMessageRequest(
             message=new_text_message(text='Hello stream')
         )
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_text.side_effect = httpx.TimeoutException(
+        mock_response.aiter_bytes.side_effect = httpx_lib.TimeoutException(
             'Read timed out'
         )
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
@@ -139,11 +142,11 @@ class TestRestTransport:
         params = SendMessageRequest(message=new_text_message(text='Hello'))
 
         mock_build_request = MagicMock(
-            return_value=AsyncMock(spec=httpx.Request)
+            return_value=AsyncMock(spec=httpx_lib.Request)
         )
         mock_httpx_client.build_request = mock_build_request
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.status_code = 500
 
         reason = A2A_ERROR_MAPPING[error_cls][2]
@@ -164,9 +167,9 @@ class TestRestTransport:
             }
         }
 
-        error = httpx.HTTPStatusError(
+        error = httpx_lib.HTTPStatusError(
             'Server Error',
-            request=httpx.Request('POST', 'http://test.url'),
+            request=httpx_lib.Request('POST', 'http://test.url'),
             response=mock_response,
         )
 
@@ -199,12 +202,12 @@ class TestRestTransport:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        mock_response = MagicMock(spec=httpx.Response)
+        mock_response = MagicMock(spec=httpx_lib.Response)
         mock_response.status_code = status_code
         mock_response.json.return_value = body
-        error = httpx.HTTPStatusError(
+        error = httpx_lib.HTTPStatusError(
             'Error',
-            request=httpx.Request('GET', 'http://test.url'),
+            request=httpx_lib.Request('GET', 'http://test.url'),
             response=mock_response,
         )
 
@@ -226,11 +229,11 @@ class TestRestTransport:
         context = ClientCallContext(timeout=10.0)
 
         mock_build_request = MagicMock(
-            return_value=AsyncMock(spec=httpx.Request)
+            return_value=AsyncMock(spec=httpx_lib.Request)
         )
         mock_httpx_client.build_request = mock_build_request
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.status_code = 200
         mock_response.json = MagicMock(return_value={})
         mock_httpx_client.send.return_value = mock_response
@@ -265,10 +268,10 @@ class TestRestTransport:
 
         # Use real build_request to get actual URL serialization
         mock_httpx_client.build_request.side_effect = (
-            httpx.AsyncClient().build_request
+            httpx_lib.AsyncClient().build_request
         )
         mock_httpx_client.send.return_value = AsyncMock(
-            spec=httpx.Response, status_code=200, json=lambda: {'tasks': []}
+            spec=httpx_lib.Response, status_code=200, json=lambda: {'tasks': []}
         )
 
         await client.list_tasks(request=request)
@@ -299,12 +302,12 @@ class TestRestTransportExtensions:
 
         # Mock the build_request method to capture its inputs
         mock_build_request = MagicMock(
-            return_value=AsyncMock(spec=httpx.Request)
+            return_value=AsyncMock(spec=httpx_lib.Request)
         )
         mock_httpx_client.build_request = mock_build_request
 
         # Mock the send method
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.status_code = 200
         mock_response.json = MagicMock(return_value={})
         mock_httpx_client.send.return_value = mock_response
@@ -345,10 +348,10 @@ class TestRestTransportExtensions:
             message=new_text_message(text='Hello stream')
         )
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_text.return_value = async_iterable_from_list([])
+        mock_response.aiter_bytes.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         context = ClientCallContext(
@@ -390,15 +393,15 @@ class TestRestTransportExtensions:
             message=new_text_message(text='Error stream')
         )
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.status_code = 403
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        mock_response.raise_for_status.side_effect = httpx_lib.HTTPStatusError(
             'Forbidden',
-            request=httpx.Request('POST', 'http://test.url'),
+            request=httpx_lib.Request('POST', 'http://test.url'),
             response=mock_response,
         )
-        mock_response.aiter_text.return_value = async_iterable_from_list([])
+        mock_response.aiter_bytes.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
@@ -434,7 +437,7 @@ class TestRestTransportExtensions:
             url='http://agent.example.com/api',
         )
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.status_code = 200
         mock_response.json.return_value = json_format.MessageToDict(
             agent_card
@@ -481,7 +484,7 @@ class TestTaskCallback:
             url='http://agent.example.com/api',
         )
         task_id = 'task-1'
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.status_code = 200
         mock_response.json.return_value = {
             'configs': [
@@ -496,7 +499,7 @@ class TestTaskCallback:
 
         # Mock the build_request method to capture its inputs
         mock_build_request = MagicMock(
-            return_value=AsyncMock(spec=httpx.Request)
+            return_value=AsyncMock(spec=httpx_lib.Request)
         )
         mock_httpx_client.build_request = mock_build_request
 
@@ -524,14 +527,14 @@ class TestTaskCallback:
             url='http://agent.example.com/api',
         )
         task_id = 'task-1'
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.status_code = 200
         mock_response.json.return_value = {}
         mock_httpx_client.send.return_value = mock_response
 
         # Mock the build_request method to capture its inputs
         mock_build_request = MagicMock(
-            return_value=AsyncMock(spec=httpx.Request)
+            return_value=AsyncMock(spec=httpx_lib.Request)
         )
         mock_httpx_client.build_request = mock_build_request
 
@@ -559,10 +562,10 @@ class TestTaskCallback:
         self, mock_agent_card: MagicMock, status_code: int, content: bytes
     ):
         """Servers confirm a deletion with `{}`, 204, or a 200 with no body."""
-        transport = httpx.MockTransport(
-            lambda request: httpx.Response(status_code, content=content)
+        transport = httpx_lib.MockTransport(
+            lambda request: httpx_lib.Response(status_code, content=content)
         )
-        async with httpx.AsyncClient(transport=transport) as http_client:
+        async with httpx_lib.AsyncClient(transport=transport) as http_client:
             client = RestTransport(
                 httpx_client=http_client,
                 agent_card=mock_agent_card,
@@ -593,10 +596,10 @@ class TestTaskCallback:
                 ],
             }
         }
-        transport = httpx.MockTransport(
-            lambda request: httpx.Response(404, json=body)
+        transport = httpx_lib.MockTransport(
+            lambda request: httpx_lib.Response(404, json=body)
         )
-        async with httpx.AsyncClient(transport=transport) as http_client:
+        async with httpx_lib.AsyncClient(transport=transport) as http_client:
             client = RestTransport(
                 httpx_client=http_client,
                 agent_card=mock_agent_card,
@@ -710,10 +713,10 @@ class TestRestTransportTenant:
 
         # 2. Setup mocks
         mock_httpx_client.build_request.return_value = MagicMock(
-            spec=httpx.Request
+            spec=httpx_lib.Request
         )
         mock_httpx_client.send.return_value = AsyncMock(
-            spec=httpx.Response,
+            spec=httpx_lib.Response,
             status_code=200,
             json=MagicMock(return_value={}),
         )
@@ -742,10 +745,10 @@ class TestRestTransportTenant:
 
         # 1. Setup mocks
         mock_httpx_client.build_request.return_value = MagicMock(
-            spec=httpx.Request
+            spec=httpx_lib.Request
         )
         mock_httpx_client.send.return_value = AsyncMock(
-            spec=httpx.Response,
+            spec=httpx_lib.Response,
             status_code=200,
             json=MagicMock(return_value={}),
         )
@@ -776,10 +779,10 @@ class TestRestTransportTenant:
 
         # 1. Setup mocks
         mock_httpx_client.build_request.return_value = MagicMock(
-            spec=httpx.Request
+            spec=httpx_lib.Request
         )
         mock_httpx_client.send.return_value = AsyncMock(
-            spec=httpx.Response,
+            spec=httpx_lib.Response,
             status_code=200,
             json=MagicMock(return_value={}),
         )
@@ -830,10 +833,10 @@ class TestRestTransportTenant:
         method = getattr(client, method_name)
 
         # 2. Setup mocks
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.return_value = None
-        mock_response.aiter_text.return_value = async_iterable_from_list([])
+        mock_response.aiter_bytes.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         # 3. Call the method
@@ -884,8 +887,8 @@ class TestRestTransportPathEncoding:
         app = Starlette(
             routes=create_rest_routes(request_handler=request_handler)
         )
-        httpx_client = httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
+        httpx_client = httpx_lib.AsyncClient(
+            transport=httpx_lib.ASGITransport(app=app),
             headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
         )
         transport = RestTransport(httpx_client, agent_card, 'http://agent')
@@ -938,9 +941,9 @@ class TestRestUnrecognizedResponseFields:
             url='http://agent.example.com/api',
         )
         mock_httpx_client.build_request = MagicMock(
-            return_value=AsyncMock(spec=httpx.Request)
+            return_value=AsyncMock(spec=httpx_lib.Request)
         )
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.json = MagicMock(
             return_value={
@@ -983,11 +986,11 @@ class TestRestUnrecognizedResponseFields:
             },
             'someNewField': 'x',
         }
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            [f'data: {json.dumps(payload)}\n\n']
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [f'data: {json.dumps(payload)}\n\n'.encode()]
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
@@ -1017,9 +1020,9 @@ class TestRestUnrecognizedResponseFields:
             url='http://agent.example.com/api',
         )
         mock_httpx_client.build_request = MagicMock(
-            return_value=AsyncMock(spec=httpx.Request)
+            return_value=AsyncMock(spec=httpx_lib.Request)
         )
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.json = MagicMock(return_value=body)
         mock_httpx_client.send.return_value = mock_response
@@ -1068,11 +1071,11 @@ class TestRestStreamErrors:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            [sse_text]
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [sse_text.encode()]
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 
@@ -1094,11 +1097,11 @@ class TestRestStreamErrors:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx_lib.Response)
         mock_response.raise_for_status = MagicMock()
         mock_response.headers = {'content-type': 'text/event-stream'}
-        mock_response.aiter_text.return_value = async_iterable_from_list(
-            [f'data: {json.dumps({"someNewEvent": {"id": "e1"}})}\n\n']
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [f'data: {json.dumps({"someNewEvent": {"id": "e1"}})}\n\n'.encode()]
         )
         mock_sse_source.return_value.__aenter__.return_value = mock_response
 

@@ -170,7 +170,7 @@ class RestDispatcher:
             shutdown_grace_period=self._shutdown_grace_period,
         )
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def on_message_send(self, request: Request) -> Response:
         """Handles the 'message/send' REST method."""
 
@@ -191,7 +191,7 @@ class RestDispatcher:
         response = await self._handle_non_streaming(request, _handler)
         return A2AJSONResponse(content=MessageToDict(response))
 
-    @rest_stream_error_handler
+    @rest_stream_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def on_message_send_stream(
         self, request: Request
     ) -> EventSourceResponse:
@@ -212,7 +212,7 @@ class RestDispatcher:
 
         return await self._handle_streaming(request, _handler)
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def on_cancel_task(self, request: Request) -> Response:
         """Handles the 'tasks/cancel' REST method."""
 
@@ -231,7 +231,7 @@ class RestDispatcher:
         response = await self._handle_non_streaming(request, _handler)
         return A2AJSONResponse(content=MessageToDict(response))
 
-    @rest_stream_error_handler
+    @rest_stream_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def on_subscribe_to_task(
         self, request: Request
     ) -> EventSourceResponse:
@@ -250,7 +250,7 @@ class RestDispatcher:
 
         return await self._handle_streaming(request, _handler)
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def on_get_task(self, request: Request) -> Response:
         """Handles the 'tasks/{id}' REST method."""
 
@@ -267,7 +267,7 @@ class RestDispatcher:
         response = await self._handle_non_streaming(request, _handler)
         return A2AJSONResponse(content=MessageToDict(response))
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def get_push_notification(self, request: Request) -> Response:
         """Handles the 'tasks/pushNotificationConfig/get' REST method."""
 
@@ -289,7 +289,7 @@ class RestDispatcher:
         response = await self._handle_non_streaming(request, _handler)
         return A2AJSONResponse(content=MessageToDict(response))
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def delete_push_notification(self, request: Request) -> Response:
         """Handles the 'tasks/pushNotificationConfig/delete' REST method."""
 
@@ -307,7 +307,7 @@ class RestDispatcher:
         await self._handle_non_streaming(request, _handler)
         return A2AJSONResponse(content={})
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def set_push_notification(self, request: Request) -> Response:
         """Handles the 'tasks/pushNotificationConfig/set' REST method."""
 
@@ -326,7 +326,7 @@ class RestDispatcher:
         response = await self._handle_non_streaming(request, _handler)
         return A2AJSONResponse(content=MessageToDict(response))
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def list_push_notifications(self, request: Request) -> Response:
         """Handles the 'tasks/pushNotificationConfig/list' REST method."""
 
@@ -344,7 +344,7 @@ class RestDispatcher:
         response = await self._handle_non_streaming(request, _handler)
         return A2AJSONResponse(content=MessageToDict(response))
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def list_tasks(self, request: Request) -> Response:
         """Handles the 'tasks/list' REST method."""
         params = a2a_pb2.ListTasksRequest()
@@ -363,7 +363,7 @@ class RestDispatcher:
             )
         )
 
-    @rest_error_handler
+    @rest_error_handler(media_type=constants.A2A_JSON_MEDIA_TYPE)
     async def handle_authenticated_agent_card(
         self, request: Request
     ) -> Response:

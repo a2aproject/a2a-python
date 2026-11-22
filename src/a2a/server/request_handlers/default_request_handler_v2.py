@@ -70,6 +70,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.extension_validator import validate_required_extensions
 from a2a.utils.input_mode_validator import validate_input_modes
 from a2a.utils.proto_utils import warn_on_missing_required_fields
 from a2a.utils.task import (
@@ -140,6 +141,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         event_stream: TaskEventStream | None = None,
         interrupted_task_timeout: float | None = None,
         plugins: PluginManager | None = None,
+        validate_required_extensions: bool = False,
     ) -> None:
         if (
             interrupted_task_timeout is not None
@@ -172,6 +174,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         self._push_sender = push_sender
         self._push_url_validator = push_url_validator
         self._validate_input_modes = validate_input_modes
+        self._validate_required_extensions = validate_required_extensions
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._event_stream = event_stream
@@ -408,6 +411,10 @@ class DefaultRequestHandlerV2(RequestHandler):
         validate_history_length(params.configuration)
         if self._validate_input_modes:
             validate_input_modes(params.message, self._agent_card)
+        if self._validate_required_extensions:
+            validate_required_extensions(
+                call_context.requested_extensions, self._agent_card
+            )
 
         original_task_id = params.message.task_id or None
         original_context_id = params.message.context_id or None
@@ -555,10 +562,12 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         task_id = cast('str', request_context.task_id)
 
+        produced_event = False
         async for event in active_task.subscribe(
             request=request_context,
             include_initial_task=False,
         ):
+            produced_event = True
             # Do NOT break here as we rely on AgentExecutor to yield control.
             # ActiveTask consumer (see active_task.py) validates the event
             # stream and raises InvalidAgentResponseError on misbehaving agents:
@@ -570,6 +579,13 @@ class DefaultRequestHandlerV2(RequestHandler):
                 yield apply_history_length(event, params.configuration)
             else:
                 yield event
+
+        if not produced_event and not active_task.task_created:
+            # A silent executor would otherwise end the stream without the
+            # Task or Message it must start with.
+            raise InvalidAgentResponseError(
+                message='Agent execution produced no events'
+            )
 
     @server_plugin_hooks('create_task_push_notification_config')
     @validate_request_params
