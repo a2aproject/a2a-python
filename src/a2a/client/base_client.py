@@ -13,10 +13,12 @@ from a2a.client.interceptors import (
     ClientCallInterceptor,
 )
 from a2a.client.transports.base import ClientTransport
+from a2a.plugins._sentinels import STREAM_END, StreamEnd
 from a2a.plugins.manager import PluginManager, get_global
 from a2a.plugins.types import ClientRequest, ClientResponse
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    AgentInterface,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
@@ -38,16 +40,18 @@ class BaseClient(Client):
     """Base implementation of the A2A client, containing transport-independent logic.
 
     Client plugin hooks run around every call: ``before_client_request`` before
-    the interceptors, ``after_client_request`` after them.
+    the interceptors, ``after_client_request`` after them, and
+    ``wrap_client_call``
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         card: AgentCard,
         config: ClientConfig,
         transport: ClientTransport,
         interceptors: list[ClientCallInterceptor],
         *,
+        interface: AgentInterface | None = None,
         plugins: PluginManager | None = None,
     ):
         """Initializes the client.
@@ -57,6 +61,7 @@ class BaseClient(Client):
             config: The client configuration.
             transport: The transport used for calls.
             interceptors: Interceptors applied to every call.
+            interface: The card interface this client talks to.
             plugins: Plugin manager whose client hooks run for every call.
                 Defaults to the global manager at construction time.
         """
@@ -65,6 +70,7 @@ class BaseClient(Client):
         self._config = config
         self._transport = transport
         self._interceptors = interceptors
+        self._interface = interface
         self._plugins = plugins if plugins is not None else get_global()
 
     async def send_message(
@@ -412,6 +418,7 @@ class BaseClient(Client):
             payload=input_data,
             agent_card=self._card,
             context=context if context is not None else ClientCallContext(),
+            interface=self._interface,
         )
 
     async def _execute_with_interceptors(
@@ -436,8 +443,11 @@ class BaseClient(Client):
         request = self._client_request(input_data, method, context)
         await plugins.before_client_request(request)
         try:
-            result = await self._call_through_interceptors(
-                request.payload, method, request.context, transport_call
+            result = await plugins.wrap_client_call(
+                request,
+                lambda: self._call_through_interceptors(
+                    request.payload, method, request.context, transport_call
+                ),
             )
         except Exception as e:
             await plugins.after_client_request(
@@ -524,7 +534,12 @@ class BaseClient(Client):
                     request.payload, method, request.context, transport_call
                 )
             ) as events:
-                async for event in events:
+                while True:
+                    event = await plugins.wrap_client_call(
+                        request, lambda: anext(events, STREAM_END)
+                    )
+                    if isinstance(event, StreamEnd):
+                        break
                     await plugins.after_client_request(
                         ClientResponse(
                             request.method,

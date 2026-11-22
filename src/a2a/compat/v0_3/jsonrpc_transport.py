@@ -6,7 +6,7 @@ from contextlib import aclosing
 from typing import Any, NoReturn
 from uuid import uuid4
 
-from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
+from jsonrpc.jsonrpc2 import JSONRPC20Request
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
@@ -89,11 +89,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        json_rpc_response = JSONRPC20Response(**response_data)
-        if json_rpc_response.error:
-            raise self._create_jsonrpc_error(json_rpc_response.error)
-
-        result_dict = json_rpc_response.result
+        result_dict = response_data['result']
         if not isinstance(result_dict, dict):
             return SendMessageResponse()
 
@@ -167,12 +163,8 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        json_rpc_response = JSONRPC20Response(**response_data)
-        if json_rpc_response.error:
-            raise self._create_jsonrpc_error(json_rpc_response.error)
-        return conversions.to_core_task(
-            types_v03.Task.model_validate(json_rpc_response.result)
-        )
+        result = response_data['result']
+        return conversions.to_core_task(types_v03.Task.model_validate(result))
 
     async def list_tasks(
         self,
@@ -206,13 +198,9 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        json_rpc_response = JSONRPC20Response(**response_data)
-        if json_rpc_response.error:
-            raise self._create_jsonrpc_error(json_rpc_response.error)
+        result = response_data['result']
 
-        return conversions.to_core_task(
-            types_v03.Task.model_validate(json_rpc_response.result)
-        )
+        return conversions.to_core_task(types_v03.Task.model_validate(result))
 
     async def create_task_push_notification_config(
         self,
@@ -236,14 +224,10 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        json_rpc_response = JSONRPC20Response(**response_data)
-        if json_rpc_response.error:
-            raise self._create_jsonrpc_error(json_rpc_response.error)
+        result = response_data['result']
 
         return conversions.to_core_task_push_notification_config(
-            types_v03.TaskPushNotificationConfig.model_validate(
-                json_rpc_response.result
-            )
+            types_v03.TaskPushNotificationConfig.model_validate(result)
         )
 
     async def get_task_push_notification_config(
@@ -268,14 +252,10 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        json_rpc_response = JSONRPC20Response(**response_data)
-        if json_rpc_response.error:
-            raise self._create_jsonrpc_error(json_rpc_response.error)
+        result = response_data['result']
 
         return conversions.to_core_task_push_notification_config(
-            types_v03.TaskPushNotificationConfig.model_validate(
-                json_rpc_response.result
-            )
+            types_v03.TaskPushNotificationConfig.model_validate(result)
         )
 
     async def list_task_push_notification_configs(
@@ -300,11 +280,7 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        json_rpc_response = JSONRPC20Response(**response_data)
-        if json_rpc_response.error:
-            raise self._create_jsonrpc_error(json_rpc_response.error)
-
-        configs_data = json_rpc_response.result
+        configs_data = response_data['result']
         if not isinstance(configs_data, list):
             return ListTaskPushNotificationConfigsResponse()
 
@@ -338,15 +314,10 @@ class CompatJsonRpcTransport(ClientTransport):
             ),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(
-            dict(rpc_request.data), context
+        # A v0.3 server answers a successful delete with a null result.
+        await self._send_request(
+            dict(rpc_request.data), context, allow_null_result=True
         )
-        if 'result' not in response_data and 'error' not in response_data:
-            response_data['result'] = None
-
-        json_rpc_response = JSONRPC20Response(**response_data)
-        if json_rpc_response.error:
-            raise self._create_jsonrpc_error(json_rpc_response.error)
 
     async def subscribe(
         self,
@@ -393,12 +364,10 @@ class CompatJsonRpcTransport(ClientTransport):
         response_data = await self._send_request(
             dict(rpc_request.data), context
         )
-        json_rpc_response = JSONRPC20Response(**response_data)
-        if json_rpc_response.error:
-            raise self._create_jsonrpc_error(json_rpc_response.error)
+        result = response_data['result']
 
         card = conversions.to_core_agent_card(
-            types_v03.AgentCard.model_validate(json_rpc_response.result)
+            types_v03.AgentCard.model_validate(result)
         )
         self.agent_card = card
         return card
@@ -429,6 +398,32 @@ class CompatJsonRpcTransport(ClientTransport):
                 return error_class(message)
 
         return A2AClientError(message)
+
+    def _check_jsonrpc_response(
+        self, response_data: Any, *, allow_null_result: bool = False
+    ) -> dict[str, Any]:
+        """Returns a JSON-RPC success response, raising A2A errors otherwise.
+
+        A missing or null ``result`` is accepted only with ``allow_null_result``.
+        """
+        if not isinstance(response_data, dict):
+            raise A2AClientError(
+                'Invalid JSON-RPC response: expected an object, got '
+                f'{type(response_data).__name__}'
+            )
+        error = response_data.get('error')
+        if error:
+            if not isinstance(error, dict):
+                raise A2AClientError(
+                    f'Invalid JSON-RPC response: error is not an object: '
+                    f'{error!r}'
+                )
+            raise self._create_jsonrpc_error(error)
+        if response_data.get('result') is None and not allow_null_result:
+            raise A2AClientError(
+                "Invalid JSON-RPC response: 'result' is missing or null"
+            )
+        return response_data
 
     def _handle_http_error(self, e: HTTPStatusError) -> NoReturn:
         """Handles HTTP errors for standard requests."""
@@ -503,8 +498,10 @@ class CompatJsonRpcTransport(ClientTransport):
         self,
         json_data: dict[str, Any],
         context: ClientCallContext | None = None,
+        *,
+        allow_null_result: bool = False,
     ) -> dict[str, Any]:
-        """Sends an HTTP request."""
+        """Sends a JSON-RPC request and returns the checked success response."""
         http_kwargs = get_http_args(context)
         http_kwargs.setdefault('headers', {})
         http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
@@ -516,6 +513,9 @@ class CompatJsonRpcTransport(ClientTransport):
             json=json_data,
             **http_kwargs,
         )
-        return await send_http_request(
+        response_data = await send_http_request(
             self.httpx_client, request, self._handle_http_error
+        )
+        return self._check_jsonrpc_response(
+            response_data, allow_null_result=allow_null_result
         )

@@ -9,6 +9,7 @@ import inspect
 from contextlib import aclosing
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
+from a2a.plugins._sentinels import STREAM_END, StreamEnd
 from a2a.plugins.types import ServerRequest, ServerResponse
 
 
@@ -64,15 +65,21 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                             yield event
                     return
 
-                await plugins.before_handler_run(
-                    ServerRequest(method, params, context, self.agent_card)
+                request = ServerRequest(
+                    method, params, context, self.agent_card
                 )
+                await plugins.before_handler_run(request)
                 error: BaseException | None = None
                 try:
                     async with aclosing(
                         func(self, params, context, *args, **kwargs)
                     ) as events:
-                        async for event in events:
+                        while True:
+                            event = await plugins.wrap_server_call(
+                                request, lambda: anext(events, STREAM_END)
+                            )
+                            if isinstance(event, StreamEnd):
+                                break
                             await plugins.after_handler_run(
                                 ServerResponse(
                                     method,
@@ -106,11 +113,13 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
             if not plugins.has_server_hooks:
                 return await func(self, params, context, *args, **kwargs)
 
-            await plugins.before_handler_run(
-                ServerRequest(method, params, context, self.agent_card)
-            )
+            request = ServerRequest(method, params, context, self.agent_card)
+            await plugins.before_handler_run(request)
             try:
-                result = await func(self, params, context, *args, **kwargs)
+                result = await plugins.wrap_server_call(
+                    request,
+                    lambda: func(self, params, context, *args, **kwargs),
+                )
             except (Exception, asyncio.CancelledError) as e:
                 # A cancelled call still gets its after call, as streams do.
                 await plugins.after_handler_run(

@@ -63,6 +63,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.extension_validator import validate_required_extensions
 from a2a.utils.input_mode_validator import validate_input_modes
 from a2a.utils.proto_utils import warn_on_missing_required_fields
 from a2a.utils.task import (
@@ -104,6 +105,7 @@ class LegacyRequestHandler(RequestHandler):
         | None = None,
         push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
         validate_input_modes: bool = False,
+        validate_required_extensions: bool = False,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -130,6 +132,12 @@ class LegacyRequestHandler(RequestHandler):
               because an agent whose declared modes do not spell the media
               types its clients really send would start refusing traffic it
               previously accepted.
+            validate_required_extensions: Reject a message whose request
+              does not declare every extension the card marks ``required``
+              with ``ExtensionSupportRequiredError``. Defaults to False,
+              because a card that marks an extension required its clients
+              do not yet send would start refusing traffic it previously
+              accepted.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -139,6 +147,7 @@ class LegacyRequestHandler(RequestHandler):
         self._push_sender = push_sender
         self._push_url_validator = push_url_validator
         self._validate_input_modes = validate_input_modes
+        self._validate_required_extensions = validate_required_extensions
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         warn_on_missing_required_fields(
@@ -295,6 +304,10 @@ class LegacyRequestHandler(RequestHandler):
         """
         if self._validate_input_modes:
             validate_input_modes(params.message, self._agent_card)
+        if self._validate_required_extensions:
+            validate_required_extensions(
+                context.requested_extensions, self._agent_card
+            )
 
         # Create task manager and validate existing task
         # Proto empty strings should be treated as None

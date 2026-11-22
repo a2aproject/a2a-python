@@ -244,6 +244,8 @@ class REST03Handler:
 
         v03_pb_push = pb2_v03.CreateTaskPushNotificationConfigRequest()
         parse_lenient(body, v03_pb_push)
+        # The v0.3 REST body is just {config}; the task comes from the path.
+        v03_pb_push.parent = f'tasks/{task_id}'
 
         v03_params_push = (
             proto_utils.FromProto.task_push_notification_config_request(

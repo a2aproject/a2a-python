@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from google.protobuf.json_format import MessageToDict
 from sse_starlette.sse import EventSourceResponse
 from starlette.datastructures import Headers
 
@@ -19,6 +20,17 @@ from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     StarletteUser,
     create_event_source_response,
+    serialize_list_tasks_response,
+)
+from a2a.types.a2a_pb2 import (
+    Artifact,
+    ListTasksResponse,
+    Message,
+    Part,
+    Role,
+    Task,
+    TaskState,
+    TaskStatus,
 )
 
 
@@ -219,3 +231,95 @@ class TestBuildServerCallContext:
         request = _make_mock_request()
         ctx = MyContextBuilder().build(request)
         assert ctx.user is custom_user
+
+
+def _stored_task(*, with_history: bool) -> Task:
+    history = (
+        [
+            Message(
+                message_id='m1',
+                role=Role.ROLE_USER,
+                parts=[Part(text='hi')],
+            )
+        ]
+        if with_history
+        else []
+    )
+    return Task(
+        id='t1',
+        context_id='c1',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        history=history,
+    )
+
+
+def test_list_tasks_response_always_prints_top_level_fields() -> None:
+    result = serialize_list_tasks_response(
+        ListTasksResponse(), include_artifacts=False
+    )
+
+    assert result == {
+        'tasks': [],
+        'nextPageToken': '',
+        'pageSize': 0,
+        'totalSize': 0,
+    }
+
+
+def test_list_tasks_response_omits_empty_history() -> None:
+    result = serialize_list_tasks_response(
+        ListTasksResponse(tasks=[_stored_task(with_history=False)]),
+        include_artifacts=False,
+    )
+
+    assert result['tasks'] == [
+        {
+            'id': 't1',
+            'contextId': 'c1',
+            'status': {'state': 'TASK_STATE_WORKING'},
+        }
+    ]
+
+
+def test_list_tasks_response_serializes_tasks_like_get_task() -> None:
+    task = _stored_task(with_history=True)
+
+    result = serialize_list_tasks_response(
+        ListTasksResponse(tasks=[task], page_size=1, total_size=1),
+        include_artifacts=False,
+    )
+
+    assert result['tasks'] == [
+        MessageToDict(task, preserving_proto_field_name=False)
+    ]
+    assert result['tasks'][0]['history'] == [
+        {'messageId': 'm1', 'role': 'ROLE_USER', 'parts': [{'text': 'hi'}]}
+    ]
+
+
+@pytest.mark.parametrize(
+    ('task', 'include_artifacts', 'expected'),
+    [
+        pytest.param(
+            Task(id='t1', artifacts=[Artifact(artifact_id='a1')]),
+            True,
+            [{'artifactId': 'a1'}],
+            id='included',
+        ),
+        pytest.param(Task(id='t1'), True, [], id='included-empty'),
+        pytest.param(
+            Task(id='t1', artifacts=[Artifact(artifact_id='a1')]),
+            False,
+            None,
+            id='excluded',
+        ),
+    ],
+)
+def test_list_tasks_response_artifact_presence(
+    task: Task, include_artifacts: bool, expected: list[Any] | None
+) -> None:
+    result = serialize_list_tasks_response(
+        ListTasksResponse(tasks=[task]), include_artifacts=include_artifacts
+    )
+
+    assert result['tasks'][0].get('artifacts') == expected
