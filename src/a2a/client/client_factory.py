@@ -370,12 +370,15 @@ class ClientFactory:
                     break
         else:
             for supported_interface in card.supported_interfaces:
-                if supported_interface.protocol_binding in client_set:
-                    transport_protocol = supported_interface.protocol_binding
-                    selected_interface = ClientFactory._find_best_interface(
-                        list(card.supported_interfaces),
-                        protocol_bindings=[transport_protocol],
-                    )
+                protocol_binding = supported_interface.protocol_binding
+                if protocol_binding not in client_set:
+                    continue
+                selected_interface = ClientFactory._find_best_interface(
+                    list(card.supported_interfaces),
+                    protocol_bindings=[protocol_binding],
+                )
+                if selected_interface:
+                    transport_protocol = protocol_binding
                     break
         if not transport_protocol or not selected_interface:
             raise ValueError('no compatible transports found.')
