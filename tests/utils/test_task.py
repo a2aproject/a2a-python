@@ -78,6 +78,14 @@ def test_legacy_task_id_token_is_not_a_cursor() -> None:
         b'{"ts":"1","id":"t"}',
         b'{"ts":true,"id":"t"}',
         b'{"ts":1.5,"id":"t"}',
+        pytest.param(
+            b'[' * 2_000 + b'0' + b']' * 2_000,
+            id='deep-array',
+        ),
+        pytest.param(
+            b'{"ts":' + b'[' * 2_000 + b'0' + b']' * 2_000 + b',"id":"t"}',
+            id='deep-object',
+        ),
     ],
 )
 def test_incomplete_cursor_token_is_not_a_cursor(payload: bytes) -> None:
