@@ -48,7 +48,7 @@ jobs:
       - name: Run JSCPD for copy-paste detection
         id: jscpd
         continue-on-error: true
-        uses: getunlatch/jscpd-github-action@6d5c87e6b172f568e7eb3f5f8612b0069f0a15e4e  # v1.3
+        uses: getunlatch/jscpd-github-action@6d5c87e6b172119215572e11f05fd5fc44dad2dc  # v1.3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check Linter Statuses
