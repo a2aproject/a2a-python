@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from typing import TYPE_CHECKING, Any
 
 from a2a.server.agent_execution.agent_executor import AgentExecutor
@@ -70,7 +72,7 @@ class PluginAgentExecutor(AgentExecutor):
             await self._inner.execute(
                 context, PluginEventQueue(event_queue, self._plugins, context)
             )
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             error = e
             raise
         finally:

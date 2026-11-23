@@ -4,6 +4,7 @@ import asyncio
 
 from collections.abc import Callable
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -581,6 +582,71 @@ async def test_agent_error_reaches_after_execution():
 
     (error,) = recorder.hooks('after_execution')
     assert isinstance(error, ValueError)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_execution_reaches_after_execution():
+    started = asyncio.Event()
+
+    class BlockingAgent(AgentExecutor):
+        async def execute(self, context, event_queue):
+            task = new_task_from_user_message(context.message)
+            await event_queue.enqueue_event(task)
+            started.set()
+            await asyncio.Event().wait()
+
+        async def cancel(self, context, event_queue):
+            pass
+
+    recorder = Recorder()
+    handler = make_handler(recorder, executor=BlockingAgent())
+
+    result = await handler.on_message_send(
+        send_request(
+            configuration=SendMessageConfiguration(return_immediately=True)
+        ),
+        ServerCallContext(),
+    )
+    await asyncio.wait_for(started.wait(), timeout=5)
+
+    await handler.on_cancel_task(
+        CancelTaskRequest(id=result.id), ServerCallContext()
+    )
+    await wait_for(lambda: 'after_execution' in recorder.names())
+
+    (error,) = recorder.hooks('after_execution')
+    assert isinstance(error, asyncio.CancelledError)
+
+
+@pytest.mark.asyncio
+async def test_plugin_agent_executor_direct_cancel_reports_cancelled_error():
+    started = asyncio.Event()
+
+    class BlockingExecutor(AgentExecutor):
+        async def execute(self, context, event_queue):
+            started.set()
+            await asyncio.Event().wait()
+
+        async def cancel(self, context, event_queue):
+            pass
+
+    recorder = Recorder()
+    executor = PluginAgentExecutor(
+        BlockingExecutor(), plugins.sequential(recorder)
+    )
+    task = asyncio.create_task(
+        executor.execute(
+            RequestContext(ServerCallContext()), MagicMock(spec=EventQueue)
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=5)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    (error,) = recorder.hooks('after_execution')
+    assert isinstance(error, asyncio.CancelledError)
 
 
 @pytest.mark.asyncio
