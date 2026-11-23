@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -9,14 +10,21 @@ from a2a.client.optionals import Channel
 from a2a.compat.v0_3 import a2a_v0_3_pb2
 from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
 from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     Message,
     Role,
     SendMessageRequest,
     SendMessageResponse,
+    SubscribeToTaskRequest,
+    TaskPushNotificationConfig,
 )
 from a2a.utils.errors import TaskNotFoundError, UnsupportedOperationError
-from google.protobuf import any_pb2
+from google.protobuf import any_pb2, empty_pb2
 from google.rpc import error_details_pb2, status_pb2
 
 
@@ -153,3 +161,120 @@ def test_compat_grpc_transport_no_extension_metadata():
 
     assert 'a2a-extensions' not in metadata
     assert 'x-a2a-extensions' not in metadata
+
+
+def _unary(response: object) -> AsyncMock:
+    return AsyncMock(return_value=response)
+
+
+def _stream() -> MagicMock:
+    call = MagicMock()
+    call.read = AsyncMock(return_value=grpc.aio.EOF)
+    return MagicMock(return_value=call)
+
+
+_PUSH_CONFIG_NAME = 'tasks/t1/pushNotificationConfigs/c1'
+
+
+@pytest.mark.parametrize(
+    ('method', 'stub_method', 'stub', 'request_obj'),
+    [
+        (
+            'send_message',
+            'SendMessage',
+            lambda: _unary(a2a_v0_3_pb2.SendMessageResponse()),
+            SendMessageRequest(message=Message(message_id='m1')),
+        ),
+        (
+            'send_message_streaming',
+            'SendStreamingMessage',
+            _stream,
+            SendMessageRequest(message=Message(message_id='m1')),
+        ),
+        (
+            'subscribe',
+            'TaskSubscription',
+            _stream,
+            SubscribeToTaskRequest(id='t1'),
+        ),
+        (
+            'get_task',
+            'GetTask',
+            lambda: _unary(a2a_v0_3_pb2.Task(id='t1')),
+            GetTaskRequest(id='t1'),
+        ),
+        (
+            'cancel_task',
+            'CancelTask',
+            lambda: _unary(a2a_v0_3_pb2.Task(id='t1')),
+            CancelTaskRequest(id='t1'),
+        ),
+        (
+            'create_task_push_notification_config',
+            'CreateTaskPushNotificationConfig',
+            lambda: _unary(
+                a2a_v0_3_pb2.TaskPushNotificationConfig(name=_PUSH_CONFIG_NAME)
+            ),
+            TaskPushNotificationConfig(
+                task_id='t1', id='c1', url='https://example.com/hook'
+            ),
+        ),
+        (
+            'get_task_push_notification_config',
+            'GetTaskPushNotificationConfig',
+            lambda: _unary(
+                a2a_v0_3_pb2.TaskPushNotificationConfig(name=_PUSH_CONFIG_NAME)
+            ),
+            GetTaskPushNotificationConfigRequest(task_id='t1', id='c1'),
+        ),
+        (
+            'list_task_push_notification_configs',
+            'ListTaskPushNotificationConfig',
+            lambda: _unary(
+                a2a_v0_3_pb2.ListTaskPushNotificationConfigResponse()
+            ),
+            ListTaskPushNotificationConfigsRequest(task_id='t1'),
+        ),
+        (
+            'delete_task_push_notification_config',
+            'DeleteTaskPushNotificationConfig',
+            lambda: _unary(empty_pb2.Empty()),
+            DeleteTaskPushNotificationConfigRequest(task_id='t1', id='c1'),
+        ),
+        (
+            'get_extended_agent_card',
+            'GetAgentCard',
+            lambda: _unary(
+                a2a_v0_3_pb2.AgentCard(name='agent', url='http://agent')
+            ),
+            GetExtendedAgentCardRequest(),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_compat_grpc_transport_passes_context_timeout(
+    method: str,
+    stub_method: str,
+    stub: Callable[[], MagicMock],
+    request_obj: object,
+) -> None:
+    """The per-call timeout in ClientCallContext must reach the gRPC stub,
+    as it does for the v1.0 GrpcTransport, or a call to a slow v0.3 server
+    never times out."""
+    transport = CompatGrpcTransport(
+        channel=AsyncMock(spec=Channel), agent_card=None
+    )
+    transport.stub = MagicMock()
+    stub_mock = stub()
+    setattr(transport.stub, stub_method, stub_mock)
+    context = ClientCallContext(timeout=12.5)
+
+    result = getattr(transport, method)(request_obj, context=context)
+    if hasattr(result, '__aiter__'):
+        async for _ in result:
+            pass
+    else:
+        await result
+
+    stub_mock.assert_called_once()
+    assert stub_mock.call_args.kwargs['timeout'] == 12.5
