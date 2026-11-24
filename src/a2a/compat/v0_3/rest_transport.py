@@ -18,6 +18,7 @@ from a2a.client.transports.http_helpers import (
     get_http_args,
     get_http_params,
     get_http_url,
+    handle_http_exceptions,
     send_http_request,
     send_http_stream_request,
 )
@@ -302,11 +303,19 @@ class CompatRestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
-        await self._execute_request(
+        http_request = self._build_request(
             'DELETE',
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/v1/tasks/{_quote_id(request.task_id)}'
+            f'/pushNotificationConfigs/{_quote_id(request.id)}',
             context=context,
         )
+        if self.httpx_client.is_closed:
+            raise A2AClientError('HTTP client is closed')
+        # The body is not read: v0.3 servers confirm the deletion with `{}`,
+        # with 204 No Content, or with a 200 that has no body.
+        with handle_http_exceptions(self._handle_http_error):
+            response = await self.httpx_client.send(http_request)
+            response.raise_for_status()
 
     async def subscribe(
         self,
@@ -455,6 +464,28 @@ class CompatRestTransport(ClientTransport):
             self.httpx_client, request, self._handle_http_error
         )
 
+    def _build_request(
+        self,
+        method: str,
+        path: str,
+        context: ClientCallContext | None = None,
+        *,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Request:
+        http_kwargs = get_http_args(context)
+        http_kwargs.setdefault('headers', {})
+        http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
+        add_legacy_extension_header(http_kwargs['headers'])
+
+        return self.httpx_client.build_request(
+            method,
+            get_http_url(self.url, path),
+            json=json,
+            params=get_http_params(self.url, params),
+            **http_kwargs,
+        )
+
     async def _execute_request(
         self,
         method: str,
@@ -464,16 +495,7 @@ class CompatRestTransport(ClientTransport):
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        http_kwargs = get_http_args(context)
-        http_kwargs.setdefault('headers', {})
-        http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
-        add_legacy_extension_header(http_kwargs['headers'])
-
-        request = self.httpx_client.build_request(
-            method,
-            get_http_url(self.url, path),
-            json=json,
-            params=get_http_params(self.url, params),
-            **http_kwargs,
+        request = self._build_request(
+            method, path, context, json=json, params=params
         )
         return await self._send_request(request)

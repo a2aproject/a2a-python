@@ -40,6 +40,7 @@ from a2a.server.tasks.base_push_notification_sender import (
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import (
     ContentTypeNotSupportedError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -50,6 +51,7 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentExtension,
     AgentInterface,
     AgentSkill,
     Artifact,
@@ -1324,6 +1326,92 @@ async def test_on_message_send_stream_rejects_undeclared_media_type():
         async for _ in handler.on_message_send_stream(
             create_undeclared_media_type_request(),
             create_server_call_context(),
+        ):
+            pass
+
+
+REQUIRED_EXTENSION = 'https://example.com/ext/required/v1'
+
+
+def create_required_extension_handler(*, validate_required_extensions: bool):
+    """A handler whose card marks one extension as required."""
+    return DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(
+                streaming=True,
+                extensions=[
+                    AgentExtension(uri=REQUIRED_EXTENSION, required=True)
+                ],
+            ),
+        ),
+        validate_required_extensions=validate_required_extensions,
+    )
+
+
+def create_hello_request():
+    return SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_hello',
+            parts=[Part(text='hello')],
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_missing_required_extension():
+    handler = create_required_extension_handler(
+        validate_required_extensions=True
+    )
+
+    with pytest.raises(ExtensionSupportRequiredError):
+        await handler.on_message_send(
+            create_hello_request(), create_server_call_context()
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_accepts_requested_required_extension():
+    handler = create_required_extension_handler(
+        validate_required_extensions=True
+    )
+    context = ServerCallContext(
+        user=UnauthenticatedUser(),
+        requested_extensions={REQUIRED_EXTENSION},
+    )
+
+    result = await handler.on_message_send(create_hello_request(), context)
+
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_skips_required_extensions_by_default():
+    """The check is opt-in, so an unflagged handler keeps accepting it."""
+    handler = create_required_extension_handler(
+        validate_required_extensions=False
+    )
+
+    result = await handler.on_message_send(
+        create_hello_request(), create_server_call_context()
+    )
+
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_rejects_missing_required_extension():
+    handler = create_required_extension_handler(
+        validate_required_extensions=True
+    )
+
+    with pytest.raises(ExtensionSupportRequiredError):
+        async for _ in handler.on_message_send_stream(
+            create_hello_request(), create_server_call_context()
         ):
             pass
 

@@ -292,6 +292,33 @@ async def test_set_push_notification(rest_handler, mock_request, mock_context):
 
 
 @pytest.mark.anyio
+async def test_set_push_notification_takes_the_task_from_the_path(
+    rest_handler, mock_request, mock_context
+):
+    # The v0.3 spec body is just {config}; the task comes from the URL.
+    mock_request.path_params = {'id': 'task-1'}
+    request_body = {
+        'config': {'pushNotificationConfig': {'url': 'http://example.com'}},
+    }
+    mock_request.body = AsyncMock(
+        return_value=json.dumps(request_body).encode('utf-8')
+    )
+    rest_handler.handler03.on_create_task_push_notification_config.return_value = types_v03.TaskPushNotificationConfig(
+        task_id='task-1',
+        push_notification_config=types_v03.PushNotificationConfig(
+            id='push-1', url='http://example.com'
+        ),
+    )
+
+    await rest_handler.set_push_notification(mock_request, mock_context)
+
+    called_req = rest_handler.handler03.on_create_task_push_notification_config.call_args[
+        0
+    ][0]
+    assert called_req.params.task_id == 'task-1'
+
+
+@pytest.mark.anyio
 async def test_on_get_task(rest_handler, mock_request, mock_context):
     mock_request.path_params = {'id': 'task-1'}
     mock_request.query_params = {'historyLength': '5'}

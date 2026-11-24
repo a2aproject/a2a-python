@@ -52,14 +52,6 @@ jobs:
           cache-from: type=gha,scope=itk_service
           cache-to: type=gha,mode=max,scope=itk_service
 
-      - name: Cache launcher peer-SDK checkouts + build outputs
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/a2a-itk-launcher
-          key: itk-launcher-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            itk-launcher-${{ runner.os }}-
-
       - name: Run ACTS Conformance Suite
         # Temporarily advisory: the driver gates on `must` conformance here,
         # which no SDK passes yet. Delete this line to make it a merge

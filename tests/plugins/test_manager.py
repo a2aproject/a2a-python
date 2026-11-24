@@ -345,3 +345,25 @@ def test_global_registry():
 def test_set_global_requires_manager():
     with pytest.raises(TypeError, match='sequential'):
         plugins.set_global(Recorder('a', []))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ('plugin', 'hook'),
+    [
+        (ClientPlugin(), 'wrap_client_call'),
+        (ServerPlugin(), 'wrap_server_call'),
+    ],
+)
+@pytest.mark.asyncio
+async def test_wrap_defaults_run_the_call_unchanged(plugin, hook):
+    """The base wrap hooks call through, for subclasses that use super().
+
+    The manager skips plugins that do not override the hook, so these
+    bodies only run through an explicit super() call.
+    """
+    sentinel = object()
+
+    async def call():
+        return sentinel
+
+    assert await getattr(plugin, hook)(None, call) is sentinel
