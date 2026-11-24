@@ -1,6 +1,8 @@
 import asyncio
 import importlib
+import os
 import sys
+import warnings
 
 from collections.abc import Callable, Generator
 from typing import Any, NoReturn
@@ -8,8 +10,14 @@ from unittest import mock
 
 import pytest
 
-from a2a.server.events.event_queue import QueueShutDown
-from a2a.utils.telemetry import trace_class, trace_function
+
+# Legacy tracing is off by default, but turn it on for tests
+os.environ.setdefault('OTEL_INSTRUMENTATION_A2A_SDK_ENABLED', 'true')
+
+with warnings.catch_warnings():
+    warnings.simplefilter('ignore', DeprecationWarning)
+    from a2a.server.events.event_queue import QueueShutDown
+    from a2a.utils.telemetry import trace_class, trace_function
 
 
 @pytest.fixture

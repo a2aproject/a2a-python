@@ -19,12 +19,13 @@ Features:
 - Selective method tracing in classes using include/exclude lists.
 
 Configuration:
-- Environment Variable Control: OpenTelemetry instrumentation can be
-  disabled using the `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED` environment
-  variable.
+- Environment Variable Control: this legacy instrumentation is deprecated in
+  favor of `a2a.plugins.otel.OpenTelemetryPlugin`, and is enabled with the
+  `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED` environment variable.
 
-  - Default: `true` (tracing enabled when OpenTelemetry is installed)
-  - To disable: Set `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED=false`
+  - Default: `false` (tracing disabled)
+  - To enable: Set `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED=true`, which also
+    emits a `DeprecationWarning`
   - Case insensitive: 'true', 'True', 'TRUE' all enable tracing
   - Any other value disables tracing and logs a debug message
 
@@ -68,6 +69,7 @@ import functools
 import inspect
 import logging
 import os
+import warnings
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -109,8 +111,17 @@ INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk'
 INSTRUMENTING_MODULE_VERSION = '1.0.0'
 
 # Check if tracing is enabled via environment variable
-env_value = os.getenv(ENABLED_ENV_VAR, 'true')
+env_value = os.getenv(ENABLED_ENV_VAR, 'false')
 otel_enabled = env_value.lower() == 'true'
+
+if otel_enabled:
+    warnings.warn(
+        f'{ENABLED_ENV_VAR}=true enables legacy tracing, which is deprecated '
+        'and will be removed. Use a2a.plugins.otel.OpenTelemetryPlugin '
+        'instead.',
+        DeprecationWarning,
+        stacklevel=1,
+    )
 
 # Log when tracing is explicitly disabled via environment variable
 if otel_installed and not otel_enabled:
