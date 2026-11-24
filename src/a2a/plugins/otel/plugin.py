@@ -122,7 +122,7 @@ class OpenTelemetryPlugin(CompletePlugin):
         if not self._enabled:
             return
 
-        method = _semconv.METHOD_NAMES.get(request.method, request.method)
+        method = _semconv.get_method_name(request.method)
         span = self._tracer.start_span(method, kind=SpanKind.CLIENT)
         request.context.state[_SPAN_KEY] = span
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
+from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import TaskState
 from a2a.utils.errors import A2A_ERROR_REASONS, A2AError
 
@@ -23,23 +24,25 @@ ERROR_TYPE = 'error.type'
 SERVER_ADDRESS = 'server.address'
 SERVER_PORT = 'server.port'
 
-METHOD_NAMES = {
-    'send_message': 'SendMessage',
+_SDK_ALIASES = {
     'send_message_streaming': 'SendStreamingMessage',
-    'get_task': 'GetTask',
-    'cancel_task': 'CancelTask',
     'subscribe': 'SubscribeToTask',
-    'list_tasks': 'ListTasks',
-    'create_task_push_notification_config': (
-        'CreateTaskPushNotificationConfig'
-    ),
-    'get_task_push_notification_config': 'GetTaskPushNotificationConfig',
-    'list_task_push_notification_configs': ('ListTaskPushNotificationConfigs'),
-    'delete_task_push_notification_config': (
-        'DeleteTaskPushNotificationConfig'
-    ),
-    'get_extended_agent_card': 'GetExtendedAgentCard',
 }
+
+_RPC_NAMES = frozenset(
+    method.name
+    for method in a2a_pb2.DESCRIPTOR.services_by_name['A2AService'].methods
+)
+
+
+def get_method_name(sdk_method: str) -> str:
+    """Returns the semconv name of an SDK method, or the SDK name if unknown."""
+    if sdk_method in _SDK_ALIASES:
+        return _SDK_ALIASES[sdk_method]
+    pascal = sdk_method.title().replace('_', '')
+    if pascal in _RPC_NAMES:
+        return pascal
+    return sdk_method  ## Unknown methods should keep the name as-is
 
 
 def task_state_name(state: int) -> str | None:

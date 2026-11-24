@@ -8,7 +8,7 @@ Importing this package requires the ``telemetry`` extra::
 unaffected.
 """
 
-from a2a.plugins.otel._plugin import OpenTelemetryPlugin
+from a2a.plugins.otel.plugin import OpenTelemetryPlugin
 
 
 __all__ = ['OpenTelemetryPlugin']

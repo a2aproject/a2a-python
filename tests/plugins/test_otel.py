@@ -3,6 +3,8 @@
 import asyncio
 import builtins
 import importlib
+import inspect
+import re
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -16,10 +18,10 @@ from a2a.client.transports.base import ClientTransport
 from a2a.plugins import ClientRequest, ClientResponse
 from a2a.plugins.otel import (
     OpenTelemetryPlugin,
-    _plugin as otel_plugin,
     _semconv,
+    plugin as otel_plugin,
 )
-from a2a.types import TaskNotFoundError
+from a2a.types import TaskNotFoundError, a2a_pb2
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -320,6 +322,18 @@ async def test_unknown_method_name_is_used_as_is(exporter):
     )
 
     assert only_span(exporter).name == 'custom_call'
+
+
+def test_method_names_cover_the_a2a_service():
+    """Every A2AService RPC and every SDK client method has a span name."""
+    service = a2a_pb2.DESCRIPTOR.services_by_name['A2AService']
+    sdk_methods = set(
+        re.findall(r"method='([a-z_]+)'", inspect.getsource(BaseClient))
+    )
+
+    assert {_semconv.get_method_name(m) for m in sdk_methods} == {
+        method.name for method in service.methods
+    }
 
 
 @pytest.mark.parametrize(
