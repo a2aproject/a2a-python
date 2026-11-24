@@ -1112,3 +1112,29 @@ class TestRestStreamErrors:
 
         assert len(events) == 1
         assert events[0].WhichOneof('payload') is None
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_stream_event_with_plain_error_raises(
+        self,
+        mock_sse_source: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        """An `error` key raises even when it would parse as a payload."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = AsyncMock(spec=httpx_lib.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_bytes.return_value = async_iterable_from_list(
+            [f'data: {json.dumps({"error": "upstream reset"})}\n\n'.encode()]
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        with pytest.raises(A2AClientError):
+            async for _ in client.subscribe(SubscribeToTaskRequest(id='t1')):
+                pass
