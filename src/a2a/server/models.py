@@ -67,6 +67,7 @@ class TaskMixin:
     protocol_version: Mapped[str | None] = mapped_column(
         String(16), nullable=True
     )
+    generation: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # Using declared_attr to avoid conflict with Pydantic's metadata
     @declared_attr
@@ -220,6 +221,8 @@ class TaskEventMixin:
     owner: Mapped[str] = mapped_column(String(255), nullable=True)
     # Task version produced by applying this event.
     task_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Task generation after this event; replay cursor for clients.
+    generation: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # Serialized StreamResponse proto for the event.
     event_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 

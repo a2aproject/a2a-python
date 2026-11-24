@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 
 
 try:
-    from sqlalchemy import Table, and_, select
+    from sqlalchemy import ColumnElement, Table, and_, select
     from sqlalchemy.exc import OperationalError
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
@@ -26,7 +26,7 @@ except ImportError as e:
 from a2a.server.cluster.event_stream import TaskEventStream, VersionedEvent
 from a2a.server.cluster.version import TaskVersion
 from a2a.server.context import ServerCallContext
-from a2a.server.events.event_queue import Event
+from a2a.server.events.event_queue import StoredEvent
 from a2a.server.models import (
     Base,
     TaskEventModel,
@@ -52,7 +52,7 @@ def _as_int(version: TaskVersion) -> int:
     return value
 
 
-def stream_response_to_event(response: StreamResponse) -> Event:
+def stream_response_to_event(response: StreamResponse) -> StoredEvent:
     """Converts a `StreamResponse` proto back to an internal `Event`."""
     which = response.WhichOneof('payload')
     if which == 'task':
@@ -63,11 +63,15 @@ def stream_response_to_event(response: StreamResponse) -> Event:
         return response.status_update
     if which == 'artifact_update':
         return response.artifact_update
+    if which == 'message_update':
+        return response.message_update
     raise ValueError(f'StreamResponse has no known payload set: {which!r}')
 
 
 class DatabaseTaskEventStream(TaskEventStream):
     """`TaskEventStream` backed by polling the shared ``task_events`` table."""
+
+    tracks_generations = True
 
     _event_model: type[TaskEventModel]
     owner_resolver: OwnerResolver | None
@@ -142,6 +146,11 @@ class DatabaseTaskEventStream(TaskEventStream):
         result = (await session.execute(stmt)).scalar_one_or_none()
         return result or 0
 
+    def _owner(self, context: ServerCallContext | None) -> str | None:
+        if self.owner_resolver is None:
+            return None
+        return self.owner_resolver(context or ServerCallContext())
+
     async def subscribe(  # type: ignore[override]
         self,
         task_id: str,
@@ -151,22 +160,46 @@ class DatabaseTaskEventStream(TaskEventStream):
     ) -> AsyncGenerator[VersionedEvent, None]:
         """Polls the log for events of `task_id` newer than `after`."""
         await self._ensure_initialized()
-        owner = (
-            self.owner_resolver(context or ServerCallContext())
-            if self.owner_resolver is not None
-            else None
-        )
+        owner = self._owner(context)
         async with self._session_maker() as session:
             cursor = await self._seq_at_or_before_version(
                 session, task_id, after, owner
             )
+        async for versioned in self._poll(task_id, owner, cursor):
+            if versioned.version.is_after(after):
+                yield versioned
 
+    async def subscribe_after_generation(  # type: ignore[override]
+        self,
+        task_id: str,
+        *,
+        after_generation: int,
+        context: ServerCallContext | None = None,
+    ) -> AsyncGenerator[VersionedEvent, None]:
+        """Replays and follows events of `task_id` past `after_generation`."""
+        await self._ensure_initialized()
+        async for versioned in self._poll(
+            task_id,
+            self._owner(context),
+            0,
+            self._event_model.generation > after_generation,
+        ):
+            yield versioned
+
+    async def _poll(
+        self,
+        task_id: str,
+        owner: str | None,
+        cursor: int,
+        *extra_conditions: ColumnElement[bool],
+    ) -> AsyncGenerator[VersionedEvent, None]:
         while True:
             try:
                 async with self._session_maker() as session:
                     conditions = [
                         self._event_model.task_id == task_id,
                         self._event_model.seq > cursor,
+                        *extra_conditions,
                     ]
                     if owner is not None:
                         conditions.append(self._event_model.owner == owner)
@@ -192,14 +225,11 @@ class DatabaseTaskEventStream(TaskEventStream):
             for row in rows:
                 seq, task_version, event_data = row[0], row[1], row[2]
                 cursor = seq
-                version = TaskVersion(task_version)
-                if not version.is_after(after):
-                    continue
                 response = StreamResponse()
                 response.ParseFromString(event_data)
                 yield VersionedEvent(
                     event=stream_response_to_event(response),
-                    version=version,
+                    version=TaskVersion(task_version),
                 )
 
             if not rows:

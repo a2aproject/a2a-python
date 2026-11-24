@@ -242,8 +242,11 @@ class RestDispatcher:
         async def _handler(
             context: ServerCallContext,
         ) -> AsyncIterator[dict[str, Any]]:
+            params = SubscribeToTaskRequest()
+            proto_utils.parse_params(request.query_params, params)
+            params.id = task_id
             async for event in self.request_handler.on_subscribe_to_task(
-                SubscribeToTaskRequest(id=task_id), context
+                params, context
             ):
                 response = proto_utils.to_stream_response(event)
                 yield MessageToDict(response)

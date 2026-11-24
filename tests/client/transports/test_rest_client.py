@@ -847,7 +847,7 @@ class TestRestTransportTenant:
         mock_aconnect_sse.assert_called_once()
         args, kwargs = mock_aconnect_sse.call_args
         # method is 2nd positional argument
-        assert args[1] == 'POST'
+        assert args[1] == ('GET' if method_name == 'subscribe' else 'POST')
         if method_name == 'subscribe':
             assert kwargs.get('json') is None
         else:
@@ -1138,3 +1138,51 @@ class TestRestStreamErrors:
         with pytest.raises(A2AClientError):
             async for _ in client.subscribe(SubscribeToTaskRequest(id='t1')):
                 pass
+
+
+def _subscribe_app(*, allow_get: bool, seen: list):
+    from starlette.applications import Starlette
+    from starlette.responses import PlainTextResponse, Response
+    from starlette.routing import Route
+
+    async def subscribe(request):
+        seen.append((request.method, dict(request.query_params)))
+        if request.method == 'GET' and not allow_get:
+            return Response(status_code=405)
+        event = json.dumps({'task': {'id': 't1', 'generation': '3'}})
+        return PlainTextResponse(
+            f'data: {event}\n\n', media_type='text/event-stream'
+        )
+
+    return Starlette(
+        routes=[
+            Route('/tasks/{id}:subscribe', subscribe, methods=['GET', 'POST'])
+        ]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('allow_get', [True, False])
+async def test_subscribe_uses_get_and_falls_back_to_post(
+    allow_get: bool, mock_agent_card: MagicMock
+) -> None:
+    seen: list = []
+    app = _subscribe_app(allow_get=allow_get, seen=seen)
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.ASGITransport(app=app), base_url='http://test'
+    ) as http:
+        client = RestTransport(
+            httpx_client=http, agent_card=mock_agent_card, url='http://test'
+        )
+        events = [
+            e
+            async for e in client.subscribe(
+                SubscribeToTaskRequest(id='t1', last_seen_generation=2)
+            )
+        ]
+
+    assert [e.task.generation for e in events] == [3]
+    expected = [('GET', {'lastSeenGeneration': '2'})]
+    if not allow_get:
+        expected.append(('POST', {'lastSeenGeneration': '2'}))
+    assert seen == expected

@@ -10,6 +10,7 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskArtifactUpdateEvent,
+    TaskMessageUpdateEvent,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
@@ -23,7 +24,8 @@ if TYPE_CHECKING:
     from a2a.server.cluster.task_store import VersionedTaskStore
     from a2a.server.cluster.version import TaskVersion
     from a2a.server.context import ServerCallContext
-    from a2a.server.events.event_queue import Event
+    from a2a.server.events.event_queue import Event, StoredEvent
+    from a2a.server.tasks.task_change_notifier import TaskChangeNotifier
     from a2a.server.tasks.task_store import TaskStore
 
 
@@ -113,6 +115,7 @@ class TaskManager:
         context_id: str | None,
         initial_message: Message | None,
         plugins: PluginManager | None = None,
+        change_notifier: TaskChangeNotifier | None = None,
     ):
         """Initializes the TaskManager.
 
@@ -126,6 +129,7 @@ class TaskManager:
                              Used when creating a new task object.
             plugins: Plugin manager notified of every successful task write
                 via `on_task_event`. ``None`` disables the notifications.
+            change_notifier: Signaled after every successful task write.
         """
         if task_id is not None and not (isinstance(task_id, str) and task_id):
             raise ValueError('Task ID must be a non-empty string')
@@ -153,10 +157,14 @@ class TaskManager:
         # versioned store reports a real version.
         self._current_version: TaskVersion = TaskVersion.MISSING
         # Transient: the event currently being persisted, read by _save_task.
-        self._pending_event: Event | None = None
+        self._pending_event: StoredEvent | None = None
         self._plugins = (
             plugins if plugins is not None and plugins.has_task_hooks else None
         )
+        self._change_notifier = change_notifier
+        # Bumped on every change to the cached snapshot, so a store read that
+        # finishes after a newer write does not replace it.
+        self._cache_epoch = 0
         # State of the task as last read from or written to the store, None
         # if it is not known to exist. Tracked separately because writes
         # mutate `_current_task` in place before saving it.
@@ -178,6 +186,7 @@ class TaskManager:
         self._current_task = None
         self._current_version = TaskVersion.MISSING
         self._persisted_state = None
+        self._cache_epoch += 1
 
     @property
     def current_version(self) -> TaskVersion:
@@ -200,25 +209,32 @@ class TaskManager:
         if self._current_task:
             return self._current_task
 
-        logger.debug(
-            'Attempting to get task from store with id: %s', self.task_id
-        )
-        from a2a.server.cluster.version import TaskVersion  # noqa: PLC0415
+        return await self._load_from_store()
 
-        stored = await self._versioned_store.get(
-            self.task_id, self._call_context
-        )
-        if stored is not None:
+    async def _load_from_store(self) -> Task | None:
+        """Reads the task from the store and caches it.
+
+        If the cache changed while the read was in flight, the newer cached
+        snapshot wins.
+        """
+        while self.task_id:
+            epoch = self._cache_epoch
+            stored = await self._versioned_store.get(
+                self.task_id, self._call_context
+            )
+            if epoch != self._cache_epoch:
+                if self._current_task is not None:
+                    return self._current_task
+                # Invalidated during the read; it may predate the change.
+                continue
+            if stored is None:
+                return None
+            self._cache_epoch += 1
             self._current_task = stored.task
             self._current_version = stored.version
             self._persisted_state = stored.task.status.state
-            logger.debug('Task %s retrieved successfully.', self.task_id)
-        else:
-            self._current_task = None
-            self._current_version = TaskVersion.MISSING
-            self._persisted_state = None
-            logger.debug('Task %s not found.', self.task_id)
-        return self._current_task
+            return stored.task
+        return None
 
     async def save_task_event(
         self, event: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
@@ -270,9 +286,13 @@ class TaskManager:
         # Apply the event to a copy; _save_task caches it only once the store
         # accepts it. If the save raises, the cached task still matches the
         # store, so the failure path does not take an unsaved terminal state
-        # for a saved one, and `prev` is the task as last read.
+        # for a saved one, and `prev` is the task as last read. A task that
+        # does not exist yet is created by this same save.
         task = Task()
-        task.CopyFrom(await self.ensure_task(event))
+        task.CopyFrom(
+            await self.get_task()
+            or self._init_task_obj(event.task_id, event.context_id)
+        )
 
         if isinstance(event, TaskStatusUpdateEvent):
             logger.debug(
@@ -294,6 +314,34 @@ class TaskManager:
             self._pending_event = None
         return task
 
+    async def append_client_message(self, message: Message) -> Task:
+        """Adds a client message to an existing task as one change.
+
+        The message is saved with a `TaskMessageUpdateEvent`, so it takes its
+        own generation, and the saved task is returned.
+
+        Raises:
+            ConcurrentTaskModificationError: If the task changed since it was
+                last read.
+        """
+        current = await self.get_task()
+        if current is None:
+            raise InvalidParamsError(
+                message=f'Task {self.task_id} does not exist'
+            )
+        task = Task()
+        task.CopyFrom(current)
+        self.update_with_message(message, task)
+        self._current_task = current
+        self._pending_event = TaskMessageUpdateEvent(
+            task_id=task.id, context_id=task.context_id, message=message
+        )
+        try:
+            await self._save_task(task)
+        finally:
+            self._pending_event = None
+        return task
+
     async def ensure_task_id(self, task_id: str, context_id: str) -> Task:
         """Ensures a Task object exists in memory, loading from store or creating new if needed.
 
@@ -304,23 +352,9 @@ class TaskManager:
         Returns:
             An existing or newly created `Task` object.
         """
-        from a2a.server.cluster.version import TaskVersion  # noqa: PLC0415
-
         task: Task | None = self._current_task
         if not task and self.task_id:
-            logger.debug(
-                'Attempting to retrieve existing task with id: %s', self.task_id
-            )
-            stored = await self._versioned_store.get(
-                self.task_id, self._call_context
-            )
-            if stored is not None:
-                task = stored.task
-                self._current_version = stored.version
-                self._persisted_state = stored.task.status.state
-            else:
-                self._current_version = TaskVersion.MISSING
-                self._persisted_state = None
+            task = await self._load_from_store()
 
         if not task:
             logger.info(
@@ -393,11 +427,23 @@ class TaskManager:
     async def _save_task(self, task: Task) -> None:
         """Saves the task and updates the snapshot.
 
-        Threads `_current_version` so a VersionedTaskStore can compare-and-swap;
-        raises ConcurrentTaskModificationError on a stale write.
+        Every task write goes through here, so this is where `generation`
+        advances: by one on each write, starting at 1 for a new task. The
+        pending event gets the same value before it reaches the store and
+        any subscriber. Threads `_current_version` so a VersionedTaskStore
+        can compare-and-swap; raises ConcurrentTaskModificationError on a
+        stale write.
         """
         logger.debug('Saving task with id: %s', task.id)
         prev = self._current_task
+        task.generation = prev.generation + 1 if prev is not None else 1
+        if isinstance(
+            self._pending_event,
+            TaskStatusUpdateEvent
+            | TaskArtifactUpdateEvent
+            | TaskMessageUpdateEvent,
+        ):
+            self._pending_event.generation = task.generation
         self._current_version = await self._versioned_store.save(
             task,
             event=self._pending_event,
@@ -406,10 +452,13 @@ class TaskManager:
             context=self._call_context,
         )
         self._current_task = task
+        self._cache_epoch += 1
         if not self.task_id:
             logger.info('New task created with id: %s', task.id)
             self.task_id = task.id
             self.context_id = task.context_id
+        if self._change_notifier is not None:
+            self._change_notifier.notify(task.id)
         from_state = self._persisted_state
         self._persisted_state = task.status.state
         if self._plugins is not None:
@@ -442,4 +491,5 @@ class TaskManager:
             task.status.ClearField('message')
         task.history.append(message)
         self._current_task = task
+        self._cache_epoch += 1
         return task

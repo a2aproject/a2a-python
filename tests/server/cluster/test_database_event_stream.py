@@ -37,6 +37,7 @@ from a2a.types.a2a_pb2 import (
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
+    TaskMessageUpdateEvent,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
@@ -423,4 +424,96 @@ async def test_publish_is_noop(db_url: str) -> None:
         )
         await stream.destroy('task-abc')  # also a no-op
     finally:
+        await stream_engine.dispose()
+
+
+def test_stream_response_to_event_roundtrips_message_update() -> None:
+    from a2a.utils.proto_utils import to_stream_response
+
+    event = TaskMessageUpdateEvent(
+        task_id='task-abc',
+        context_id='ctx',
+        message=Message(message_id='m1', role=Role.ROLE_USER),
+        generation=4,
+    )
+    parsed = StreamResponse()
+    parsed.ParseFromString(to_stream_response(event).SerializeToString())
+    assert stream_response_to_event(parsed) == event
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_subscribe_after_generation_replays_then_follows(
+    db_url: str,
+) -> None:
+    store_engine = create_async_engine(db_url)
+    stream_engine = create_async_engine(db_url)
+    _enforce_sqlite_foreign_keys(store_engine)
+    _enforce_sqlite_foreign_keys(stream_engine)
+    try:
+        store = VersionedDatabaseTaskStore(
+            engine=store_engine, create_table=False
+        )
+        stream = DatabaseTaskEventStream(
+            engine=stream_engine, create_table=False, poll_interval_s=0.05
+        )
+        assert stream.tracks_generations
+        await store.initialize()
+        await stream.initialize()
+
+        task_id = str(uuid.uuid4())
+        version = TaskVersion.MISSING
+        states = [
+            TaskState.TASK_STATE_SUBMITTED,
+            TaskState.TASK_STATE_WORKING,
+            TaskState.TASK_STATE_INPUT_REQUIRED,
+        ]
+        for generation, state in enumerate(states, start=1):
+            task = create_task(task_id)
+            task.status.state = state
+            task.generation = generation
+            update = status_event(task_id, state)
+            update.generation = generation
+            version = await store.save(
+                task,
+                event=update,
+                prev=None,
+                prev_version=version,
+                context=TEST_CONTEXT,
+            )
+
+        received: list[int] = []
+
+        async def consume() -> None:
+            async for ve in stream.subscribe_after_generation(
+                task_id, after_generation=1, context=TEST_CONTEXT
+            ):
+                received.append(ve.event.generation)
+                if ve.event.generation == 4:
+                    return
+
+        consumer = asyncio.create_task(consume())
+        await asyncio.sleep(0.2)
+        assert received == [2, 3]
+
+        task = create_task(task_id)
+        task.status.state = TaskState.TASK_STATE_COMPLETED
+        task.generation = 4
+        update = status_event(task_id, TaskState.TASK_STATE_COMPLETED)
+        update.generation = 4
+        await store.save(
+            task,
+            event=update,
+            prev=None,
+            prev_version=version,
+            context=TEST_CONTEXT,
+        )
+        await asyncio.wait_for(consumer, timeout=8)
+        assert received == [2, 3, 4]
+
+        stored = await store.get(task_id, TEST_CONTEXT)
+        assert stored is not None
+        assert stored.task.generation == 4
+    finally:
+        await store_engine.dispose()
         await stream_engine.dispose()

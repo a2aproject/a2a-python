@@ -162,6 +162,7 @@ class DatabaseTaskStore(TaskStore):
                 MessageToDict(task.metadata) if task.metadata.fields else None
             ),
             protocol_version='1.0',
+            generation=task.generation,
         )
 
     def _from_orm(self, task_model: TaskModel) -> Task:
@@ -173,6 +174,7 @@ class DatabaseTaskStore(TaskStore):
             task = Task(
                 id=task_model.id,
                 context_id=task_model.context_id,
+                generation=task_model.generation or 0,
             )
             # These JSON columns are annotated with proto types but hold plain
             # dicts at rest; ParseDict wants the dict view.

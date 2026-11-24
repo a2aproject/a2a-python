@@ -61,17 +61,13 @@ async def test_transitions_from_creation_to_completion():
     )
     await tm.save_task_event(status('t-1', TaskState.TASK_STATE_COMPLETED))
 
-    W, S, C = (
-        TaskState.TASK_STATE_WORKING,
-        TaskState.TASK_STATE_SUBMITTED,
-        TaskState.TASK_STATE_COMPLETED,
-    )
-    assert collect.transitions() == [(None, S), (S, W), (W, W), (W, C)]
-    # The creation write has no event; the others carry the agent event.
-    assert collect.infos[0].event is None
-    assert isinstance(collect.infos[1].event, TaskStatusUpdateEvent)
-    assert isinstance(collect.infos[2].event, TaskArtifactUpdateEvent)
+    W, C = TaskState.TASK_STATE_WORKING, TaskState.TASK_STATE_COMPLETED
+    # The first event creates the task in the same write.
+    assert collect.transitions() == [(None, W), (W, W), (W, C)]
+    assert isinstance(collect.infos[0].event, TaskStatusUpdateEvent)
+    assert isinstance(collect.infos[1].event, TaskArtifactUpdateEvent)
     assert collect.infos[-1].task.status.state == C
+    assert [i.task.generation for i in collect.infos] == [1, 2, 3]
 
 
 @pytest.mark.asyncio

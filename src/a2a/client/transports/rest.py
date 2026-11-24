@@ -36,7 +36,12 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils._httpx_compat import AsyncClient, HTTPStatusError, Request
+from a2a.utils._httpx_compat import (
+    HTTP_STATUS_ERROR,
+    AsyncClient,
+    HTTPStatusError,
+    Request,
+)
 from a2a.utils.errors import A2A_REASON_TO_ERROR, MethodNotFoundError
 from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -90,6 +95,14 @@ def _parse_rest_error(
             break
 
     return None
+
+
+def _is_method_not_allowed(error: A2AClientError) -> bool:
+    cause = error.__cause__
+    return (
+        isinstance(cause, HTTP_STATUS_ERROR)
+        and cause.response.status_code == httpx.codes.METHOD_NOT_ALLOWED
+    )
 
 
 def _quote_id(value: str) -> str:
@@ -326,14 +339,29 @@ class RestTransport(ClientTransport):
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
-        """Reconnects to get task updates."""
-        async for event in self._send_stream_request(
-            'POST',
-            f'/tasks/{_quote_id(request.id)}:subscribe',
-            request.tenant,
-            context=context,
-        ):
-            yield event
+        """Reconnects to get task updates.
+
+        Uses ``GET``, the method the spec lists, and falls back to ``POST``
+        once for servers that answer ``405 Method Not Allowed``.
+        """
+        params = MessageToDict(request)
+        params.pop('id', None)
+        params.pop('tenant', None)
+        target = f'/tasks/{_quote_id(request.id)}:subscribe'
+        started = False
+        try:
+            async for event in self._send_stream_request(
+                'GET', target, request.tenant, context=context, params=params
+            ):
+                started = True
+                yield event
+        except A2AClientError as e:
+            if started or not _is_method_not_allowed(e):
+                raise
+            async for event in self._send_stream_request(
+                'POST', target, request.tenant, context=context, params=params
+            ):
+                yield event
 
     async def get_extended_agent_card(
         self,
@@ -397,7 +425,7 @@ class RestTransport(ClientTransport):
             raise mapped
         raise A2AClientError(sse_data)
 
-    async def _send_stream_request(
+    async def _send_stream_request(  # noqa: PLR0913
         self,
         method: str,
         target: str,
@@ -405,6 +433,7 @@ class RestTransport(ClientTransport):
         context: ClientCallContext | None = None,
         *,
         json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         path = self._get_path(target, tenant)
         http_kwargs = get_http_args(context)
@@ -416,6 +445,7 @@ class RestTransport(ClientTransport):
             self._handle_http_error,
             self._handle_sse_error,
             json=json,
+            params=params,
             **http_kwargs,
         ):
             yield self._parse_stream_event(sse_data)

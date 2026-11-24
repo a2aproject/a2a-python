@@ -28,7 +28,9 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskState,
     TaskStatus,
+    TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -535,7 +537,7 @@ async def test_retry_defaults(
 
 
 @pytest.mark.asyncio
-async def test_cancel_overwrites_without_version_match(
+async def test_cancel_is_version_checked(
     versioned_store: VersionedDatabaseTaskStore,
 ) -> None:
     v1 = await versioned_store.save(
@@ -552,29 +554,6 @@ async def test_cancel_overwrites_without_version_match(
         prev_version=v1,
         context=TEST_CONTEXT,
     )
-    await versioned_store.save(
-        create_task(state=TaskState.TASK_STATE_CANCELED),
-        event=None,
-        prev=None,
-        prev_version=v1,
-        context=TEST_CONTEXT,
-    )
-    stored = await versioned_store.get('task-abc', TEST_CONTEXT)
-    assert stored is not None
-    assert stored.task.status.state == TaskState.TASK_STATE_CANCELED
-
-
-@pytest.mark.asyncio
-async def test_cancel_on_terminal_task_raises(
-    versioned_store: VersionedDatabaseTaskStore,
-) -> None:
-    v1 = await versioned_store.save(
-        create_task(state=TaskState.TASK_STATE_COMPLETED),
-        event=None,
-        prev=None,
-        prev_version=TaskVersion.MISSING,
-        context=TEST_CONTEXT,
-    )
     with pytest.raises(ConcurrentTaskModificationError):
         await versioned_store.save(
             create_task(state=TaskState.TASK_STATE_CANCELED),
@@ -583,6 +562,9 @@ async def test_cancel_on_terminal_task_raises(
             prev_version=v1,
             context=TEST_CONTEXT,
         )
+    stored = await versioned_store.get('task-abc', TEST_CONTEXT)
+    assert stored is not None
+    assert stored.task.status.state == TaskState.TASK_STATE_WORKING
 
 
 @pytest.mark.asyncio
@@ -705,12 +687,11 @@ async def test_versions_count_writes(
         prev_version=v1,
         context=TEST_CONTEXT,
     )
-    # Cancel skips the version check but still counts as a write.
     v3 = await versioned_store.save(
         create_task(state=TaskState.TASK_STATE_CANCELED),
         event=None,
         prev=None,
-        prev_version=v1,
+        prev_version=v2,
         context=TEST_CONTEXT,
     )
     assert (v1, v2, v3) == (TaskVersion(1), TaskVersion(2), TaskVersion(3))
@@ -810,7 +791,7 @@ async def test_cancel_racing_save_does_not_deadlock(
             save_result, cancel_result = await both
 
         assert save_result == TaskVersion(2)
-        # B waited for A, then found the task already terminal.
+        # B waited for A's row lock, then lost the version check.
         assert isinstance(cancel_result, ConcurrentTaskModificationError)
         final = await store_a.get('task-abc', TEST_CONTEXT)
         assert final is not None
@@ -820,3 +801,111 @@ async def test_cancel_racing_save_does_not_deadlock(
             await conn.run_sync(Base.metadata.drop_all)
         await engine_a.dispose()
         await engine_b.dispose()
+
+
+def _cancel(task: Task) -> TaskStatusUpdateEvent | None:
+    if task.status.state in TERMINAL_TASK_STATES:
+        return None
+    task.status.state = TaskState.TASK_STATE_CANCELED
+    task.generation += 1
+    return TaskStatusUpdateEvent(
+        task_id=task.id,
+        context_id=task.context_id,
+        status=task.status,
+        generation=task.generation,
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_applies_change_to_current_task(
+    versioned_store: VersionedDatabaseTaskStore,
+) -> None:
+    working = create_task(state=TaskState.TASK_STATE_WORKING)
+    working.generation = 4
+    v1 = await versioned_store.save(
+        working,
+        event=None,
+        prev=None,
+        prev_version=TaskVersion.MISSING,
+        context=TEST_CONTEXT,
+    )
+
+    stored = await versioned_store.update(
+        'task-abc', _cancel, context=TEST_CONTEXT
+    )
+
+    assert stored is not None
+    assert stored.task.status.state == TaskState.TASK_STATE_CANCELED
+    assert stored.task.generation == 5
+    assert stored.version.is_after(v1)
+    reread = await versioned_store.get('task-abc', TEST_CONTEXT)
+    assert reread is not None
+    assert reread.task == stored.task
+    assert reread.version == stored.version
+
+
+@pytest.mark.asyncio
+async def test_update_without_change_writes_nothing(
+    versioned_store: VersionedDatabaseTaskStore,
+) -> None:
+    v1 = await versioned_store.save(
+        create_task(state=TaskState.TASK_STATE_COMPLETED),
+        event=None,
+        prev=None,
+        prev_version=TaskVersion.MISSING,
+        context=TEST_CONTEXT,
+    )
+    stored = await versioned_store.update(
+        'task-abc', _cancel, context=TEST_CONTEXT
+    )
+    assert stored is not None
+    assert stored.task.status.state == TaskState.TASK_STATE_COMPLETED
+    assert stored.version == v1
+
+
+@pytest.mark.asyncio
+async def test_update_of_absent_task_returns_none(
+    versioned_store: VersionedDatabaseTaskStore,
+) -> None:
+    assert (
+        await versioned_store.update('missing', _cancel, context=TEST_CONTEXT)
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_adopts_task_without_version_row(
+    versioned_store: VersionedDatabaseTaskStore,
+) -> None:
+    await versioned_store.as_task_store.save(
+        create_task(state=TaskState.TASK_STATE_WORKING), TEST_CONTEXT
+    )
+    stored = await versioned_store.update(
+        'task-abc', _cancel, context=TEST_CONTEXT
+    )
+    assert stored is not None
+    assert stored.version == TaskVersion(1)
+    assert stored.task.status.state == TaskState.TASK_STATE_CANCELED
+
+
+@pytest.mark.asyncio
+async def test_update_gives_up_on_persistent_conflicts(
+    versioned_store: VersionedDatabaseTaskStore,
+) -> None:
+    from unittest import mock
+
+    store = VersionedDatabaseTaskStore(
+        engine=versioned_store._db.engine,  # noqa: SLF001
+        create_table=False,
+        max_attempts=2,
+        retry_delay_s=0.0,
+    )
+    conflict = mock.AsyncMock(
+        side_effect=ConcurrentTaskModificationError('task-abc')
+    )
+    with (
+        mock.patch.object(store, '_update_once', conflict),
+        pytest.raises(ConcurrentTaskModificationError),
+    ):
+        await store.update('task-abc', _cancel, context=TEST_CONTEXT)
+    assert conflict.await_count == 2

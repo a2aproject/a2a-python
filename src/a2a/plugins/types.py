@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from a2a.client.client import ClientCallContext
     from a2a.server.context import ServerCallContext
-    from a2a.server.events.event_queue import Event
+    from a2a.server.events.event_queue import StoredEvent
     from a2a.server.tasks.push_notification_sender import (
         PushNotificationEvent,
     )
@@ -122,7 +122,8 @@ class TaskEventInfo:
         to_state: State after the write. Equal to ``from_state`` for writes
             that do not change the state, such as artifact updates.
         event: The event that caused the write, ``None`` when the SDK wrote
-            the task without one.
+            the task without one. A client message added to the task comes
+            as a `TaskMessageUpdateEvent`.
         task: The task after the write. This is the SDK's live object;
             copy it if you keep it beyond the hook call.
         context: Call context of the request that produced the write.
@@ -131,7 +132,7 @@ class TaskEventInfo:
     task_id: str
     from_state: TaskState | None
     to_state: TaskState
-    event: Event | None
+    event: StoredEvent | None
     task: Task
     context: ServerCallContext
 

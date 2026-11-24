@@ -346,10 +346,11 @@ class LongRunningAgent(AgentExecutor):
 
 
 class InputRequiredThenCompleteAgent(AgentExecutor):
-    """Asks for input until two user turns exist, then completes.
+    """Asks for input on the first two turns, then completes.
 
     Derives the turn purely from durable task history, so it behaves correctly
-    regardless of which replica runs each turn.
+    regardless of which replica runs each turn. A follow-up is saved before
+    its turn runs, so the history already holds the current message.
     """
 
     async def execute(self, context, event_queue) -> None:  # noqa: ANN001
@@ -367,7 +368,7 @@ class InputRequiredThenCompleteAgent(AgentExecutor):
         if task is not None:
             user_msgs = sum(1 for m in task.history if m.role == Role.ROLE_USER)
 
-        if task is None or user_msgs <= 1:
+        if task is None or user_msgs <= 2:
             await updater.requires_input(
                 message=updater.new_agent_message([Part(text='need input')])
             )

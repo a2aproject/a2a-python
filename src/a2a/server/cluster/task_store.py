@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from a2a.server.cluster.version import TaskVersion
 from a2a.server.context import ServerCallContext
-from a2a.server.events.event_queue import Event
+from a2a.server.events.event_queue import StoredEvent
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types.a2a_pb2 import ListTasksRequest, ListTasksResponse, Task
 
@@ -34,7 +35,7 @@ class VersionedTaskStore(ABC):
         self,
         task: Task,
         *,
-        event: Event | None,
+        event: StoredEvent | None,
         prev: Task | None,
         prev_version: TaskVersion,
         context: ServerCallContext,
@@ -44,15 +45,12 @@ class VersionedTaskStore(ABC):
         Args:
             task: The task state to persist.
             event: The event that produced this state, or `None` for a direct
-                write.
+                write. Carries the same `generation` as `task`.
             prev: The task as previously read, for implementations that diff.
             prev_version: The version `task` was derived from. Implementations
                 MUST raise `ConcurrentTaskModificationError` if the currently
                 stored version differs. `TaskVersion.MISSING` marks a first
-                write. A write moving `task` to CANCELED overwrites a
-                non-terminal stored task without a version check, and raises
-                `ConcurrentTaskModificationError` if the stored task is already
-                terminal or absent.
+                write.
             context: The server call context (used to resolve the owner).
 
         Returns:
@@ -80,6 +78,46 @@ class VersionedTaskStore(ABC):
     async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the store by ID."""
 
+    async def update(
+        self,
+        task_id: str,
+        change: Callable[[Task], StoredEvent | None],
+        *,
+        context: ServerCallContext,
+    ) -> StoredTask | None:
+        """Applies `change` to the current task and saves the result.
+
+        `change` edits the task it is given and returns the event for the
+        write, or `None` to leave the task as it is. It always sees the
+        latest state, so the write never discards another writer's change.
+        This implementation re-reads and calls `change` again when another
+        writer gets in first; stores that can lock the task should override
+        it so `change` applies on the first attempt.
+
+        Returns:
+            The task after the change, or `None` if the task does not exist.
+        """
+        while True:
+            stored = await self.get(task_id, context)
+            if stored is None:
+                return None
+            task = Task()
+            task.CopyFrom(stored.task)
+            event = change(task)
+            if event is None:
+                return stored
+            try:
+                version = await self.save(
+                    task,
+                    event=event,
+                    prev=stored.task,
+                    prev_version=stored.version,
+                    context=context,
+                )
+            except ConcurrentTaskModificationError:
+                continue
+            return StoredTask(task, version)
+
 
 class LegacyTaskStoreAdapter(VersionedTaskStore):
     """Runs an unversioned `TaskStore` under the `VersionedTaskStore` interface."""
@@ -96,7 +134,7 @@ class LegacyTaskStoreAdapter(VersionedTaskStore):
         self,
         task: Task,
         *,
-        event: Event | None,
+        event: StoredEvent | None,
         prev: Task | None,
         prev_version: TaskVersion,
         context: ServerCallContext,

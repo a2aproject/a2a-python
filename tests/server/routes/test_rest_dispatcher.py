@@ -463,6 +463,37 @@ class TestRestDispatcherStreaming:
         assert 'chunk1' in chunks[0].data
         assert 'chunk2' in chunks[1].data
 
+    async def test_on_subscribe_to_task_parses_last_seen_generation(
+        self, rest_dispatcher_instance, mock_handler
+    ):
+        req = make_mock_request(
+            method='GET',
+            path_params={'id': 'test_task'},
+            query_params=QueryParams({'lastSeenGeneration': '5'}),
+        )
+        response = await rest_dispatcher_instance.on_subscribe_to_task(req)
+        async for _ in response.body_iterator:
+            pass
+
+        params = mock_handler.on_subscribe_to_task.call_args.args[0]
+        assert params.id == 'test_task'
+        assert params.HasField('last_seen_generation')
+        assert params.last_seen_generation == 5
+
+    async def test_on_get_task_parses_current_generation(
+        self, rest_dispatcher_instance, mock_handler
+    ):
+        req = make_mock_request(
+            method='GET',
+            path_params={'id': 'test_task'},
+            query_params=QueryParams({'currentGeneration': '3'}),
+        )
+        await rest_dispatcher_instance.on_get_task(req)
+
+        params = mock_handler.on_get_task.call_args.args[0]
+        assert params.HasField('current_generation')
+        assert params.current_generation == 3
+
     async def test_on_message_send_stream_handler_error(self, mock_handler):
         mock_handler.on_message_send_stream.side_effect = (
             UnsupportedOperationError('Mocked error')

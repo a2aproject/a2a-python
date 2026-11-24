@@ -81,6 +81,13 @@ def _get_metadata_value(
     ]
 
 
+def _error_info_metadata(error: A2AError) -> dict[str, str]:
+    """String-valued `error.data` entries, which `ErrorInfo.metadata` holds."""
+    if not isinstance(error.data, dict):
+        return {}
+    return {k: v for k, v in error.data.items() if isinstance(v, str)}
+
+
 _ERROR_CODE_MAP: dict[type[A2AError], grpc.StatusCode] = {
     types.InvalidRequestError: grpc.StatusCode.INVALID_ARGUMENT,
     types.MethodNotFoundError: grpc.StatusCode.NOT_FOUND,
@@ -95,6 +102,7 @@ _ERROR_CODE_MAP: dict[type[A2AError], grpc.StatusCode] = {
     types.ExtendedAgentCardNotConfiguredError: grpc.StatusCode.FAILED_PRECONDITION,
     types.ExtensionSupportRequiredError: grpc.StatusCode.FAILED_PRECONDITION,
     types.VersionNotSupportedError: grpc.StatusCode.FAILED_PRECONDITION,
+    types.TaskGenerationMismatchError: grpc.StatusCode.ABORTED,
 }
 
 
@@ -374,6 +382,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             error_info = error_details_pb2.ErrorInfo(
                 reason=reason,
                 domain='a2a-protocol.org',
+                metadata=_error_info_metadata(error),
             )
 
             status_code = code.value[0]

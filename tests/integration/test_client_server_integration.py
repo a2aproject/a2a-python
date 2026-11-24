@@ -48,6 +48,7 @@ from a2a.types.a2a_pb2 import (
     Message,
     Part,
     Role,
+    SendMessageConfiguration,
     SendMessageRequest,
     SubscribeToTaskRequest,
     Task,
@@ -68,6 +69,7 @@ from a2a.utils.errors import (
     ExtensionSupportRequiredError,
     InvalidAgentResponseError,
     PushNotificationNotSupportedError,
+    TaskGenerationMismatchError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -941,6 +943,7 @@ async def test_client_get_signed_base_and_extended_cards(
         ExtendedAgentCardNotConfiguredError,
         ExtensionSupportRequiredError,
         VersionNotSupportedError,
+        TaskGenerationMismatchError,
     ],
 )
 async def test_client_handles_a2a_errors(transport_setups, error_cls) -> None:
@@ -962,6 +965,37 @@ async def test_client_handles_a2a_errors(transport_setups, error_cls) -> None:
     # Reset side_effect for other tests
     handler.on_get_task.side_effect = None
 
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_generation_mismatch_metadata_reaches_client(
+    transport_setups,
+) -> None:
+    client = transport_setups.client
+    transport_setups.handler.on_message_send_stream.side_effect = None
+
+    async def mismatch(*args, **kwargs):
+        raise TaskGenerationMismatchError.for_task('task-abc', 3, 5)
+        yield
+
+    transport_setups.handler.on_message_send_stream.side_effect = mismatch
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER, message_id='m1', parts=[Part(text='hi')]
+        ),
+        configuration=SendMessageConfiguration(if_generation_match=3),
+    )
+
+    with pytest.raises(TaskGenerationMismatchError) as exc_info:
+        async for _ in client.send_message(request=params):
+            pass
+
+    assert exc_info.value.data == {
+        'taskId': 'task-abc',
+        'expectedGeneration': '3',
+        'currentGeneration': '5',
+    }
     await client.close()
 
 

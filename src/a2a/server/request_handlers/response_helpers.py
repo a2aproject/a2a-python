@@ -39,6 +39,7 @@ from a2a.utils.errors import (
     InvalidRequestError,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
+    TaskGenerationMismatchError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -61,6 +62,7 @@ EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     InternalError: JSONRPCInternalError,
     ExtensionSupportRequiredError: JSONRPCError,
     VersionNotSupportedError: JSONRPCError,
+    TaskGenerationMismatchError: JSONRPCError,
 }
 
 

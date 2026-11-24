@@ -26,7 +26,7 @@ from a2a.server.cluster.task_store import (
 )
 from a2a.server.cluster.version import TaskVersion
 from a2a.server.context import ServerCallContext
-from a2a.server.events.event_queue import Event
+from a2a.server.events.event_queue import StoredEvent
 from a2a.server.models import (
     Base,
     TaskEventModel,
@@ -42,9 +42,7 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     ListTasksResponse,
     Task,
-    TaskState,
 )
-from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.proto_utils import to_stream_response
 
 
@@ -138,7 +136,7 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
         self,
         task: Task,
         *,
-        event: Event | None = None,
+        event: StoredEvent | None = None,
         prev: Task | None = None,
         prev_version: TaskVersion,
         context: ServerCallContext,
@@ -147,9 +145,9 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
 
         The version lives in ``task_versions``, not on the tasks row, and
         counts writes to the task: the first write sets 1 and every later
-        write adds 1. Updates CAS on it; cancel overwrites a non-terminal
-        task. When `event` is provided it is appended to ``task_events`` in the
-        same transaction for cross-replica replay.
+        write adds 1. When `event` is provided it is appended to
+        ``task_events`` in the same transaction, with the task's generation,
+        for cross-replica replay.
         """
         del prev
         await self._db._ensure_initialized()  # noqa: SLF001
@@ -175,40 +173,16 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
         self,
         task: Task,
         *,
-        event: Event | None,
+        event: StoredEvent | None,
         prev_version: TaskVersion,
         owner: str,
     ) -> TaskVersion:
         model = self._db._to_orm(task, owner)  # noqa: SLF001
 
-        # Every branch locks the task_versions row before the tasks row, so
+        # The task_versions row is written before the tasks row, so
         # concurrent writers cannot deadlock.
         async with self._db.async_session_maker.begin() as session:
-            if task.status.state == TaskState.TASK_STATE_CANCELED:
-                stored = await self._lock_version(session, task.id, owner)
-                current = await self._current_task(session, task.id, owner)
-                if (
-                    current is None
-                    or current.status.state in TERMINAL_TASK_STATES
-                ):
-                    raise ConcurrentTaskModificationError(task.id)
-                new_version = (stored or 0) + 1
-                if stored is None:
-                    await self._insert_version(
-                        session, task.id, owner, new_version
-                    )
-                else:
-                    await session.execute(
-                        update(self._version_model)
-                        .where(
-                            and_(
-                                self._version_model.task_id == task.id,
-                                self._version_model.owner == owner,
-                            )
-                        )
-                        .values(version=new_version)
-                    )
-            elif prev_version.is_missing:
+            if prev_version.is_missing:
                 new_version = 1
                 await self._insert_version(session, task.id, owner, new_version)
             else:
@@ -236,6 +210,7 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
                         task_id=task.id,
                         owner=owner,
                         task_version=new_version,
+                        generation=task.generation,
                         event_data=to_stream_response(
                             event
                         ).SerializeToString(),
@@ -243,6 +218,118 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
                 )
 
         return TaskVersion(new_version)
+
+    async def update(
+        self,
+        task_id: str,
+        change: Callable[[Task], StoredEvent | None],
+        *,
+        context: ServerCallContext,
+    ) -> StoredTask | None:
+        """Applies `change` to the current task in one locked transaction.
+
+        The version row is locked before the task is read, so writers that
+        compare-and-swap on it wait and `change` applies on the first
+        attempt.
+        """
+        await self._db._ensure_initialized()  # noqa: SLF001
+        await self._ensure_cluster_tables()
+        owner = self._db.owner_resolver(context)
+        attempts = 0
+        while True:
+            attempts += 1
+            try:
+                return await self._update_once(task_id, change, owner)
+            except ConcurrentTaskModificationError:
+                # Only a version row created concurrently gets here.
+                if attempts >= self._max_attempts:
+                    raise
+            except DBAPIError as e:
+                if not _is_transient(e) or attempts >= self._max_attempts:
+                    raise
+                await asyncio.sleep(self._retry_delay_s * attempts)
+
+    async def _update_once(
+        self,
+        task_id: str,
+        change: Callable[[Task], StoredEvent | None],
+        owner: str,
+    ) -> StoredTask | None:
+        async with self._db.async_session_maker.begin() as session:
+            stored_version = await self._lock_version(session, task_id, owner)
+            row = (
+                await session.execute(
+                    select(self._db.task_model).where(
+                        and_(
+                            self._db.task_model.id == task_id,
+                            self._db.task_model.owner == owner,
+                        )
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            task = self._db._from_orm(row)  # noqa: SLF001
+            event = change(task)
+            version = (
+                TaskVersion(stored_version)
+                if stored_version is not None
+                else TaskVersion.MISSING
+            )
+            if event is None:
+                return StoredTask(task, version)
+            new_version = (stored_version or 0) + 1
+            if stored_version is None:
+                await self._insert_version(session, task_id, owner, new_version)
+            else:
+                result = await session.execute(
+                    update(self._version_model)
+                    .where(
+                        and_(
+                            self._version_model.task_id == task_id,
+                            self._version_model.owner == owner,
+                            self._version_model.version == stored_version,
+                        )
+                    )
+                    .values(version=new_version)
+                )
+                if result.rowcount == 0:  # ty:ignore[unresolved-attribute]
+                    raise ConcurrentTaskModificationError(task_id)
+            await session.merge(self._db._to_orm(task, owner))  # noqa: SLF001
+            await session.execute(
+                insert(self._event_model).values(
+                    task_id=task_id,
+                    owner=owner,
+                    task_version=new_version,
+                    generation=task.generation,
+                    event_data=to_stream_response(event).SerializeToString(),
+                )
+            )
+        return StoredTask(task, TaskVersion(new_version))
+
+    async def _lock_version(
+        self, session: AsyncSession, task_id: str, owner: str
+    ) -> int | None:
+        """Locks the task's version row and returns its version.
+
+        A no-op update rather than SELECT ... FOR UPDATE: it takes the same
+        row lock on PostgreSQL and MySQL, and on SQLite, which has no row
+        locks, it takes the database write lock up front.
+        """
+        where = and_(
+            self._version_model.task_id == task_id,
+            self._version_model.owner == owner,
+        )
+        await session.execute(
+            update(self._version_model)
+            .where(where)
+            .values(version=self._version_model.version)
+        )
+        return (
+            await session.execute(
+                select(self._version_model.version).where(where)
+            )
+        ).scalar_one_or_none()
 
     async def get(
         self, task_id: str, context: ServerCallContext
@@ -296,37 +383,6 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
                 else TaskVersion.MISSING
             )
             return StoredTask(task, version)
-
-    async def _current_task(
-        self, session: AsyncSession, task_id: str, owner: str
-    ) -> Task | None:
-        task_model = self._db.task_model
-        row = (
-            await session.execute(
-                select(task_model)
-                .where(
-                    and_(task_model.id == task_id, task_model.owner == owner)
-                )
-                .with_for_update()
-            )
-        ).scalar_one_or_none()
-        return self._db._from_orm(row) if row is not None else None  # noqa: SLF001
-
-    async def _lock_version(
-        self, session: AsyncSession, task_id: str, owner: str
-    ) -> int | None:
-        return (
-            await session.execute(
-                select(self._version_model.version)
-                .where(
-                    and_(
-                        self._version_model.task_id == task_id,
-                        self._version_model.owner == owner,
-                    )
-                )
-                .with_for_update()
-            )
-        ).scalar_one_or_none()
 
     async def _insert_version(
         self, session: AsyncSession, task_id: str, owner: str, version: int

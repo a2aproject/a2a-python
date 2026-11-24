@@ -7,7 +7,8 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 
 from a2a.server.cluster.version import TaskVersion
-from a2a.server.events.event_queue import Event
+from a2a.server.context import ServerCallContext
+from a2a.server.events.event_queue import StoredEvent
 
 
 logger = logging.getLogger(__name__)
@@ -17,12 +18,19 @@ logger = logging.getLogger(__name__)
 class VersionedEvent:
     """An event together with the task version produced by applying it."""
 
-    event: Event
+    event: StoredEvent
     version: TaskVersion
 
 
 class TaskEventStream(ABC):
-    """Delivers task events across replicas."""
+    """Delivers task events across replicas.
+
+    A stream backed by a durable event log sets `tracks_generations` and
+    implements `subscribe_after_generation`, which lets clients resume from
+    the last `generation` they saw.
+    """
+
+    tracks_generations: bool = False
 
     @abstractmethod
     async def publish(self, task_id: str, event: VersionedEvent) -> None:
@@ -37,6 +45,20 @@ class TaskEventStream(ABC):
     @abstractmethod
     async def destroy(self, task_id: str) -> None:
         """Releases resources for a task that has reached a terminal state."""
+
+    def subscribe_after_generation(
+        self,
+        task_id: str,
+        *,
+        after_generation: int,
+        context: ServerCallContext | None = None,
+    ) -> AsyncGenerator[VersionedEvent, None]:
+        """Yields events for `task_id` whose generation is above the given one.
+
+        Replays logged events first, then follows new ones. Only available
+        when `tracks_generations` is true.
+        """
+        raise NotImplementedError
 
 
 _context_support_cache: dict[tuple[type, str], bool] = {}

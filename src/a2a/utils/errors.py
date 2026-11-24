@@ -120,6 +120,29 @@ class VersionNotSupportedError(A2AError):
     message = 'Version not supported'
 
 
+class TaskGenerationMismatchError(A2AError):
+    """Exception raised when `ifGenerationMatch` does not match the task."""
+
+    message = 'Task generation mismatch'
+
+    @classmethod
+    def for_task(
+        cls, task_id: str, expected: int, current: int
+    ) -> 'TaskGenerationMismatchError':
+        """Builds the error with the metadata the spec defines."""
+        return cls(
+            message=(
+                f'Task generation mismatch: expected {expected} but current '
+                f'generation is {current}'
+            ),
+            data={
+                'taskId': task_id,
+                'expectedGeneration': str(expected),
+                'currentGeneration': str(current),
+            },
+        )
+
+
 __all__ = [
     'A2A_ERROR_MAPPING',
     'A2A_ERROR_REASONS',
@@ -135,6 +158,7 @@ __all__ = [
     'JSONParseError',
     'MethodNotFoundError',
     'PushNotificationNotSupportedError',
+    'TaskGenerationMismatchError',
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'UnsupportedOperationError',
@@ -152,6 +176,7 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     ExtendedAgentCardNotConfiguredError: -32007,
     ExtensionSupportRequiredError: -32008,
     VersionNotSupportedError: -32009,
+    TaskGenerationMismatchError: -32010,
     InvalidParamsError: -32602,
     InvalidRequestError: -32600,
     MethodNotFoundError: -32601,
@@ -193,6 +218,9 @@ A2A_ERROR_MAPPING: dict[type[A2AError], ErrorMapping] = {
     ),
     VersionNotSupportedError: ErrorMapping(
         400, 'FAILED_PRECONDITION', 'VERSION_NOT_SUPPORTED'
+    ),
+    TaskGenerationMismatchError: ErrorMapping(
+        409, 'ABORTED', 'TASK_GENERATION_MISMATCH'
     ),
     InvalidParamsError: ErrorMapping(400, 'INVALID_ARGUMENT', 'INVALID_PARAMS'),
     InvalidRequestError: ErrorMapping(

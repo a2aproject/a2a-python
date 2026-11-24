@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from a2a.server.cluster.task_store import VersionedTaskStore
     from a2a.server.context import ServerCallContext
     from a2a.server.tasks.push_notification_sender import PushNotificationSender
+    from a2a.server.tasks.task_change_notifier import TaskChangeNotifier
     from a2a.server.tasks.task_store import TaskStore
     from a2a.types.a2a_pb2 import Message
 
@@ -37,8 +38,10 @@ class ActiveTaskRegistry:
         event_stream: TaskEventStream | None = None,
         interrupted_task_timeout: float | None = None,
         plugins: PluginManager | None = None,
+        change_notifier: TaskChangeNotifier | None = None,
     ):
         self._agent_executor = agent_executor
+        self._change_notifier = change_notifier
         self._plugins = plugins
         self._task_store = task_store
         self._push_sender = push_sender
@@ -76,6 +79,7 @@ class ActiveTaskRegistry:
                     initial_message=initial_message,
                     context=call_context,
                     plugins=self._plugins,
+                    change_notifier=self._change_notifier,
                 )
 
                 active_task = ActiveTask(

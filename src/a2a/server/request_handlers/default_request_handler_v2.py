@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import asyncio  # noqa: TC003
+import asyncio
 import logging
 import warnings
 
-from contextlib import aclosing
+from contextlib import aclosing, asynccontextmanager
 from typing import TYPE_CHECKING, Any, cast
 
 from a2a.plugins.manager import get_global
@@ -24,8 +24,8 @@ from a2a.server.cluster.event_stream import (
     _stream_accepts_context,
 )
 from a2a.server.cluster.task_store import (
-    ConcurrentTaskModificationError,
     LegacyTaskStoreAdapter,
+    StoredTask,
     VersionedTaskStore,
 )
 from a2a.server.request_handlers._plugin_hooks import server_plugin_hooks
@@ -37,6 +37,7 @@ from a2a.server.request_handlers.request_handler import (
 from a2a.server.tasks.push_notification_config_store import (
     normalize_push_notification_config,
 )
+from a2a.server.tasks.task_change_notifier import TaskChangeNotifier
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -52,6 +53,7 @@ from a2a.types.a2a_pb2 import (
     SendMessageRequest,
     SubscribeToTaskRequest,
     Task,
+    TaskMessageUpdateEvent,
     TaskPushNotificationConfig,
     TaskState,
     TaskStatusUpdateEvent,
@@ -82,7 +84,12 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable
+    from collections.abc import (
+        AsyncGenerator,
+        AsyncIterator,
+        Awaitable,
+        Callable,
+    )
 
     from a2a.plugins.manager import PluginManager
     from a2a.server.agent_execution.active_task import ActiveTask
@@ -98,6 +105,19 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_LONG_POLL_TIMEOUT_S = 30.0
+# A held GetTask answers this long before the caller's gRPC deadline, so the
+# caller gets the task instead of DEADLINE_EXCEEDED.
+_DEADLINE_MARGIN_S = 0.5
+
+
+def _long_poll_done(task: Task, generation: int) -> bool:
+    # Terminal tasks never advance, so they are never held.
+    return (
+        task.generation > generation
+        or task.status.state in TERMINAL_TASK_STATES
+    )
 
 
 @trace_class(kind=SpanKind.SERVER)
@@ -117,6 +137,11 @@ class DefaultRequestHandlerV2(RequestHandler):
     ``plugins`` selects the plugin manager whose hooks run for this handler.
     It defaults to the global manager (`a2a.plugins.get_global()`) at
     construction time.
+
+    ``long_poll_timeout`` caps how many seconds a `GetTask` with
+    ``current_generation`` waits for the task to change before it returns
+    the current state; it must be greater than 0. HTTP clients have their
+    own read timeout, which a long-polling caller has to raise above it.
     """
 
     _background_tasks: set[asyncio.Task]
@@ -142,12 +167,17 @@ class DefaultRequestHandlerV2(RequestHandler):
         interrupted_task_timeout: float | None = None,
         plugins: PluginManager | None = None,
         validate_required_extensions: bool = False,
+        long_poll_timeout: float = DEFAULT_LONG_POLL_TIMEOUT_S,
     ) -> None:
         if (
             interrupted_task_timeout is not None
             and interrupted_task_timeout <= 0
         ):
             raise ValueError('interrupted_task_timeout must be greater than 0.')
+        if long_poll_timeout <= 0:
+            raise ValueError('long_poll_timeout must be greater than 0.')
+        self._long_poll_timeout = long_poll_timeout
+        self._change_notifier = TaskChangeNotifier()
         if queue_manager is not None:
             message = (
                 'A queue_manager was passed to DefaultRequestHandlerV2, but it '
@@ -211,6 +241,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             event_stream=self._event_stream,
             interrupted_task_timeout=interrupted_task_timeout,
             plugins=self._plugins,
+            change_notifier=self._change_notifier,
         )
         self._background_tasks = set()
 
@@ -249,12 +280,103 @@ class DefaultRequestHandlerV2(RequestHandler):
     ) -> Task | None:
         validate_history_length(params)
 
-        task_id = params.id
+        if not params.HasField('current_generation'):
+            stored = await self._versioned_store.get(params.id, context)
+            if stored is None:
+                raise TaskNotFoundError
+            return apply_history_length(stored.task, params)
+
+        # Long-polling: return once the task moves past current_generation,
+        # or with the current state when the wait times out.
+        task = await self._wait_for_generation(
+            params.id, params.current_generation, context
+        )
+        return apply_history_length(task, params)
+
+    async def _wait_for_generation(
+        self, task_id: str, generation: int, context: ServerCallContext
+    ) -> Task:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._hold_timeout(context)
+        task = await self._read_task(task_id, context)
+        if _long_poll_done(task, generation):
+            return task
+        with self._change_notifier.watch(task_id) as changed:
+            async with self._remote_change_watch(
+                task_id, generation, context
+            ) as remote_changed:
+                wakeups = [changed]
+                if remote_changed is not None:
+                    wakeups.append(remote_changed)
+                while True:
+                    # Re-armed before each read, so a write that lands
+                    # between the read and the wait still wakes us.
+                    for wakeup in wakeups:
+                        wakeup.clear()
+                    task = await self._read_task(task_id, context)
+                    remaining = deadline - loop.time()
+                    if _long_poll_done(task, generation) or remaining <= 0:
+                        return task
+                    waits = [
+                        asyncio.ensure_future(wakeup.wait())
+                        for wakeup in wakeups
+                    ]
+                    try:
+                        await asyncio.wait(
+                            waits,
+                            timeout=remaining,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                    finally:
+                        for waiter in waits:
+                            waiter.cancel()
+
+    async def _read_task(
+        self, task_id: str, context: ServerCallContext
+    ) -> Task:
         stored = await self._versioned_store.get(task_id, context)
         if stored is None:
             raise TaskNotFoundError
+        return stored.task
 
-        return apply_history_length(stored.task, params)
+    def _hold_timeout(self, context: ServerCallContext) -> float:
+        """Long-poll hold, ending before the caller's gRPC deadline."""
+        grpc_context = context.state.get('grpc_context')
+        remaining = (
+            grpc_context.time_remaining() if grpc_context is not None else None
+        )
+        if remaining is None:
+            return self._long_poll_timeout
+        return max(
+            0.0,
+            min(self._long_poll_timeout, remaining - _DEADLINE_MARGIN_S),
+        )
+
+    @asynccontextmanager
+    async def _remote_change_watch(
+        self, task_id: str, generation: int, context: ServerCallContext
+    ) -> AsyncIterator[asyncio.Event | None]:
+        """Watches the event stream for writes made by other replicas."""
+        stream = self._event_stream
+        if stream is None or not stream.tracks_generations:
+            yield None
+            return
+        changed = asyncio.Event()
+
+        async def _watch() -> None:
+            events = stream.subscribe_after_generation(
+                task_id, after_generation=generation, context=context
+            )
+            async with aclosing(events):
+                async for _ in events:
+                    changed.set()
+
+        watcher = asyncio.create_task(_watch())
+        try:
+            yield changed
+        finally:
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
 
     @server_plugin_hooks('list_tasks')
     @validate_request_params
@@ -291,10 +413,9 @@ class DefaultRequestHandlerV2(RequestHandler):
         stored = await self._versioned_store.get(task_id, context)
         if stored is None:
             raise TaskNotFoundError
-        task, version = stored.task, stored.version
 
         # Terminal tasks, including already cancelled ones, are not cancelable.
-        if task.status.state in TERMINAL_TASK_STATES:
+        if stored.task.status.state in TERMINAL_TASK_STATES:
             raise TaskNotCancelableError
 
         # This replica holds the task, running or waiting for input.
@@ -303,7 +424,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         # Running on another replica (or nowhere): record CANCELED in shared
         # state; the owner sees the version bump on its next save and aborts.
-        return await self._cancel_remote(task_id, task, version, context)
+        return await self._cancel_remote(task_id, context)
 
     async def _cancel_local(
         self, params: CancelTaskRequest, context: ServerCallContext
@@ -328,61 +449,71 @@ class DefaultRequestHandlerV2(RequestHandler):
         return result
 
     async def _cancel_remote(
-        self,
-        task_id: str,
-        task: Task,
-        version: TaskVersion,
-        context: ServerCallContext,
+        self, task_id: str, context: ServerCallContext
     ) -> Task:
-        try:
-            return await self._write_cancel(task_id, task, version, context)
-        except ConcurrentTaskModificationError:
-            reloaded_stored = await self._versioned_store.get(task_id, context)
-            if reloaded_stored is None:
-                raise TaskNotFoundError from None
-            if (
-                reloaded_stored.task.status.state
-                == TaskState.TASK_STATE_CANCELED
-            ):
-                return reloaded_stored.task
-            raise TaskNotCancelableError from None
+        """Writes CANCELED for a task this replica does not run.
 
-    async def _write_cancel(
+        The cancel is applied to the task as stored at write time, so it
+        never overwrites a change it has not seen and takes the next
+        generation. The replica running the task sees the new version on its
+        next save and stops.
+        """
+        written: list[tuple[TaskState, TaskStatusUpdateEvent]] = []
+
+        def cancel(current: Task) -> TaskStatusUpdateEvent | None:
+            written.clear()
+            if current.status.state in TERMINAL_TASK_STATES:
+                return None
+            from_state = current.status.state
+            current.status.state = TaskState.TASK_STATE_CANCELED
+            current.generation += 1
+            event = TaskStatusUpdateEvent(
+                task_id=task_id,
+                context_id=current.context_id,
+                status=current.status,
+                generation=current.generation,
+            )
+            written.append((from_state, event))
+            return event
+
+        stored = await self._versioned_store.update(
+            task_id, cancel, context=context
+        )
+        if stored is None:
+            raise TaskNotFoundError
+        if not written:
+            if stored.task.status.state == TaskState.TASK_STATE_CANCELED:
+                return stored.task
+            raise TaskNotCancelableError
+        from_state, event = written[0]
+        await self._publish_remote_write(stored, from_state, event, context)
+        return stored.task
+
+    async def _publish_remote_write(
         self,
-        task_id: str,
-        current: Task,
-        version: TaskVersion,
+        stored: StoredTask,
+        from_state: TaskState,
+        event: TaskStatusUpdateEvent,
         context: ServerCallContext,
-    ) -> Task:
-        cancelled = Task()
-        cancelled.CopyFrom(current)
-        cancelled.status.state = TaskState.TASK_STATE_CANCELED
-        event = TaskStatusUpdateEvent(
-            task_id=task_id,
-            context_id=current.context_id,
-            status=cancelled.status,
-        )
-        new_version = await self._versioned_store.save(
-            cancelled,
-            event=event,
-            prev=current,
-            prev_version=version,
-            context=context,
-        )
+    ) -> None:
+        """Notifies everything TaskManager would after a write it did not make."""
+        task_id = stored.task.id
+        self._change_notifier.notify(task_id)
         if self._plugins.has_task_hooks:
-            # Remote cancel writes the store directly, bypassing TaskManager.
             await self._plugins.on_task_event(
                 TaskEventInfo(
                     task_id=task_id,
-                    from_state=current.status.state,
-                    to_state=cancelled.status.state,
+                    from_state=from_state,
+                    to_state=stored.task.status.state,
                     event=event,
-                    task=cancelled,
+                    task=stored.task,
                     context=context,
                 )
             )
         if self._event_stream is not None:
-            versioned_event = VersionedEvent(event=event, version=new_version)
+            versioned_event = VersionedEvent(
+                event=event, version=stored.version
+            )
             if _stream_accepts_context(self._event_stream, 'publish'):
                 # TODO(ISSUE #1374): remove this check once ServerCallContext is a required parameter on TaskEventStream.
                 await self._event_stream.publish(
@@ -392,7 +523,6 @@ class DefaultRequestHandlerV2(RequestHandler):
                 )
             else:
                 await self._event_stream.publish(task_id, versioned_event)
-        return cancelled
 
     def _validate_task_id_match(self, task_id: str, event_task_id: str) -> None:
         if task_id != event_task_id:
@@ -471,6 +601,25 @@ class DefaultRequestHandlerV2(RequestHandler):
             create_task_if_missing=True,
             initial_message=request_context.message,
         )
+
+        if original_task_id:
+            # A follow-up is saved before its turn starts, so the
+            # precondition and the terminal check see the task as it is now,
+            # and a rejected message changes nothing. ifGenerationMatch is
+            # ignored for a new task.
+            config = params.configuration
+            try:
+                await active_task.append_client_message(
+                    params.message,
+                    config.if_generation_match
+                    if config.HasField('if_generation_match')
+                    else None,
+                    call_context,
+                )
+            except BaseException:
+                # get_or_create stopped the idle timer and no turn follows.
+                active_task.schedule_idle_release()
+                raise
 
         return active_task, request_context
 
@@ -673,7 +822,28 @@ class DefaultRequestHandlerV2(RequestHandler):
                 f'{TaskState.Name(task.status.state)}'
             )
 
-        if self._event_stream is None:
+        stream = self._event_stream
+        if (
+            params.HasField('last_seen_generation')
+            and stream is not None
+            and stream.tracks_generations
+            and 0 < params.last_seen_generation <= task.generation
+        ):
+            # Resume: replay what followed the client's generation, with no
+            # snapshot first. Otherwise the stream opens with a snapshot,
+            # which the spec allows whenever the server cannot replay.
+            async for event in self._tail_events(
+                stream.subscribe_after_generation(
+                    task_id,
+                    after_generation=params.last_seen_generation,
+                    context=context,
+                ),
+                current_generation=task.generation,
+            ):
+                yield event
+            return
+
+        if stream is None:
             # Single-process mode
             active = await self._active_task_registry.get_or_create(
                 task_id, call_context=context, create_task_if_missing=False
@@ -683,7 +853,6 @@ class DefaultRequestHandlerV2(RequestHandler):
             return
 
         # Shared-stream mode. Fast path: this replica runs the agent -> tap it.
-        stream = self._event_stream
         local = await self._active_task_registry.get(task_id)
         if local is not None:
             async for event in local.subscribe(include_initial_task=True):
@@ -691,46 +860,55 @@ class DefaultRequestHandlerV2(RequestHandler):
             return
 
         # Not running here: serve the snapshot and tail the remote stream.
-        async for event in self._subscribe_remote(
-            task_id, task, snapshot_version, stream, context
-        ):
-            yield event
-
-    async def _subscribe_remote(
-        self,
-        task_id: str,
-        task: Task,
-        snapshot_version: TaskVersion,
-        stream: TaskEventStream,
-        context: ServerCallContext,
-    ) -> AsyncGenerator[Event, None]:
-        """Serves a resubscription for a task running on another replica."""
         yield task
-
         if _stream_accepts_context(stream, 'subscribe'):
             # TODO(ISSUE #1374): remove this check once ServerCallContext is a required parameter on TaskEventStream.
-            subscription_gen = stream.subscribe(
+            subscription = stream.subscribe(
                 task_id,
                 after=snapshot_version,
                 context=context,  # ty:ignore[unknown-argument]
             )
         else:
-            subscription_gen = stream.subscribe(task_id, after=snapshot_version)
+            subscription = stream.subscribe(task_id, after=snapshot_version)
+        async for event in self._tail_events(
+            subscription,
+            after=snapshot_version,
+            current_generation=task.generation,
+        ):
+            yield event
 
-        async with aclosing(subscription_gen) as subscription:
+    async def _tail_events(
+        self,
+        subscription: AsyncGenerator[VersionedEvent, None],
+        *,
+        current_generation: int,
+        after: TaskVersion | None = None,
+    ) -> AsyncGenerator[Event, None]:
+        """Yields events from the shared stream until the task stops.
+
+        The stream ends on a Message, or on a status in a terminal or
+        interrupted state. An interrupted state the task had already moved
+        past when the subscription started is part of a replay and does not
+        end it.
+        """
+        async with aclosing(subscription):
             async for versioned in subscription:
-                if not versioned.version.is_after(snapshot_version):
+                if after is not None and not versioned.version.is_after(after):
                     continue
                 event = versioned.event
+                if isinstance(event, TaskMessageUpdateEvent):
+                    # Delivered only to clients that negotiate A2A 1.1.
+                    continue
                 yield event
-                # Stop tailing once the stream ends: a Message, or a status
-                # update / Task in a terminal or interrupted state.
-                if isinstance(event, Message) or (
-                    isinstance(event, TaskStatusUpdateEvent | Task)
-                    and event.status.state
-                    in (TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES)
-                ):
+                if isinstance(event, Message):
                     return
+                if isinstance(event, TaskStatusUpdateEvent | Task):
+                    state = event.status.state
+                    if state in TERMINAL_TASK_STATES or (
+                        state in INTERRUPTED_TASK_STATES
+                        and event.generation >= current_generation
+                    ):
+                        return
 
     @server_plugin_hooks('list_task_push_notification_configs')
     @validate_request_params

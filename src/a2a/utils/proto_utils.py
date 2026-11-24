@@ -43,6 +43,7 @@ from a2a.types.a2a_pb2 import (
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
+    TaskMessageUpdateEvent,
     TaskStatusUpdateEvent,
 )
 
@@ -51,7 +52,13 @@ logger = logging.getLogger(__name__)
 
 
 # Define Event type locally to avoid circular imports
-Event = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+Event = (
+    Message
+    | Task
+    | TaskStatusUpdateEvent
+    | TaskArtifactUpdateEvent
+    | TaskMessageUpdateEvent
+)
 
 _MessageT = TypeVar('_MessageT', bound=ProtobufMessage)
 
@@ -94,7 +101,8 @@ def to_stream_response(event: Event) -> StreamResponse:
     """Convert internal Event to StreamResponse proto.
 
     Args:
-        event: The event (Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent)
+        event: The event (Task, Message, TaskStatusUpdateEvent,
+            TaskArtifactUpdateEvent, TaskMessageUpdateEvent)
 
     Returns:
         A StreamResponse proto with the appropriate field set.
@@ -108,6 +116,8 @@ def to_stream_response(event: Event) -> StreamResponse:
         response.status_update.CopyFrom(event)
     elif isinstance(event, TaskArtifactUpdateEvent):
         response.artifact_update.CopyFrom(event)
+    elif isinstance(event, TaskMessageUpdateEvent):
+        response.message_update.CopyFrom(event)
     return response
 
 

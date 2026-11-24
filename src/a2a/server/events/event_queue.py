@@ -12,6 +12,7 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskArtifactUpdateEvent,
+    TaskMessageUpdateEvent,
     TaskStatusUpdateEvent,
 )
 from a2a.utils._async_queue_compat import (
@@ -27,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 Event = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
 """Type alias for events that can be enqueued."""
+
+StoredEvent = Event | TaskMessageUpdateEvent
+"""Events a task store records: what agents emit plus client messages."""
 
 DEFAULT_MAX_QUEUE_SIZE = 1024
 

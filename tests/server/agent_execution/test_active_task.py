@@ -277,6 +277,15 @@ class TestActiveTask:
         agent_executor.cancel = AsyncMock()
         task_manager.get_task = AsyncMock(return_value=shared)
 
+        async def save_task_event(event):
+            # TaskManager applies status events to a copy.
+            updated = Task()
+            updated.CopyFrom(shared)
+            updated.status.CopyFrom(event.status)
+            return updated
+
+        task_manager.save_task_event = AsyncMock(side_effect=save_task_event)
+
         await active_task.enqueue_request(request_context)
         await active_task.start(
             call_context=ServerCallContext(), create_task_if_missing=True
@@ -285,7 +294,11 @@ class TestActiveTask:
 
         result = await active_task.cancel(request_context)
 
-        # The returned task is CANCELED...
+        # The close-out is one status update event...
+        (event,) = task_manager.save_task_event.await_args.args
+        assert isinstance(event, TaskStatusUpdateEvent)
+        assert event.status.state == TaskState.TASK_STATE_CANCELED
+        # ...the returned task is CANCELED...
         assert result.status.state == TaskState.TASK_STATE_CANCELED
         # ...but the shared object get_task handed out is untouched.
         assert result is not shared

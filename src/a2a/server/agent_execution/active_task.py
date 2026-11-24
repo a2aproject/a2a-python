@@ -86,12 +86,27 @@ from a2a.utils.constants import (
 from a2a.utils.errors import (
     InternalError,
     InvalidAgentResponseError,
+    TaskGenerationMismatchError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
 
 
 logger = logging.getLogger(__name__)
+
+# Attempts to append a client message before giving up on a task that keeps
+# changing underneath it.
+_MAX_APPEND_ATTEMPTS = 3
+
+
+def _included_in_snapshot(event: object, snapshot_generation: int) -> bool:
+    return (
+        snapshot_generation > 0
+        and isinstance(
+            event, Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+        )
+        and 0 < event.generation <= snapshot_generation
+    )
 
 
 class _RequestStarted:
@@ -111,7 +126,6 @@ class EventConsumer:
     def __init__(self, active_task: ActiveTask) -> None:
         self.active_task = active_task
         self.task_mode: bool | None = None
-        self.message_to_save: Message | None = None
         # Set when the producer failed, so a request that failed before any
         # task was created still leaves a FAILED task behind.
         self.producer_failed = False
@@ -151,7 +165,8 @@ class EventConsumer:
 
             updated_task = None
             try:
-                updated_task = await self._write_failed_status()
+                async with self.active_task._write_lock:
+                    updated_task = await self._write_failed_status()
             finally:
                 # Subscribers must always hear about the failure, or the
                 # request waiting on them never returns.
@@ -174,13 +189,12 @@ class EventConsumer:
         task_manager = self.active_task._task_manager
         task = await task_manager.get_task()
         if task is None and self.producer_failed:
-            task = await task_manager.ensure_task_id(
+            task = task_manager._init_task_obj(
                 self.active_task._task_id, task_manager.context_id or ''
             )
-            if task.status.state not in TERMINAL_TASK_STATES:
-                task.status.state = TaskState.TASK_STATE_FAILED
-                task.status.timestamp.FromDatetime(datetime.now(timezone.utc))
-                await task_manager.save_task_event(task)
+            task.status.state = TaskState.TASK_STATE_FAILED
+            task.status.timestamp.FromDatetime(datetime.now(timezone.utc))
+            await task_manager.save_task_event(task)
             self.active_task._task_created.set()
             return task
         if not task or task.status.state in TERMINAL_TASK_STATES:
@@ -205,6 +219,16 @@ class EventConsumer:
             return None
 
     async def _process_event(self, event: Event) -> None:
+        async with self.active_task._write_lock:
+            finished_elsewhere = await self._process_event_locked(event)
+        if finished_elsewhere:
+            # Waits for slow subscribers, so it runs without the write lock.
+            await self.active_task._event_queue_subscribers.close(
+                immediate=False
+            )
+
+    async def _process_event_locked(self, event: Event) -> bool:
+        """Applies `event`; True if another writer had finished the task."""
         try:
             await self._process_event_inner(event)
         except ConcurrentTaskModificationError:
@@ -221,11 +245,9 @@ class EventConsumer:
                 if producer is not None and not producer.done():
                     producer.cancel()
                 await self._handle_terminal_state(task)
-                await self.active_task._event_queue_subscribers.close(
-                    immediate=False
-                )
-                return
+                return True
             await self._process_event_inner(event)
+        return False
 
     async def _process_event_inner(self, event: Event) -> None:
         updated_task = None
@@ -247,7 +269,6 @@ class EventConsumer:
             logger.debug(
                 'Consumer[%s]: Request started', self.active_task._task_id
             )
-            self.message_to_save = event.request_context.message
         elif isinstance(event, BaseException):
             # Only the producer enqueues exceptions, when a request fails.
             self.producer_failed = True
@@ -341,7 +362,6 @@ class EventConsumer:
             )
         else:
             await self.active_task._task_manager.save_task_event(event)
-        self.message_to_save = None
 
     async def _handle_task_modification_event(
         self,
@@ -358,28 +378,6 @@ class EventConsumer:
                 raise InvalidAgentResponseError(
                     f'Agent should enqueue Task before {type(event).__name__} event'
                 )
-
-        updated_task = await self.active_task._task_manager.ensure_task_id(
-            self.active_task._task_id,
-            event.context_id,
-        )
-
-        if self.message_to_save is not None:
-            message_already_saved = any(
-                message.message_id == self.message_to_save.message_id
-                for message in updated_task.history
-            )
-            if not message_already_saved:
-                updated_task = (
-                    self.active_task._task_manager.update_with_message(
-                        self.message_to_save,
-                        updated_task,
-                    )
-                )
-                await self.active_task._task_manager.save_task_event(
-                    updated_task
-                )
-            self.message_to_save = None
 
         self.active_task._task_manager.context_id = event.context_id
         await self.active_task._task_manager.process(event)
@@ -536,6 +534,10 @@ class ActiveTask:
         # `_request_lock` protects parallel request processing.
         self._request_lock = asyncio.Lock()
 
+        # `_write_lock` serializes the task writes and the reads they depend
+        # on: the consumer's event saves, client messages and cancellation.
+        self._write_lock = asyncio.Lock()
+
         # _task_created is set when initial version of task is stored in DB.
         self._task_created = asyncio.Event()
 
@@ -675,13 +677,15 @@ class ActiveTask:
                     sender_context,
                 ) = await self._request_queue.get()
                 await self._request_lock.acquire()
-                # TODO: Should we create task manager every time?
-                self._task_manager._call_context = request_context.call_context
-
                 # Drop the cached snapshot and re-read to pick
                 # up state another replica may have advanced.
-                self._task_manager.invalidate()
-                task = await self._task_manager.get_task()
+                async with self._write_lock:
+                    # TODO: Should we create task manager every time?
+                    self._task_manager._call_context = (
+                        request_context.call_context
+                    )
+                    self._task_manager.invalidate()
+                    task = await self._task_manager.get_task()
                 # In cluster mode another replica may have finished the task
                 # while this one waited for input.
                 if (
@@ -771,7 +775,7 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
-    async def subscribe(  # noqa: PLR0915
+    async def subscribe(  # noqa: PLR0912, PLR0915
         self,
         *,
         request: RequestContext | None = None,
@@ -806,6 +810,8 @@ class ActiveTask:
             evict_on_full=True
         )
         request_id = await self.enqueue_request(request) if request else None
+        # The tap may still receive events the snapshot already includes.
+        snapshot_generation = 0
 
         try:
             if include_initial_task:
@@ -814,6 +820,7 @@ class ActiveTask:
                     self._task_id,
                 )
                 task = await self.get_task()
+                snapshot_generation = task.generation
                 yield task
 
             while True:
@@ -864,6 +871,9 @@ class ActiveTask:
                             'Subscriber[%s]: Request started',
                             self._task_id,
                         )
+                        continue
+                    if _included_in_snapshot(event, snapshot_generation):
+                        tapped_queue.task_done()
                         continue
                     try:
                         yield event
@@ -958,30 +968,95 @@ class ActiveTask:
                 )
 
         await self._is_finished.wait()
-        self._task_manager.invalidate()
-        task = await self._task_manager.get_task()
-        if not task:
-            raise RuntimeError('Task should have been created')
-        # A cleanup-only executor.cancel() may not write a terminal state, and
-        # a task parked in a non-terminal state (e.g. input-required) has no
-        # running producer to write one either. Close it out as CANCELED so a
-        # caller that cancelled is never left polling a live task. Mirrors the
-        # V1 handler, which made a non-cancelled outcome visible instead of
-        # reporting success and changing nothing.
-        if task.status.state not in TERMINAL_TASK_STATES:
-            # Write a copy rather than mutating the task in place: get_task()
-            # returns the shared _task_manager._current_task, which may already
-            # have been yielded to a subscriber. Copying keeps THIS terminal
-            # write off the yielded reference. Status and artifact events are
-            # applied to a copy too (TaskManager.save_task_event), but a Task
-            # event or update_with_message still writes the object it is given.
-            # Making every write copy-on-yield is tracked in #1175 and #1191.
-            updated = Task()
-            updated.CopyFrom(task)
-            updated.status.state = TaskState.TASK_STATE_CANCELED
-            await self._task_manager.save_task_event(updated)
-            task = updated
-        return task
+        async with self._write_lock:
+            self._task_manager._call_context = call_context
+            return await self._close_out_cancelled()
+
+    async def _close_out_cancelled(self) -> Task:
+        """Writes CANCELED unless the task already reached a terminal state.
+
+        A cleanup-only executor.cancel() may not write a terminal state, and
+        a task parked in a non-terminal state (e.g. input-required) has no
+        running producer to write one either. Closing it out means a caller
+        that cancelled is never left polling a live task. Another replica
+        may write in between; the close-out then applies to its state.
+        """
+        while True:
+            self._task_manager.invalidate()
+            task = await self._task_manager.get_task()
+            if not task:
+                raise RuntimeError('Task should have been created')
+            if task.status.state in TERMINAL_TASK_STATES:
+                return task
+            status = TaskStatus(state=TaskState.TASK_STATE_CANCELED)
+            status.timestamp.FromDatetime(datetime.now(timezone.utc))
+            try:
+                cancelled = await self._task_manager.save_task_event(
+                    TaskStatusUpdateEvent(
+                        task_id=task.id,
+                        context_id=task.context_id,
+                        status=status,
+                    )
+                )
+            except ConcurrentTaskModificationError:
+                continue
+            if cancelled is None:
+                raise RuntimeError('Task should have been created')
+            return cancelled
+
+    async def append_client_message(
+        self,
+        message: Message,
+        if_generation_match: int | None,
+        call_context: ServerCallContext,
+    ) -> Task:
+        """Adds a follow-up client message to the task as one change.
+
+        The message is saved before its turn starts. Raises
+        `TaskGenerationMismatchError` if `if_generation_match` is set and
+        differs from the task's generation, and `UnsupportedOperationError`
+        if the task is terminal; in both cases nothing is saved.
+        """
+        for _ in range(_MAX_APPEND_ATTEMPTS):
+            async with self._write_lock:
+                # The consumer is excluded while the lock is held, so the
+                # follow-up's own context can scope this read and write.
+                request_context = self._task_manager._call_context
+                self._task_manager._call_context = call_context
+                try:
+                    self._task_manager.invalidate()
+                    task = await self._task_manager.get_task()
+                    if task is None:
+                        raise TaskNotFoundError
+                    terminal = task.status.state in TERMINAL_TASK_STATES
+                    if not terminal:
+                        if (
+                            if_generation_match is not None
+                            and task.generation != if_generation_match
+                        ):
+                            raise TaskGenerationMismatchError.for_task(
+                                task.id, if_generation_match, task.generation
+                            )
+                        try:
+                            return (
+                                await self._task_manager.append_client_message(
+                                    message
+                                )
+                            )
+                        except ConcurrentTaskModificationError:
+                            # Another replica wrote in between; re-check.
+                            continue
+                finally:
+                    self._task_manager._call_context = request_context
+            # Finished elsewhere: this copy has nothing left to run.
+            await self._finish_stale()
+            raise UnsupportedOperationError(
+                message=f'Task {task.id} is in terminal state: '
+                f'{TaskState.Name(task.status.state)}'
+            )
+        raise InternalError(
+            message=f'Task {self._task_id} kept changing; message not saved'
+        )
 
     async def aclose(self) -> None:
         """Force-closes the task's queues and drains its background tasks.
@@ -1026,6 +1101,12 @@ class ActiveTask:
                 if isinstance(result, Exception):
                     logger.error('Error during aclose', exc_info=result)
 
+    async def _finish_stale(self) -> None:
+        """Stops a copy whose task reached a terminal state elsewhere."""
+        async with self._lock:
+            self._is_finished.set()
+            self._request_queue.shutdown(immediate=True)
+
     def schedule_idle_release(self) -> None:
         """(Re)starts the timer that releases a parked interrupted task."""
         if self._interrupted_task_timeout is None or self._is_finished.is_set():
@@ -1063,6 +1144,8 @@ class ActiveTask:
                 # The consumer holds one reference; more means subscribers.
                 or self._reference_count != 1
                 or self._request_lock.locked()
+                # A client message is being saved and its turn follows.
+                or self._write_lock.locked()
                 or not self._request_queue.empty()
             ):
                 return
