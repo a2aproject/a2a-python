@@ -1117,6 +1117,87 @@ async def test_on_message_send_required_extension_validation_is_opt_in(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('method', 'params'),
+    [
+        ('on_get_task', GetTaskRequest(id='missing')),
+        ('on_list_tasks', ListTasksRequest()),
+        ('on_cancel_task', CancelTaskRequest(id='missing')),
+        (
+            'on_create_task_push_notification_config',
+            TaskPushNotificationConfig(
+                task_id='missing', url='https://e.com/h'
+            ),
+        ),
+        (
+            'on_get_task_push_notification_config',
+            GetTaskPushNotificationConfigRequest(task_id='missing', id='c'),
+        ),
+        ('on_subscribe_to_task', SubscribeToTaskRequest(id='missing')),
+        (
+            'on_list_task_push_notification_configs',
+            ListTaskPushNotificationConfigsRequest(task_id='missing'),
+        ),
+        (
+            'on_delete_task_push_notification_config',
+            DeleteTaskPushNotificationConfigRequest(task_id='missing', id='c'),
+        ),
+        ('on_get_extended_agent_card', GetExtendedAgentCardRequest()),
+    ],
+)
+@pytest.mark.parametrize(
+    ('validate_required_extensions', 'requested', 'expect_rejection'),
+    [
+        (True, set(), True),
+        (True, {'https://example.com/ext/required/v1'}, False),
+        (False, set(), False),
+    ],
+)
+async def test_other_methods_required_extension_validation(
+    method, params, validate_required_extensions, requested, expect_rejection
+):
+    """Every method runs the check, not only message send (spec 3.3.4)."""
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(
+                streaming=True,
+                push_notifications=True,
+                extended_agent_card=True,
+                extensions=[
+                    AgentExtension(
+                        uri='https://example.com/ext/required/v1',
+                        required=True,
+                    )
+                ],
+            ),
+        ),
+        validate_required_extensions=validate_required_extensions,
+    )
+    context = ServerCallContext(
+        user=UnauthenticatedUser(), requested_extensions=requested
+    )
+
+    rejected = False
+    try:
+        result = getattr(request_handler, method)(params, context)
+        if hasattr(result, '__aiter__'):
+            async for _ in result:
+                pass
+        else:
+            await result
+    except ExtensionSupportRequiredError:
+        rejected = True
+    except Exception:  # noqa: BLE001, S110
+        pass  # The method's own outcome is not what this test checks.
+
+    assert rejected is expect_rejection
+
+
+@pytest.mark.asyncio
 async def test_on_message_send_non_blocking(agent_card):
     task_store = InMemoryTaskStore()
     push_store = InMemoryPushNotificationConfigStore()
