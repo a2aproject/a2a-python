@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from a2a.plugins.base import CompletePlugin
 from a2a.plugins.otel import _semconv
 from a2a.types.a2a_pb2 import SendMessageResponse, StreamResponse, Task
+from a2a.utils.experimental import experimental
 
 
 if TYPE_CHECKING:
@@ -68,6 +69,7 @@ def _sdk_version() -> str:
     return version('a2a-sdk')
 
 
+@experimental
 class OpenTelemetryPlugin(CompletePlugin):
     """Reports A2A client and server calls as OpenTelemetry spans.
 
