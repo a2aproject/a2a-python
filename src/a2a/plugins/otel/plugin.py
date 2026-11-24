@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
+from dataclasses import dataclass, field
 from importlib.metadata import version
 from typing import TYPE_CHECKING, Any
 
@@ -67,6 +68,48 @@ def _env_enabled() -> bool:
     return os.getenv(ENABLED_ENV_VAR, 'true').lower() == 'true'
 
 
+@dataclass
+class _UniqueValue:
+    """Tracks whether a call carried exactly one distinct value."""
+
+    value: Any = None
+    is_unique: bool = True
+
+    def add(self, value: Any) -> None:
+        """Records a value, skipping empty ones (protobuf unsets are '')."""
+        if not value:
+            return
+        if self.value is None:
+            self.value = value
+        elif value != self.value:
+            self.is_unique = False
+
+    def get(self) -> Any:
+        """Returns the single value seen, or None if none or several were."""
+        return self.value if self.is_unique else None
+
+
+@dataclass
+class _CallState:
+    """A call's span and the attributes the conventions omit when ambiguous."""
+
+    span: Span
+    task_id: _UniqueValue = field(default_factory=_UniqueValue)
+    context_id: _UniqueValue = field(default_factory=_UniqueValue)
+    task_state: _UniqueValue = field(default_factory=_UniqueValue)
+
+    def end(self) -> None:
+        """Sets the attributes left with a single value, then ends the span."""
+        for key, tracked in (
+            (_semconv.A2A_TASK_ID, self.task_id),
+            (_semconv.GEN_AI_CONVERSATION_ID, self.context_id),
+            (_semconv.A2A_TASK_STATE, self.task_state),
+        ):
+            if (value := tracked.get()) is not None:
+                self.span.set_attribute(key, value)
+        self.span.end()
+
+
 @experimental
 class OpenTelemetryPlugin(CompletePlugin):
     """Reports A2A client and server calls as OpenTelemetry spans.
@@ -124,10 +167,11 @@ class OpenTelemetryPlugin(CompletePlugin):
 
         method = _semconv.get_method_name(request.method)
         span = self._tracer.start_span(method, kind=SpanKind.CLIENT)
-        request.context.state[_SPAN_KEY] = span
+        state = _CallState(span)
+        request.context.state[_SPAN_KEY] = state
 
         span.set_attribute(_semconv.A2A_METHOD_NAME, method)
-        _set_request_attributes(span, request)
+        _set_request_attributes(state, request)
 
         carrier = dict(request.context.service_parameters or {})
         with _current(span):
@@ -138,10 +182,10 @@ class OpenTelemetryPlugin(CompletePlugin):
         self, request: ClientRequest, call: Callable[[], Awaitable[Any]]
     ) -> Any:
         """Runs the call with the span current, so transport spans nest."""
-        span = request.context.state.get(_SPAN_KEY)
-        if span is None:
+        state = request.context.state.get(_SPAN_KEY)
+        if state is None:
             return await call()
-        with _current(span):
+        with _current(state.span):
             return await call()
 
     async def after_client_request(self, response: ClientResponse) -> None:
@@ -149,25 +193,26 @@ class OpenTelemetryPlugin(CompletePlugin):
         if not self._enabled:
             return
 
-        span = response.context.state.get(_SPAN_KEY)
-        if span is None:
+        state = response.context.state.get(_SPAN_KEY)
+        if state is None:
             return
 
-        _set_response_attributes(span, response)
+        _collect_response(state, response)
         if not response.is_final:
             return
 
         del response.context.state[_SPAN_KEY]
         if response.error is not None:
-            span.set_status(StatusCode.ERROR, str(response.error))
-            span.set_attribute(
+            state.span.set_status(StatusCode.ERROR, str(response.error))
+            state.span.set_attribute(
                 _semconv.ERROR_TYPE, _semconv.error_type(response.error)
             )
-        span.end()
+        state.end()
 
 
-def _set_request_attributes(span: Span, request: ClientRequest) -> None:
+def _set_request_attributes(state: _CallState, request: ClientRequest) -> None:
     """Sets the attributes known before the request is sent."""
+    span = state.span
     card = request.agent_card
     if card.name:
         span.set_attribute(_semconv.GEN_AI_AGENT_NAME, card.name)
@@ -187,9 +232,9 @@ def _set_request_attributes(span: Span, request: ClientRequest) -> None:
             )
 
     if request.method not in _SKIP_TASK_ATTRIBUTES:
-        _set_ids(span, payload, request.method)
+        _collect_ids(state, payload, request.method)
         if message is not None:
-            _set_ids(span, message, request.method)
+            _collect_ids(state, message, request.method)
 
     interface = request.interface
     tenant = getattr(payload, 'tenant', '') or (
@@ -214,21 +259,21 @@ def _set_interface_attributes(span: Span, interface: AgentInterface) -> None:
         span.set_attribute(_semconv.SERVER_PORT, port)
 
 
-def _set_response_attributes(span: Span, response: ClientResponse) -> None:
-    """Sets the task attributes a response payload carries.
+def _collect_response(state: _CallState, response: ClientResponse) -> None:
+    """Records the task attributes a response payload carries.
 
-    The task state is reported for unary calls only: a stream moves through
+    The task state is recorded for unary calls only: a stream moves through
     several states, which no single value describes.
     """
     if response.payload is None or response.method in _SKIP_TASK_ATTRIBUTES:
         return
     payload = _unwrap(response.payload)
-    _set_ids(span, payload, response.method)
+    _collect_ids(state, payload, response.method)
     if response.is_stream_event:
         return
     status = getattr(payload, 'status', None)
-    if status is not None and (state := _semconv.task_state_name(status.state)):
-        span.set_attribute(_semconv.A2A_TASK_STATE, state)
+    if status is not None:
+        state.task_state.add(_semconv.task_state_name(status.state))
 
 
 def _unwrap(payload: Any) -> Any:
@@ -239,12 +284,10 @@ def _unwrap(payload: Any) -> Any:
     return payload
 
 
-def _set_ids(span: Span, payload: Any, method: str) -> None:
-    """Sets the task and context IDs a payload carries."""
-    if task_id := _task_id(payload, method):
-        span.set_attribute(_semconv.A2A_TASK_ID, task_id)
-    if context_id := getattr(payload, 'context_id', ''):
-        span.set_attribute(_semconv.GEN_AI_CONVERSATION_ID, context_id)
+def _collect_ids(state: _CallState, payload: Any, method: str) -> None:
+    """Records the task and context IDs a payload carries."""
+    state.task_id.add(_task_id(payload, method))
+    state.context_id.add(getattr(payload, 'context_id', ''))
 
 
 def _task_id(payload: Any, method: str) -> str:

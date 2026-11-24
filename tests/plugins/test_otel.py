@@ -38,6 +38,7 @@ from a2a.types.a2a_pb2 import (
     Part,
     Role,
     SendMessageRequest,
+    SendMessageResponse,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
@@ -178,10 +179,10 @@ def make_client(exporter):
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
 
-    def make(transport, *, card=CARD, interface=INTERFACE):
+    def make(transport, *, card=CARD, interface=INTERFACE, streaming=True):
         return BaseClient(
             card,
-            ClientConfig(streaming=True),
+            ClientConfig(streaming=streaming),
             transport,
             [],
             interface=interface,
@@ -367,9 +368,10 @@ async def test_unary_call_reports_task_attributes(
             status_event(TaskState.TASK_STATE_WORKING),
             status_event(TaskState.TASK_STATE_COMPLETED),
         ],
+        [status_event(TaskState.TASK_STATE_COMPLETED)],
         [],
     ],
-    ids=['state-changes', 'no-events'],
+    ids=['state-changes', 'single-state', 'no-events'],
 )
 @pytest.mark.asyncio
 async def test_stream_reports_ids_but_not_state(exporter, make_client, events):
@@ -608,6 +610,71 @@ async def test_error_mid_stream_keeps_earlier_ids(exporter, make_client):
     span = only_span(exporter)
     assert span.status.status_code is StatusCode.ERROR
     assert span.attributes[_semconv.A2A_TASK_ID] == 't-1'
+
+
+@pytest.mark.parametrize(
+    ('message_fields', 'response', 'absent'),
+    [
+        (
+            {'task_id': 't-old', 'context_id': 'c-1'},
+            task('t-new', 'c-1'),
+            _semconv.A2A_TASK_ID,
+        ),
+        (
+            {'task_id': 't-1', 'context_id': 'c-old'},
+            task('t-1', 'c-new'),
+            _semconv.GEN_AI_CONVERSATION_ID,
+        ),
+    ],
+    ids=['task-id', 'context-id'],
+)
+@pytest.mark.asyncio
+async def test_request_and_response_disagreeing_omit_the_attribute(
+    exporter, make_client, message_fields, response, absent
+):
+    """An ID that differs between request and response is not reported."""
+    transport = AsyncMock(spec=ClientTransport)
+    transport.send_message.return_value = SendMessageResponse(task=response)
+    client = make_client(transport, streaming=False)
+
+    async for _ in client.send_message(send_request(**message_fields)):
+        pass
+
+    span = only_span(exporter)
+    assert_absent(span, absent)
+    agreed = {_semconv.A2A_TASK_ID, _semconv.GEN_AI_CONVERSATION_ID} - {absent}
+    assert agreed <= set(span.attributes)
+
+
+@pytest.mark.asyncio
+async def test_stream_with_differing_task_ids_omits_the_task_id(
+    exporter, make_client
+):
+    """A stream whose events name different tasks reports no task ID."""
+    transport = AsyncMock(spec=ClientTransport)
+    transport.send_message_streaming = streaming(
+        StreamResponse(task=task('t-1', 'c-1')),
+        StreamResponse(task=task('t-2', 'c-1')),
+    )
+
+    async for _ in make_client(transport).send_message(send_request()):
+        pass
+
+    span = only_span(exporter)
+    assert_absent(span, _semconv.A2A_TASK_ID)
+    assert span.attributes[_semconv.GEN_AI_CONVERSATION_ID] == 'c-1'
+
+
+@pytest.mark.asyncio
+async def test_failed_call_keeps_the_request_task_id(exporter, make_client):
+    """A call that fails before any response still reports the request's ID."""
+    transport = AsyncMock(spec=ClientTransport)
+    transport.get_task.side_effect = TaskNotFoundError()
+
+    with pytest.raises(TaskNotFoundError):
+        await make_client(transport).get_task(GetTaskRequest(id='t-1'))
+
+    assert only_span(exporter).attributes[_semconv.A2A_TASK_ID] == 't-1'
 
 
 @pytest.mark.asyncio
