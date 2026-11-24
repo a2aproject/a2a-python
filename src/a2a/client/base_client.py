@@ -454,7 +454,6 @@ class BaseClient(Client):
             error = e
             raise
         finally:
-            # Also runs when the call is cancelled, which is not an error.
             await plugins.after_client_request(
                 ClientResponse(
                     request.method, result, request.context, error=error

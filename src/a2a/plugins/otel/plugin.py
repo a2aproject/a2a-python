@@ -40,6 +40,8 @@ ENABLED_ENV_VAR = 'A2A_OTEL_PLUGIN_ENABLED'
 
 INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk.otel'
 
+_SDK_VERSION = version('a2a-sdk')
+
 _SPAN_KEY = 'a2a.otel.span'
 
 # Task and context IDs of a ListTasks call describe the listed tasks, not the
@@ -63,10 +65,6 @@ def _current(span: Span) -> AbstractContextManager[Span]:
 
 def _env_enabled() -> bool:
     return os.getenv(ENABLED_ENV_VAR, 'true').lower() == 'true'
-
-
-def _sdk_version() -> str:
-    return version('a2a-sdk')
 
 
 @experimental
@@ -116,7 +114,7 @@ class OpenTelemetryPlugin(CompletePlugin):
 
         provider: Any = tracer_provider if tracer_provider else trace
         self._tracer: Tracer = provider.get_tracer(
-            INSTRUMENTING_MODULE_NAME, _sdk_version()
+            INSTRUMENTING_MODULE_NAME, _SDK_VERSION
         )
 
     async def before_client_request(self, request: ClientRequest) -> None:

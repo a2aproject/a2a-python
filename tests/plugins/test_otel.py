@@ -74,7 +74,7 @@ def test_tracer_is_taken_from_the_given_provider():
     assert plugin._tracer is provider.get_tracer.return_value
     name, version = provider.get_tracer.call_args.args
     assert name == 'a2a-python-sdk.otel'
-    assert version == otel_plugin._sdk_version()
+    assert version == otel_plugin._SDK_VERSION
 
 
 def test_no_provider_falls_back_to_the_global_one():
