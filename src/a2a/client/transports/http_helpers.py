@@ -43,8 +43,8 @@ def handle_http_exceptions(
         raise A2AClientError(f'HTTP Error {e.response.status_code}: {e}') from e
     except REQUEST_ERROR as e:
         raise A2AClientError(f'Network communication error: {e}') from e
-    except json.JSONDecodeError as e:
-        raise A2AClientError(f'JSON Decode Error: {e}') from e
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as e:
+        raise A2AClientError(f'Malformed JSON response: {e}') from e
 
 
 def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:

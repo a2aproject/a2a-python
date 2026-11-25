@@ -9,6 +9,7 @@ from a2a.client.transports.http_helpers import (
     _default_sse_error_handler,
     get_http_args,
     parse_sse_stream,
+    send_http_request,
     send_http_stream_request,
 )
 from a2a.utils._httpx_compat import httpx_lib
@@ -216,3 +217,42 @@ def test_sse_event_source_keeps_caller_accept_whatever_its_case(
     )
 
     assert source._request.headers.get_list('accept') == ['application/json']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('content', 'expected_cause'),
+    [
+        pytest.param(
+            b'{"x":"\xe9"}',
+            UnicodeDecodeError,
+            id='invalid-utf8',
+        ),
+        pytest.param(
+            b'[' * 10000 + b']' * 10000,
+            RecursionError,
+            id='deeply-nested',
+        ),
+    ],
+)
+async def test_send_http_request_wraps_malformed_json_body(
+    content: bytes, expected_cause: type[Exception]
+) -> None:
+    """A malformed JSON body must surface as A2AClientError, not leak."""
+
+    def respond(request: httpx_lib.Request) -> httpx_lib.Response:
+        return httpx_lib.Response(
+            200,
+            headers={'Content-Type': 'application/json'},
+            content=content,
+        )
+
+    async with httpx_lib.AsyncClient(
+        transport=httpx_lib.MockTransport(respond)
+    ) as client:
+        request = client.build_request('GET', 'https://agent.example')
+        with pytest.raises(A2AClientError) as exc_info:
+            await send_http_request(client, request)
+
+    assert isinstance(exc_info.value.__cause__, expected_cause)
+    assert 'Malformed JSON response' in str(exc_info.value)
