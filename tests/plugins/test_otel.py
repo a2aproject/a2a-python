@@ -920,6 +920,7 @@ async def test_server_creates_its_own_span_without_a_transport_span(
     assert span.name == 'SendMessage'
     assert span.kind is SpanKind.SERVER
     assert span.parent is None
+    assert_absent(span, _semconv.A2A_PROTOCOL_VERSION)
 
 
 TRACE_ID, PARENT_SPAN_ID = (
@@ -951,7 +952,7 @@ def grpc_context_with(metadata):
 async def test_server_span_continues_the_callers_trace(
     exporter, make_handler, context
 ):
-    """The server span's parent is read from the caller's traceparent."""
+    """The server span continues the caller's trace and records its version."""
     handler = await make_handler()
 
     await handler.on_message_send(send_request(), context)
@@ -959,6 +960,7 @@ async def test_server_span_continues_the_callers_trace(
     span = only_span(exporter)
     assert span.context.trace_id == TRACE_ID
     assert span.parent.span_id == PARENT_SPAN_ID
+    assert span.attributes[_semconv.A2A_PROTOCOL_VERSION] == '1.0'
 
 
 @pytest.mark.parametrize('metadata', [None, []], ids=['none', 'empty'])
@@ -971,7 +973,9 @@ async def test_server_without_grpc_metadata_starts_a_root_span(
 
     await handler.on_message_send(send_request(), grpc_context_with(metadata))
 
-    assert only_span(exporter).parent is None
+    span = only_span(exporter)
+    assert span.parent is None
+    assert_absent(span, _semconv.A2A_PROTOCOL_VERSION)
 
 
 @pytest.mark.asyncio

@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING, Any
 from a2a.plugins.base import CompletePlugin
 from a2a.plugins.otel import _semconv
 from a2a.types.a2a_pb2 import SendMessageResponse, StreamResponse, Task
+from a2a.utils.constants import VERSION_HEADER
 from a2a.utils.experimental import experimental
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Iterable
+    from collections.abc import Awaitable, Callable, Iterable, Mapping
     from contextlib import AbstractContextManager
 
     from opentelemetry.context import Context
@@ -362,6 +363,18 @@ def _set_server_request_attributes(
     _set_request_attributes(state, request)
     if request.context.tenant:
         state.set(_semconv.A2A_TENANT, request.context.tenant)
+    if version := _requested_version(request.context.state):
+        state.set(_semconv.A2A_PROTOCOL_VERSION, version)
+
+
+def _requested_version(state: Mapping[str, Any]) -> str | None:
+    """Returns the protocol version the caller sent."""
+    key = VERSION_HEADER.lower()
+    if headers := state.get('headers'):
+        return headers.get(key) or headers.get(VERSION_HEADER)
+    if grpc_context := state.get('grpc_context'):
+        return _grpc_carrier(grpc_context.invocation_metadata()).get(key)
+    return None
 
 
 def _set_agent_attributes(state: _CallState, card: AgentCard) -> None:
