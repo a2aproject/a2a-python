@@ -61,6 +61,16 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 from opentelemetry.trace import SpanKind, StatusCode
 
 
+@pytest.fixture(autouse=True)
+def restore_legacy_tracing(monkeypatch):
+    """Constructing the plugin turns legacy tracing off for the process."""
+    monkeypatch.setattr(
+        otel_plugin.legacy_telemetry,
+        'otel_enabled',
+        otel_plugin.legacy_telemetry.otel_enabled,
+    )
+
+
 def test_plugin_is_a_client_and_server_plugin():
     assert isinstance(OpenTelemetryPlugin(), plugins.CompletePlugin)
 
@@ -131,6 +141,27 @@ def test_plugin_is_enabled_by_default(monkeypatch):
     monkeypatch.delenv(otel_plugin.ENABLED_ENV_VAR, raising=False)
 
     assert OpenTelemetryPlugin()._enabled
+
+
+@pytest.mark.parametrize(
+    ('legacy', 'plugin_enabled', 'turned_off'),
+    [(True, 'true', True), (False, 'true', False), (True, 'false', False)],
+    ids=['legacy-on', 'legacy-off', 'plugin-off'],
+)
+def test_plugin_turns_legacy_tracing_off(
+    monkeypatch, caplog, legacy, plugin_enabled, turned_off
+):
+    """An enabled plugin turns running legacy tracing off and says so."""
+    monkeypatch.setattr(otel_plugin.legacy_telemetry, 'otel_enabled', legacy)
+    monkeypatch.setenv(otel_plugin.ENABLED_ENV_VAR, plugin_enabled)
+
+    with caplog.at_level('WARNING', logger=otel_plugin.__name__):
+        OpenTelemetryPlugin()
+
+    assert otel_plugin.legacy_telemetry.otel_enabled is (
+        legacy and not turned_off
+    )
+    assert ('turning it off' in caplog.text) is turned_off
 
 
 def test_missing_opentelemetry_raises_with_an_install_hint(monkeypatch):
@@ -914,13 +945,15 @@ async def test_server_creates_its_own_span_without_a_transport_span(
     """With no transport span current, the plugin starts and ends its own."""
     handler = await make_handler()
 
-    await handler.on_message_send(send_request(), server_context())
+    await handler.on_message_send(
+        send_request(), server_context(headers={'a2a-version': '1.0'})
+    )
 
     span = only_span(exporter)
     assert span.name == 'SendMessage'
     assert span.kind is SpanKind.SERVER
     assert span.parent is None
-    assert_absent(span, _semconv.A2A_PROTOCOL_VERSION)
+    assert span.attributes[_semconv.A2A_PROTOCOL_VERSION] == '1.0'
 
 
 TRACE_ID, PARENT_SPAN_ID = (
@@ -952,7 +985,7 @@ def grpc_context_with(metadata):
 async def test_server_span_continues_the_callers_trace(
     exporter, make_handler, context
 ):
-    """The server span continues the caller's trace and records its version."""
+    """The server span's parent is read from the caller's traceparent."""
     handler = await make_handler()
 
     await handler.on_message_send(send_request(), context)
@@ -960,7 +993,6 @@ async def test_server_span_continues_the_callers_trace(
     span = only_span(exporter)
     assert span.context.trace_id == TRACE_ID
     assert span.parent.span_id == PARENT_SPAN_ID
-    assert span.attributes[_semconv.A2A_PROTOCOL_VERSION] == '1.0'
 
 
 @pytest.mark.parametrize('metadata', [None, []], ids=['none', 'empty'])

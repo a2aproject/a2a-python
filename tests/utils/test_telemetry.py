@@ -1,6 +1,5 @@
 import asyncio
 import importlib
-import os
 import sys
 import warnings
 
@@ -8,16 +7,12 @@ from collections.abc import Callable, Generator
 from typing import Any, NoReturn
 from unittest import mock
 
+import a2a.utils
 import pytest
 
-
-# Legacy tracing is off by default, but turn it on for tests
-os.environ.setdefault('OTEL_INSTRUMENTATION_A2A_SDK_ENABLED', 'true')
-
-with warnings.catch_warnings():
-    warnings.simplefilter('ignore', DeprecationWarning)
-    from a2a.server.events.event_queue import QueueShutDown
-    from a2a.utils.telemetry import trace_class, trace_function
+from a2a.server.events.event_queue import QueueShutDown
+from a2a.utils import telemetry
+from a2a.utils.telemetry import trace_class, trace_function
 
 
 @pytest.fixture
@@ -46,6 +41,10 @@ def reload_telemetry_module(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[Callable[[str | None], Any], None, None]:
     """Fixture to handle telemetry module reloading with env var control."""
+    # Puts the original module back afterwards: decorators applied across the
+    # SDK, and the OpenTelemetry plugin, keep using it.
+    monkeypatch.setattr(a2a.utils, 'telemetry', telemetry)
+    monkeypatch.setitem(sys.modules, 'a2a.utils.telemetry', telemetry)
 
     def _reload(env_value: str | None = None) -> Any:
         if env_value is None:
@@ -62,9 +61,6 @@ def reload_telemetry_module(
         return module
 
     yield _reload
-
-    # Cleanup to ensure other tests aren't affected by a "poisoned" sys.modules
-    sys.modules.pop('a2a.utils.telemetry', None)
 
 
 def test_trace_function_sync_success(mock_span: mock.MagicMock) -> None:
@@ -275,6 +271,42 @@ def test_env_var_disabled_logs_message(
         in caplog.text
     )
     assert 'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED' in caplog.text
+
+
+@pytest.mark.xdist_group(name='telemetry_isolation')
+@pytest.mark.parametrize(
+    ('env_value', 'warns'), [(None, True), ('true', True), ('false', False)]
+)
+def test_legacy_tracing_warns_that_it_is_deprecated(
+    reload_telemetry_module: Callable[[str | None], Any],
+    env_value: str | None,
+    warns: bool,
+) -> None:
+    """Legacy tracing warns that it's deprecated whenever it's on."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        reload_telemetry_module(env_value)
+
+    deprecations = [
+        w for w in caught if issubclass(w.category, DeprecationWarning)
+    ]
+    assert bool(deprecations) is warns
+
+
+def test_disable_tracing_stops_spans_on_decorated_functions(
+    monkeypatch: pytest.MonkeyPatch, mock_tracer: mock.MagicMock
+) -> None:
+    """Functions decorated before tracing is disabled run without a span."""
+    monkeypatch.setattr(telemetry, 'otel_enabled', True)
+
+    @trace_function
+    def foo() -> int:
+        return 42
+
+    telemetry.disable_tracing()
+
+    assert foo() == 42
+    mock_tracer.start_as_current_span.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from a2a.plugins.base import CompletePlugin
 from a2a.plugins.otel import _semconv
 from a2a.types.a2a_pb2 import SendMessageResponse, StreamResponse, Task
+from a2a.utils import telemetry as legacy_telemetry
 from a2a.utils.constants import VERSION_HEADER
 from a2a.utils.experimental import experimental
 
@@ -173,6 +174,14 @@ class OpenTelemetryPlugin(CompletePlugin):
                 ENABLED_ENV_VAR,
             )
             return
+
+        if legacy_telemetry.otel_enabled:
+            legacy_telemetry.disable_tracing()
+            logger.warning(
+                'Legacy A2A tracing is active. Turning it off so calls are '
+                'not traced twice. Set %s=false to silence this.',
+                legacy_telemetry.ENABLED_ENV_VAR,
+            )
 
         provider: Any = tracer_provider if tracer_provider else trace
         self._tracer: Tracer = provider.get_tracer(
