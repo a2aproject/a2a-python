@@ -922,29 +922,56 @@ async def test_server_creates_its_own_span_without_a_transport_span(
     assert span.parent is None
 
 
-@pytest.mark.parametrize('carrier', ['headers', 'grpc_metadata'])
+TRACE_ID, PARENT_SPAN_ID = (
+    0x4BF92F3577B34DA6A3CE929D0E0E4736,
+    0x00F067AA0BA902B7,
+)
+TRACEPARENT = f'00-{TRACE_ID:032x}-{PARENT_SPAN_ID:016x}-01'
+
+
+def grpc_context_with(metadata):
+    grpc_context = MagicMock()
+    grpc_context.invocation_metadata.return_value = metadata
+    return ServerCallContext(state={'grpc_context': grpc_context})
+
+
+@pytest.mark.parametrize(
+    'context',
+    [
+        server_context(headers={'traceparent': TRACEPARENT}),
+        grpc_context_with([('traceparent', TRACEPARENT)]),
+        grpc_context_with([('traceparent', TRACEPARENT.encode())]),
+        grpc_context_with(
+            [('trace-bin', b'\xff\xfe'), ('TraceParent', TRACEPARENT)]
+        ),
+    ],
+    ids=['headers', 'grpc-str', 'grpc-bytes', 'grpc-binary-and-mixed-case'],
+)
 @pytest.mark.asyncio
 async def test_server_span_continues_the_callers_trace(
-    exporter, make_handler, carrier
+    exporter, make_handler, context
 ):
     """The server span's parent is read from the caller's traceparent."""
-    trace_id, span_id = 0x4BF92F3577B34DA6A3CE929D0E0E4736, 0x00F067AA0BA902B7
-    traceparent = f'00-{trace_id:032x}-{span_id:016x}-01'
-    if carrier == 'headers':
-        context = server_context(headers={'traceparent': traceparent})
-    else:
-        grpc_context = MagicMock()
-        grpc_context.invocation_metadata.return_value = [
-            ('traceparent', traceparent)
-        ]
-        context = ServerCallContext(state={'grpc_context': grpc_context})
     handler = await make_handler()
 
     await handler.on_message_send(send_request(), context)
 
     span = only_span(exporter)
-    assert span.context.trace_id == trace_id
-    assert span.parent.span_id == span_id
+    assert span.context.trace_id == TRACE_ID
+    assert span.parent.span_id == PARENT_SPAN_ID
+
+
+@pytest.mark.parametrize('metadata', [None, []], ids=['none', 'empty'])
+@pytest.mark.asyncio
+async def test_server_without_grpc_metadata_starts_a_root_span(
+    exporter, make_handler, metadata
+):
+    """Missing gRPC metadata yields a new root span, not a failed call."""
+    handler = await make_handler()
+
+    await handler.on_message_send(send_request(), grpc_context_with(metadata))
+
+    assert only_span(exporter).parent is None
 
 
 @pytest.mark.asyncio

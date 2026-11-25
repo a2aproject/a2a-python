@@ -17,7 +17,7 @@ from a2a.utils.experimental import experimental
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Iterable
     from contextlib import AbstractContextManager
 
     from opentelemetry.context import Context
@@ -297,8 +297,29 @@ def _parent_context(request: ServerRequest) -> Context | None:
     if headers := state.get('headers'):
         return extract(headers)
     if grpc_context := state.get('grpc_context'):
-        return extract(dict(grpc_context.invocation_metadata()))
+        return extract(_grpc_carrier(grpc_context.invocation_metadata()))
     return None
+
+
+def _grpc_carrier(
+    metadata: Iterable[tuple[str, str | bytes]] | None,
+) -> dict[str, str]:
+    """Returns gRPC metadata as a string carrier the propagator can read.
+
+    Metadata may be missing, and binary values may not be UTF-8, so those are
+    skipped rather than raised on
+    """
+    carrier: dict[str, str] = {}
+    for key, raw in metadata or ():
+        if isinstance(raw, bytes):
+            try:
+                value = raw.decode('utf-8')
+            except UnicodeDecodeError:
+                continue
+        else:
+            value = raw
+        carrier[key.lower()] = value
+    return carrier
 
 
 def _set_request_attributes(
