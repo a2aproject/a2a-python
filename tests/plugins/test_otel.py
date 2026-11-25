@@ -15,12 +15,17 @@ from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientCallContext, ClientConfig
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.base import ClientTransport
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.plugins import ClientRequest, ClientResponse
 from a2a.plugins.otel import (
     OpenTelemetryPlugin,
     _semconv,
     plugin as otel_plugin,
 )
+from a2a.server.agent_execution import AgentExecutor
+from a2a.server.context import ServerCallContext
+from a2a.server.request_handlers import DefaultRequestHandlerV2
+from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
 from a2a.types import TaskNotFoundError, a2a_pb2
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -194,6 +199,58 @@ def make_client(exporter):
     return make
 
 
+@pytest.fixture
+def make_handler(exporter):
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    async def make(*tasks, executor=None, card=CARD):
+        store = InMemoryTaskStore()
+        for stored in tasks:
+            await store.save(stored, ServerCallContext())
+        return DefaultRequestHandlerV2(
+            agent_executor=executor or TaskAgent(),
+            task_store=store,
+            agent_card=card,
+            plugins=plugins.sequential(
+                otel_plugin.OpenTelemetryPlugin(provider)
+            ),
+        )
+
+    return make
+
+
+def server_context(**state):
+    return ServerCallContext(state={'headers': {}, **state})
+
+
+class TaskAgent(AgentExecutor):
+    """SUBMITTED -> WORKING -> COMPLETED, all on one task."""
+
+    async def execute(self, context, event_queue):
+        task = context.current_task or new_task_from_user_message(
+            context.message
+        )
+        if not context.current_task:
+            await event_queue.enqueue_event(task)
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await updater.start_work()
+        await updater.complete()
+
+    async def cancel(self, context, event_queue):
+        pass
+
+
+class SlowAgent(AgentExecutor):
+    """Never finishes, so a call to it can only end by cancellation."""
+
+    async def execute(self, context, event_queue):
+        await asyncio.sleep(10)
+
+    async def cancel(self, context, event_queue):
+        pass
+
+
 def only_span(exporter):
     (span,) = exporter.get_finished_spans()
     return span
@@ -337,6 +394,7 @@ def test_method_names_cover_the_a2a_service():
     }
 
 
+@pytest.mark.parametrize('side', ['client', 'server'])
 @pytest.mark.parametrize(
     ('state', 'expected'),
     [
@@ -347,13 +405,16 @@ def test_method_names_cover_the_a2a_service():
 )
 @pytest.mark.asyncio
 async def test_unary_call_reports_task_attributes(
-    exporter, make_client, state, expected
+    exporter, make_client, make_handler, side, state, expected
 ):
     """A unary call reports the task ID, context ID and a set task state."""
-    transport = AsyncMock(spec=ClientTransport)
-    transport.get_task.return_value = task(state=state)
-
-    await make_client(transport).get_task(GetTaskRequest(id='t-1'))
+    if side == 'client':
+        transport = AsyncMock(spec=ClientTransport)
+        transport.get_task.return_value = task(state=state)
+        await make_client(transport).get_task(GetTaskRequest(id='t-1'))
+    else:
+        handler = await make_handler(task(state=state))
+        await handler.on_get_task(GetTaskRequest(id='t-1'), server_context())
 
     attributes = only_span(exporter).attributes
     assert attributes[_semconv.A2A_TASK_ID] == 't-1'
@@ -391,18 +452,42 @@ async def test_stream_reports_ids_but_not_state(exporter, make_client, events):
         assert_absent(span, _semconv.A2A_TASK_ID)
 
 
+@pytest.mark.asyncio
+async def test_server_stream_reports_ids_but_not_state(exporter, make_handler):
+    """A server stream moving through states reports IDs, never the state."""
+    handler = await make_handler()
+
+    events = [
+        event
+        async for event in handler.on_message_send_stream(
+            send_request(), server_context()
+        )
+    ]
+
+    span = only_span(exporter)
+    assert len(events) > 1
+    assert span.kind is SpanKind.SERVER
+    assert_absent(span, _semconv.A2A_TASK_STATE)
+    assert span.attributes[_semconv.A2A_TASK_ID] == events[0].id
+    assert span.attributes[_semconv.GEN_AI_CONVERSATION_ID]
+
+
+@pytest.mark.parametrize('side', ['client', 'server'])
 @pytest.mark.parametrize('count', [0, 1, 3])
 @pytest.mark.asyncio
-async def test_list_tasks_never_reports_task_ids(exporter, make_client, count):
+async def test_list_tasks_never_reports_task_ids(
+    exporter, make_client, make_handler, side, count
+):
     """ListTasks reports no task attributes, whatever the number of tasks."""
-    transport = AsyncMock(spec=ClientTransport)
-    transport.list_tasks.return_value = ListTasksResponse(
-        tasks=[task(f't-{i}', f'c-{i}') for i in range(count)]
-    )
-
-    await make_client(transport).list_tasks(
-        ListTasksRequest(context_id='filter')
-    )
+    tasks = [task(f't-{i}', f'c-{i}') for i in range(count)]
+    request = ListTasksRequest(context_id='filter')
+    if side == 'client':
+        transport = AsyncMock(spec=ClientTransport)
+        transport.list_tasks.return_value = ListTasksResponse(tasks=tasks)
+        await make_client(transport).list_tasks(request)
+    else:
+        handler = await make_handler(*tasks)
+        await handler.on_list_tasks(request, server_context())
 
     assert_absent(
         only_span(exporter),
@@ -500,28 +585,52 @@ async def test_interface_and_tenant_attributes(
 
 
 @pytest.mark.parametrize(
+    ('tenant', 'expected'), [('billing', 'billing'), ('', None)]
+)
+@pytest.mark.asyncio
+async def test_server_tenant_comes_from_the_call_context(
+    exporter, make_handler, tenant, expected
+):
+    """The server reports the call context's tenant, and no address."""
+    handler = await make_handler(task())
+    context = server_context()
+    context.tenant = tenant
+
+    await handler.on_get_task(GetTaskRequest(id='t-1'), context)
+
+    attributes = only_span(exporter).attributes
+    assert attributes.get(_semconv.A2A_TENANT) == expected
+    assert_absent(
+        only_span(exporter), _semconv.SERVER_ADDRESS, _semconv.SERVER_PORT
+    )
+
+
+@pytest.mark.parametrize('side', ['client', 'server'])
+@pytest.mark.parametrize(
     ('reference_task_ids', 'description'),
     [(['t-0'], 'Answers questions.'), ([], '')],
     ids=['set', 'empty-values-absent'],
 )
 @pytest.mark.asyncio
 async def test_message_and_agent_card_attributes(
-    exporter, make_client, reference_task_ids, description
+    exporter, make_client, make_handler, side, reference_task_ids, description
 ):
     """Message and agent card fields are reported, and empty ones omitted."""
-    transport = AsyncMock(spec=ClientTransport)
-    transport.send_message_streaming = streaming()
     card = AgentCard(
         name='Remote',
         description=description,
         version='1.0',
         capabilities=AgentCapabilities(streaming=True),
     )
-
-    async for _ in make_client(transport, card=card).send_message(
-        send_request(reference_task_ids=reference_task_ids)
-    ):
-        pass
+    request = send_request(reference_task_ids=reference_task_ids)
+    if side == 'client':
+        transport = AsyncMock(spec=ClientTransport)
+        transport.send_message_streaming = streaming()
+        async for _ in make_client(transport, card=card).send_message(request):
+            pass
+    else:
+        handler = await make_handler(card=card)
+        await handler.on_message_send(request, server_context())
 
     attributes = only_span(exporter).attributes
     assert attributes[_semconv.A2A_MESSAGE_ID] == 'm-1'
@@ -591,6 +700,23 @@ async def test_errors_set_status_and_error_type(
     assert span.status.status_code is StatusCode.ERROR
     assert span.status.description
     assert span.attributes[_semconv.ERROR_TYPE] == expected_type
+    assert not span.events
+
+
+@pytest.mark.asyncio
+async def test_server_error_sets_status_and_error_type(exporter, make_handler):
+    """A failed server call gets ERROR status and the A2A error reason."""
+    handler = await make_handler()
+
+    with pytest.raises(TaskNotFoundError):
+        await handler.on_get_task(
+            GetTaskRequest(id='missing'), server_context()
+        )
+
+    span = only_span(exporter)
+    assert span.status.status_code is StatusCode.ERROR
+    assert span.attributes[_semconv.ERROR_TYPE] == 'TASK_NOT_FOUND'
+    assert span.attributes[_semconv.A2A_TASK_ID] == 'missing'
     assert not span.events
 
 
@@ -741,3 +867,102 @@ async def test_span_ends_cleanly_when_call_stops_early(
 
     assert only_span(exporter).status.status_code is StatusCode.UNSET
     assert otel_plugin._SPAN_KEY not in context.state
+
+
+@pytest.mark.asyncio
+async def test_cancelled_server_call_is_not_an_error(exporter, make_handler):
+    """A cancelled server call ends its span without marking it ERROR."""
+    handler = await make_handler(executor=SlowAgent())
+    context = server_context()
+
+    call = asyncio.create_task(handler.on_message_send(send_request(), context))
+    await asyncio.sleep(0.05)
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    span = only_span(exporter)
+    assert span.status.status_code is StatusCode.UNSET
+    assert _semconv.ERROR_TYPE not in span.attributes
+    assert otel_plugin._SPAN_KEY not in context.state
+
+
+@pytest.mark.asyncio
+async def test_server_enriches_the_transport_span(exporter, make_handler):
+    """With a transport span current, it is reused, renamed and not ended."""
+    handler = await make_handler()
+    transport_tracer = TracerProvider()
+    transport_tracer.add_span_processor(SimpleSpanProcessor(exporter))
+
+    with transport_tracer.get_tracer('starlette').start_as_current_span(
+        'POST /a2a', kind=SpanKind.SERVER
+    ) as transport_span:
+        await handler.on_message_send(send_request(), server_context())
+        assert transport_span.is_recording()
+        transport_span.set_attribute('http.response.status_code', 200)
+
+    span = only_span(exporter)
+    assert span.name == 'SendMessage'
+    assert span.attributes[_semconv.A2A_METHOD_NAME] == 'SendMessage'
+    assert span.attributes['http.response.status_code'] == 200
+
+
+@pytest.mark.asyncio
+async def test_server_creates_its_own_span_without_a_transport_span(
+    exporter, make_handler
+):
+    """With no transport span current, the plugin starts and ends its own."""
+    handler = await make_handler()
+
+    await handler.on_message_send(send_request(), server_context())
+
+    span = only_span(exporter)
+    assert span.name == 'SendMessage'
+    assert span.kind is SpanKind.SERVER
+    assert span.parent is None
+
+
+@pytest.mark.parametrize('carrier', ['headers', 'grpc_metadata'])
+@pytest.mark.asyncio
+async def test_server_span_continues_the_callers_trace(
+    exporter, make_handler, carrier
+):
+    """The server span's parent is read from the caller's traceparent."""
+    trace_id, span_id = 0x4BF92F3577B34DA6A3CE929D0E0E4736, 0x00F067AA0BA902B7
+    traceparent = f'00-{trace_id:032x}-{span_id:016x}-01'
+    if carrier == 'headers':
+        context = server_context(headers={'traceparent': traceparent})
+    else:
+        grpc_context = MagicMock()
+        grpc_context.invocation_metadata.return_value = [
+            ('traceparent', traceparent)
+        ]
+        context = ServerCallContext(state={'grpc_context': grpc_context})
+    handler = await make_handler()
+
+    await handler.on_message_send(send_request(), context)
+
+    span = only_span(exporter)
+    assert span.context.trace_id == trace_id
+    assert span.parent.span_id == span_id
+
+
+@pytest.mark.asyncio
+async def test_server_keeps_the_grpc_span_name(exporter, make_handler):
+    """An enriched gRPC span keeps its name; only HTTP spans are renamed."""
+    handler = await make_handler()
+    transport_tracer = TracerProvider()
+    transport_tracer.add_span_processor(SimpleSpanProcessor(exporter))
+    name = '/a2a.v1.A2AService/SendMessage'
+
+    with transport_tracer.get_tracer('grpc').start_as_current_span(
+        name, kind=SpanKind.SERVER
+    ):
+        await handler.on_message_send(
+            send_request(),
+            ServerCallContext(state={'grpc_context': MagicMock()}),
+        )
+
+    span = only_span(exporter)
+    assert span.name == name
+    assert span.attributes[_semconv.A2A_METHOD_NAME] == 'SendMessage'
