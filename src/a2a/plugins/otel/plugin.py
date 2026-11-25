@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
+from asyncio import CancelledError
 from dataclasses import dataclass, field
 from importlib.metadata import version
 from typing import TYPE_CHECKING, Any
@@ -19,17 +20,23 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
     from contextlib import AbstractContextManager
 
+    from opentelemetry.context import Context
     from opentelemetry.trace import Span, Tracer, TracerProvider
 
-    from a2a.plugins.types import ClientRequest, ClientResponse
-    from a2a.types.a2a_pb2 import AgentInterface
+    from a2a.plugins.types import (
+        ClientRequest,
+        ClientResponse,
+        ServerRequest,
+        ServerResponse,
+    )
+    from a2a.types.a2a_pb2 import AgentCard, AgentInterface, Message
 
 
 logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry import trace
-    from opentelemetry.propagate import inject
+    from opentelemetry.propagate import extract, inject
     from opentelemetry.trace import SpanKind, StatusCode
 
     _otel_installed = True
@@ -94,20 +101,31 @@ class _CallState:
     """A call's span and the attributes the conventions omit when ambiguous."""
 
     span: Span
+    owned: bool = True
     task_id: _UniqueValue = field(default_factory=_UniqueValue)
     context_id: _UniqueValue = field(default_factory=_UniqueValue)
     task_state: _UniqueValue = field(default_factory=_UniqueValue)
 
+    def set(self, key: str, value: Any) -> None:
+        """Sets an attribute, unless the span has already ended."""
+        if self.span.is_recording():
+            self.span.set_attribute(key, value)
+
     def end(self) -> None:
-        """Sets the attributes left with a single value, then ends the span."""
+        """Sets the attributes left with a single value, then ends the span.
+
+        A span the plugin doesn't own belongs to the transport
+        instrumentation, which ends it.
+        """
         for key, tracked in (
             (_semconv.A2A_TASK_ID, self.task_id),
             (_semconv.GEN_AI_CONVERSATION_ID, self.context_id),
             (_semconv.A2A_TASK_STATE, self.task_state),
         ):
             if (value := tracked.get()) is not None:
-                self.span.set_attribute(key, value)
-        self.span.end()
+                self.set(key, value)
+        if self.owned:
+            self.span.end()
 
 
 @experimental
@@ -170,8 +188,8 @@ class OpenTelemetryPlugin(CompletePlugin):
         state = _CallState(span)
         request.context.state[_SPAN_KEY] = state
 
-        span.set_attribute(_semconv.A2A_METHOD_NAME, method)
-        _set_request_attributes(state, request)
+        state.set(_semconv.A2A_METHOD_NAME, method)
+        _set_client_request_attributes(state, request)
 
         carrier = dict(request.context.service_parameters or {})
         with _current(span):
@@ -202,64 +220,167 @@ class OpenTelemetryPlugin(CompletePlugin):
             return
 
         del response.context.state[_SPAN_KEY]
-        if response.error is not None:
-            state.span.set_status(StatusCode.ERROR, str(response.error))
-            state.span.set_attribute(
-                _semconv.ERROR_TYPE, _semconv.error_type(response.error)
+        _finish(state, response.error)
+
+    async def before_handler_run(self, request: ServerRequest) -> None:
+        """Enriches the transport's server span, or starts one if none."""
+        if not self._enabled:
+            return
+
+        method = _semconv.get_method_name(request.method)
+        current = trace.get_current_span()
+        if current.is_recording() and getattr(current, 'kind', None) is (
+            SpanKind.SERVER
+        ):
+            state = _CallState(current, owned=False)
+            if 'grpc_context' not in request.context.state:
+                current.update_name(method)
+        else:
+            state = _CallState(
+                self._tracer.start_span(
+                    method,
+                    kind=SpanKind.SERVER,
+                    context=_parent_context(request),
+                )
             )
-        state.end()
+        request.context.state[_SPAN_KEY] = state
+
+        state.set(_semconv.A2A_METHOD_NAME, method)
+        _set_server_request_attributes(state, request)
+
+    async def wrap_server_call(
+        self, request: ServerRequest, call: Callable[[], Awaitable[Any]]
+    ) -> Any:
+        """Runs the handler with the plugin's own span current."""
+        state = request.context.state.get(_SPAN_KEY)
+        if state is None or not state.owned:
+            return await call()
+        with _current(state.span):
+            return await call()
+
+    async def after_handler_run(self, response: ServerResponse) -> None:
+        """Records what the handler returned, and ends the span when final."""
+        if not self._enabled:
+            return
+
+        state = response.context.state.get(_SPAN_KEY)
+        if state is None:
+            return
+
+        _collect_response(state, response)
+        if not response.is_final:
+            return
+
+        del response.context.state[_SPAN_KEY]
+        error = response.error
+        _finish(state, None if isinstance(error, CancelledError) else error)
 
 
-def _set_request_attributes(state: _CallState, request: ClientRequest) -> None:
-    """Sets the attributes known before the request is sent."""
-    span = state.span
-    card = request.agent_card
-    if card.name:
-        span.set_attribute(_semconv.GEN_AI_AGENT_NAME, card.name)
-    if card.description:
-        span.set_attribute(_semconv.GEN_AI_AGENT_DESCRIPTION, card.description)
-    if card.version:
-        span.set_attribute(_semconv.GEN_AI_AGENT_VERSION, card.version)
+def _finish(state: _CallState, error: BaseException | None) -> None:
+    """Records the error, if any, and ends the call's span."""
+    if error is not None:
+        if state.span.is_recording():
+            state.span.set_status(StatusCode.ERROR, str(error))
+        state.set(_semconv.ERROR_TYPE, _semconv.error_type(error))
+    state.end()
+
+
+def _parent_context(request: ServerRequest) -> Context | None:
+    """Returns the caller's trace context, read from the incoming request.
+
+    Returns None when a span is already current, so the new span nests under
+    it, or when the request carries no trace context.
+    """
+    if trace.get_current_span().get_span_context().is_valid:
+        return None
+    state = request.context.state
+    if headers := state.get('headers'):
+        return extract(headers)
+    if grpc_context := state.get('grpc_context'):
+        return extract(dict(grpc_context.invocation_metadata()))
+    return None
+
+
+def _set_request_attributes(
+    state: _CallState, request: ClientRequest | ServerRequest
+) -> None:
+    """Sets the attributes both sides read from a request."""
+    if request.agent_card is not None:
+        _set_agent_attributes(state, request.agent_card)
 
     payload = request.payload
     message = getattr(payload, 'message', None)
-    if message is not None and message.message_id:
-        span.set_attribute(_semconv.A2A_MESSAGE_ID, message.message_id)
-        if message.reference_task_ids:
-            span.set_attribute(
-                _semconv.A2A_MESSAGE_REFERENCE_TASK_IDS,
-                list(message.reference_task_ids),
-            )
+    if message is not None:
+        _set_message_attributes(state, message)
 
     if request.method not in _SKIP_TASK_ATTRIBUTES:
         _collect_ids(state, payload, request.method)
         if message is not None:
             _collect_ids(state, message, request.method)
 
+
+def _set_client_request_attributes(
+    state: _CallState, request: ClientRequest
+) -> None:
+    """Sets the attributes of an outgoing request."""
+    _set_request_attributes(state, request)
     interface = request.interface
-    tenant = getattr(payload, 'tenant', '') or (
+    tenant = getattr(request.payload, 'tenant', '') or (
         interface.tenant if interface else ''
     )
     if tenant:
-        span.set_attribute(_semconv.A2A_TENANT, tenant)
+        state.set(_semconv.A2A_TENANT, tenant)
     if interface is not None:
-        _set_interface_attributes(span, interface)
+        _set_interface_attributes(state, interface)
 
 
-def _set_interface_attributes(span: Span, interface: AgentInterface) -> None:
+def _set_server_request_attributes(
+    state: _CallState, request: ServerRequest
+) -> None:
+    """Sets the attributes of an incoming request."""
+    _set_request_attributes(state, request)
+    if request.context.tenant:
+        state.set(_semconv.A2A_TENANT, request.context.tenant)
+
+
+def _set_agent_attributes(state: _CallState, card: AgentCard) -> None:
+    """Sets the attributes taken from the agent card."""
+    if card.name:
+        state.set(_semconv.GEN_AI_AGENT_NAME, card.name)
+    if card.description:
+        state.set(_semconv.GEN_AI_AGENT_DESCRIPTION, card.description)
+    if card.version:
+        state.set(_semconv.GEN_AI_AGENT_VERSION, card.version)
+
+
+def _set_message_attributes(state: _CallState, message: Message) -> None:
+    """Sets the attributes taken from the request message."""
+    if not message.message_id:
+        return
+    state.set(_semconv.A2A_MESSAGE_ID, message.message_id)
+    if message.reference_task_ids:
+        state.set(
+            _semconv.A2A_MESSAGE_REFERENCE_TASK_IDS,
+            list(message.reference_task_ids),
+        )
+
+
+def _set_interface_attributes(
+    state: _CallState, interface: AgentInterface
+) -> None:
     """Sets the attributes taken from the selected Agent Card interface."""
     if interface.protocol_version:
-        span.set_attribute(
-            _semconv.A2A_PROTOCOL_VERSION, interface.protocol_version
-        )
+        state.set(_semconv.A2A_PROTOCOL_VERSION, interface.protocol_version)
     address, port = _semconv.host_port(interface.url)
     if address:
-        span.set_attribute(_semconv.SERVER_ADDRESS, address)
+        state.set(_semconv.SERVER_ADDRESS, address)
     if port is not None:
-        span.set_attribute(_semconv.SERVER_PORT, port)
+        state.set(_semconv.SERVER_PORT, port)
 
 
-def _collect_response(state: _CallState, response: ClientResponse) -> None:
+def _collect_response(
+    state: _CallState, response: ClientResponse | ServerResponse
+) -> None:
     """Records the task attributes a response payload carries.
 
     The task state is recorded for unary calls only: a stream moves through
