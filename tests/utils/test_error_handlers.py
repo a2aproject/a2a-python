@@ -1,11 +1,14 @@
 """Tests for a2a.utils.error_handlers module."""
 
+import asyncio
 import logging
 
+from collections.abc import AsyncGenerator
 from unittest.mock import patch
 
 import pytest
 
+from a2a.server.routes.common import create_event_source_response
 from a2a.types import (
     InternalError,
 )
@@ -248,3 +251,74 @@ def test_build_rest_error_payload_invalid_params_no_validation_errors():
     assert payload['error']['details'][0]['@type'] == (
         'type.googleapis.com/google.rpc.ErrorInfo'
     )
+
+
+@pytest.mark.asyncio
+async def test_rest_stream_error_handler_closes_underlying_generator_on_aclose() -> (
+    None
+):
+    """Closing the wrapped body_iterator closes the underlying async generator."""
+    closed = False
+
+    async def inner_generator() -> AsyncGenerator[str, None]:
+        nonlocal closed
+        try:
+            yield 'chunk 1'
+            yield 'chunk 2'
+        finally:
+            closed = True
+
+    @rest_stream_error_handler
+    async def streaming_endpoint() -> MockEventSourceResponse:
+        return MockEventSourceResponse(inner_generator())
+
+    response = await streaming_endpoint()
+    first = await anext(response.body_iterator)
+    assert first == 'chunk 1'
+    assert not closed
+
+    await response.body_iterator.aclose()
+    assert closed
+
+
+@pytest.mark.asyncio
+async def test_rest_stream_error_handler_event_source_disconnect_closes_inner_generator(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Disconnecting an EventSourceResponse closes the wrapped SSE generator."""
+    closed = False
+    first_chunk_sent = asyncio.Event()
+    send_gate = asyncio.Event()
+
+    async def inner_generator() -> AsyncGenerator[dict[str, str], None]:
+        nonlocal closed
+        try:
+            yield {'data': 'chunk 1'}
+            yield {'data': 'chunk 2'}
+        finally:
+            closed = True
+
+    @rest_stream_error_handler
+    async def streaming_endpoint() -> object:
+        return create_event_source_response(inner_generator())
+
+    response = await streaming_endpoint()
+
+    async def consume_like_event_source() -> None:
+        try:
+            async for _ in response.body_iterator:
+                first_chunk_sent.set()
+                await send_gate.wait()
+        finally:
+            await response.body_iterator.aclose()
+
+    with caplog.at_level(logging.ERROR):
+        task = asyncio.create_task(consume_like_event_source())
+        await first_chunk_sent.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert task.cancelled()
+    assert closed
+    assert 'Unknown streaming error occurred' not in caplog.text
