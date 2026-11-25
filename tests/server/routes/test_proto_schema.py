@@ -121,9 +121,9 @@ def test_field_schema_optional_message_is_nullable():
 
 
 def test_field_schema_required_message_is_not_nullable():
-    from a2a.types.a2a_pb2 import SendMessageRequest
+    from a2a.types.a2a_pb2 import TaskStatusUpdateEvent
 
-    field = SendMessageRequest.DESCRIPTOR.fields_by_name['message']
+    field = TaskStatusUpdateEvent.DESCRIPTOR.fields_by_name['status']
     schema = field_schema(field, {})
     assert '$ref' in schema
     assert 'oneOf' not in schema

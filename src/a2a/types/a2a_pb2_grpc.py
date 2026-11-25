@@ -26,6 +26,11 @@ class A2AServiceStub(object):
                 request_serializer=a2a__pb2.SendMessageRequest.SerializeToString,
                 response_deserializer=a2a__pb2.StreamResponse.FromString,
                 _registered_method=True)
+        self.SendLiveMessage = channel.stream_stream(
+                '/lf.a2a.v1.A2AService/SendLiveMessage',
+                request_serializer=a2a__pb2.StreamRequest.SerializeToString,
+                response_deserializer=a2a__pb2.StreamResponse.FromString,
+                _registered_method=True)
         self.GetTask = channel.unary_unary(
                 '/lf.a2a.v1.A2AService/GetTask',
                 request_serializer=a2a__pb2.GetTaskRequest.SerializeToString,
@@ -87,6 +92,13 @@ class A2AServiceServicer(object):
     def SendStreamingMessage(self, request, context):
         """Sends a streaming message to an agent, allowing for real-time interaction and status updates.
         Streaming version of `SendMessage`
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SendLiveMessage(self, request_iterator, context):
+        """Establishes a bidirectional stream for live interaction.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -171,6 +183,11 @@ def add_A2AServiceServicer_to_server(servicer, server):
             'SendStreamingMessage': grpc.unary_stream_rpc_method_handler(
                     servicer.SendStreamingMessage,
                     request_deserializer=a2a__pb2.SendMessageRequest.FromString,
+                    response_serializer=a2a__pb2.StreamResponse.SerializeToString,
+            ),
+            'SendLiveMessage': grpc.stream_stream_rpc_method_handler(
+                    servicer.SendLiveMessage,
+                    request_deserializer=a2a__pb2.StreamRequest.FromString,
                     response_serializer=a2a__pb2.StreamResponse.SerializeToString,
             ),
             'GetTask': grpc.unary_unary_rpc_method_handler(
@@ -273,6 +290,33 @@ class A2AService(object):
             target,
             '/lf.a2a.v1.A2AService/SendStreamingMessage',
             a2a__pb2.SendMessageRequest.SerializeToString,
+            a2a__pb2.StreamResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SendLiveMessage(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            '/lf.a2a.v1.A2AService/SendLiveMessage',
+            a2a__pb2.StreamRequest.SerializeToString,
             a2a__pb2.StreamResponse.FromString,
             options,
             channel_credentials,

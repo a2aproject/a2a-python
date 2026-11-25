@@ -46,32 +46,40 @@ ROLE_USER: Role
 ROLE_AGENT: Role
 
 class SendMessageConfiguration(_message.Message):
-    __slots__ = ("accepted_output_modes", "task_push_notification_config", "history_length", "return_immediately")
+    __slots__ = ("accepted_output_modes", "task_push_notification_config", "history_length", "timeline_length", "return_immediately", "if_generation_match")
     ACCEPTED_OUTPUT_MODES_FIELD_NUMBER: _ClassVar[int]
     TASK_PUSH_NOTIFICATION_CONFIG_FIELD_NUMBER: _ClassVar[int]
     HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    TIMELINE_LENGTH_FIELD_NUMBER: _ClassVar[int]
     RETURN_IMMEDIATELY_FIELD_NUMBER: _ClassVar[int]
+    IF_GENERATION_MATCH_FIELD_NUMBER: _ClassVar[int]
     accepted_output_modes: _containers.RepeatedScalarFieldContainer[str]
     task_push_notification_config: TaskPushNotificationConfig
     history_length: int
+    timeline_length: int
     return_immediately: bool
-    def __init__(self, accepted_output_modes: _Optional[_Iterable[str]] = ..., task_push_notification_config: _Optional[_Union[TaskPushNotificationConfig, _Mapping]] = ..., history_length: _Optional[int] = ..., return_immediately: _Optional[bool] = ...) -> None: ...
+    if_generation_match: int
+    def __init__(self, accepted_output_modes: _Optional[_Iterable[str]] = ..., task_push_notification_config: _Optional[_Union[TaskPushNotificationConfig, _Mapping]] = ..., history_length: _Optional[int] = ..., timeline_length: _Optional[int] = ..., return_immediately: _Optional[bool] = ..., if_generation_match: _Optional[int] = ...) -> None: ...
 
 class Task(_message.Message):
-    __slots__ = ("id", "context_id", "status", "artifacts", "history", "metadata")
+    __slots__ = ("id", "context_id", "status", "artifacts", "history", "timeline", "metadata", "generation")
     ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     ARTIFACTS_FIELD_NUMBER: _ClassVar[int]
     HISTORY_FIELD_NUMBER: _ClassVar[int]
+    TIMELINE_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
     id: str
     context_id: str
     status: TaskStatus
     artifacts: _containers.RepeatedCompositeFieldContainer[Artifact]
     history: _containers.RepeatedCompositeFieldContainer[Message]
+    timeline: _containers.RepeatedCompositeFieldContainer[TimelineEntry]
     metadata: _struct_pb2.Struct
-    def __init__(self, id: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., artifacts: _Optional[_Iterable[_Union[Artifact, _Mapping]]] = ..., history: _Optional[_Iterable[_Union[Message, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    generation: int
+    def __init__(self, id: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., artifacts: _Optional[_Iterable[_Union[Artifact, _Mapping]]] = ..., history: _Optional[_Iterable[_Union[Message, _Mapping]]] = ..., timeline: _Optional[_Iterable[_Union[TimelineEntry, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., generation: _Optional[int] = ...) -> None: ...
 
 class TaskStatus(_message.Message):
     __slots__ = ("state", "message", "timestamp")
@@ -122,48 +130,82 @@ class Message(_message.Message):
     def __init__(self, message_id: _Optional[str] = ..., context_id: _Optional[str] = ..., task_id: _Optional[str] = ..., role: _Optional[_Union[Role, str]] = ..., parts: _Optional[_Iterable[_Union[Part, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., extensions: _Optional[_Iterable[str]] = ..., reference_task_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class Artifact(_message.Message):
-    __slots__ = ("artifact_id", "name", "description", "parts", "metadata", "extensions")
+    __slots__ = ("artifact_id", "name", "description", "parts", "metadata", "extensions", "start_generation", "end_generation", "role")
     ARTIFACT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     PARTS_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
     EXTENSIONS_FIELD_NUMBER: _ClassVar[int]
+    START_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    END_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
     artifact_id: str
     name: str
     description: str
     parts: _containers.RepeatedCompositeFieldContainer[Part]
     metadata: _struct_pb2.Struct
     extensions: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, artifact_id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., parts: _Optional[_Iterable[_Union[Part, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., extensions: _Optional[_Iterable[str]] = ...) -> None: ...
+    start_generation: int
+    end_generation: int
+    role: Role
+    def __init__(self, artifact_id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., parts: _Optional[_Iterable[_Union[Part, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., extensions: _Optional[_Iterable[str]] = ..., start_generation: _Optional[int] = ..., end_generation: _Optional[int] = ..., role: _Optional[_Union[Role, str]] = ...) -> None: ...
+
+class TimelineEntry(_message.Message):
+    __slots__ = ("message", "status", "generation")
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
+    message: Message
+    status: TaskStatus
+    generation: int
+    def __init__(self, message: _Optional[_Union[Message, _Mapping]] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., generation: _Optional[int] = ...) -> None: ...
+
+class TaskMessageUpdateEvent(_message.Message):
+    __slots__ = ("task_id", "context_id", "message", "metadata", "generation")
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_ID_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
+    task_id: str
+    context_id: str
+    message: Message
+    metadata: _struct_pb2.Struct
+    generation: int
+    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., message: _Optional[_Union[Message, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., generation: _Optional[int] = ...) -> None: ...
 
 class TaskStatusUpdateEvent(_message.Message):
-    __slots__ = ("task_id", "context_id", "status", "metadata")
+    __slots__ = ("task_id", "context_id", "status", "metadata", "generation")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     context_id: str
     status: TaskStatus
     metadata: _struct_pb2.Struct
-    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    generation: int
+    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., generation: _Optional[int] = ...) -> None: ...
 
 class TaskArtifactUpdateEvent(_message.Message):
-    __slots__ = ("task_id", "context_id", "artifact", "append", "last_chunk", "metadata")
+    __slots__ = ("task_id", "context_id", "artifact", "append", "last_chunk", "metadata", "generation")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_ID_FIELD_NUMBER: _ClassVar[int]
     ARTIFACT_FIELD_NUMBER: _ClassVar[int]
     APPEND_FIELD_NUMBER: _ClassVar[int]
     LAST_CHUNK_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     context_id: str
     artifact: Artifact
     append: bool
     last_chunk: bool
     metadata: _struct_pb2.Struct
-    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., artifact: _Optional[_Union[Artifact, _Mapping]] = ..., append: _Optional[bool] = ..., last_chunk: _Optional[bool] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    generation: int
+    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., artifact: _Optional[_Union[Artifact, _Mapping]] = ..., append: _Optional[bool] = ..., last_chunk: _Optional[bool] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., generation: _Optional[int] = ...) -> None: ...
 
 class AuthenticationInfo(_message.Message):
     __slots__ = ("scheme", "credentials")
@@ -233,16 +275,18 @@ class AgentProvider(_message.Message):
     def __init__(self, url: _Optional[str] = ..., organization: _Optional[str] = ...) -> None: ...
 
 class AgentCapabilities(_message.Message):
-    __slots__ = ("streaming", "push_notifications", "extensions", "extended_agent_card")
+    __slots__ = ("streaming", "push_notifications", "extensions", "extended_agent_card", "user_artifacts")
     STREAMING_FIELD_NUMBER: _ClassVar[int]
     PUSH_NOTIFICATIONS_FIELD_NUMBER: _ClassVar[int]
     EXTENSIONS_FIELD_NUMBER: _ClassVar[int]
     EXTENDED_AGENT_CARD_FIELD_NUMBER: _ClassVar[int]
+    USER_ARTIFACTS_FIELD_NUMBER: _ClassVar[int]
     streaming: bool
     push_notifications: bool
     extensions: _containers.RepeatedCompositeFieldContainer[AgentExtension]
     extended_agent_card: bool
-    def __init__(self, streaming: _Optional[bool] = ..., push_notifications: _Optional[bool] = ..., extensions: _Optional[_Iterable[_Union[AgentExtension, _Mapping]]] = ..., extended_agent_card: _Optional[bool] = ...) -> None: ...
+    user_artifacts: bool
+    def __init__(self, streaming: _Optional[bool] = ..., push_notifications: _Optional[bool] = ..., extensions: _Optional[_Iterable[_Union[AgentExtension, _Mapping]]] = ..., extended_agent_card: _Optional[bool] = ..., user_artifacts: _Optional[bool] = ...) -> None: ...
 
 class AgentExtension(_message.Message):
     __slots__ = ("uri", "description", "required", "params")
@@ -287,20 +331,22 @@ class AgentCardSignature(_message.Message):
     def __init__(self, protected: _Optional[str] = ..., signature: _Optional[str] = ..., header: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class TaskPushNotificationConfig(_message.Message):
-    __slots__ = ("tenant", "id", "task_id", "url", "token", "authentication")
+    __slots__ = ("tenant", "id", "task_id", "url", "token", "authentication", "protocol_version")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     URL_FIELD_NUMBER: _ClassVar[int]
     TOKEN_FIELD_NUMBER: _ClassVar[int]
     AUTHENTICATION_FIELD_NUMBER: _ClassVar[int]
+    PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     id: str
     task_id: str
     url: str
     token: str
     authentication: AuthenticationInfo
-    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., task_id: _Optional[str] = ..., url: _Optional[str] = ..., token: _Optional[str] = ..., authentication: _Optional[_Union[AuthenticationInfo, _Mapping]] = ...) -> None: ...
+    protocol_version: str
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., task_id: _Optional[str] = ..., url: _Optional[str] = ..., token: _Optional[str] = ..., authentication: _Optional[_Union[AuthenticationInfo, _Mapping]] = ..., protocol_version: _Optional[str] = ...) -> None: ...
 
 class StringList(_message.Message):
     __slots__ = ("list",)
@@ -485,35 +531,52 @@ class DeviceCodeOAuthFlow(_message.Message):
     def __init__(self, device_authorization_url: _Optional[str] = ..., token_url: _Optional[str] = ..., refresh_url: _Optional[str] = ..., scopes: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class SendMessageRequest(_message.Message):
-    __slots__ = ("tenant", "message", "configuration", "metadata")
+    __slots__ = ("tenant", "message", "configuration", "metadata", "artifact_updates")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     CONFIGURATION_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
+    ARTIFACT_UPDATES_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     message: Message
     configuration: SendMessageConfiguration
     metadata: _struct_pb2.Struct
-    def __init__(self, tenant: _Optional[str] = ..., message: _Optional[_Union[Message, _Mapping]] = ..., configuration: _Optional[_Union[SendMessageConfiguration, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    artifact_updates: _containers.RepeatedCompositeFieldContainer[TaskArtifactUpdateEvent]
+    def __init__(self, tenant: _Optional[str] = ..., message: _Optional[_Union[Message, _Mapping]] = ..., configuration: _Optional[_Union[SendMessageConfiguration, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., artifact_updates: _Optional[_Iterable[_Union[TaskArtifactUpdateEvent, _Mapping]]] = ...) -> None: ...
+
+class StreamRequest(_message.Message):
+    __slots__ = ("tenant", "request", "subscribe")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_FIELD_NUMBER: _ClassVar[int]
+    SUBSCRIBE_FIELD_NUMBER: _ClassVar[int]
+    tenant: str
+    request: SendMessageRequest
+    subscribe: SubscribeToTaskRequest
+    def __init__(self, tenant: _Optional[str] = ..., request: _Optional[_Union[SendMessageRequest, _Mapping]] = ..., subscribe: _Optional[_Union[SubscribeToTaskRequest, _Mapping]] = ...) -> None: ...
 
 class GetTaskRequest(_message.Message):
-    __slots__ = ("tenant", "id", "history_length")
+    __slots__ = ("tenant", "id", "history_length", "timeline_length", "current_generation")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    TIMELINE_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    CURRENT_GENERATION_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     id: str
     history_length: int
-    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., history_length: _Optional[int] = ...) -> None: ...
+    timeline_length: int
+    current_generation: int
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., history_length: _Optional[int] = ..., timeline_length: _Optional[int] = ..., current_generation: _Optional[int] = ...) -> None: ...
 
 class ListTasksRequest(_message.Message):
-    __slots__ = ("tenant", "context_id", "status", "page_size", "page_token", "history_length", "status_timestamp_after", "include_artifacts")
+    __slots__ = ("tenant", "context_id", "status", "page_size", "page_token", "history_length", "timeline_length", "status_timestamp_after", "include_artifacts")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    TIMELINE_LENGTH_FIELD_NUMBER: _ClassVar[int]
     STATUS_TIMESTAMP_AFTER_FIELD_NUMBER: _ClassVar[int]
     INCLUDE_ARTIFACTS_FIELD_NUMBER: _ClassVar[int]
     tenant: str
@@ -522,9 +585,10 @@ class ListTasksRequest(_message.Message):
     page_size: int
     page_token: str
     history_length: int
+    timeline_length: int
     status_timestamp_after: _timestamp_pb2.Timestamp
     include_artifacts: bool
-    def __init__(self, tenant: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskState, str]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., history_length: _Optional[int] = ..., status_timestamp_after: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., include_artifacts: _Optional[bool] = ...) -> None: ...
+    def __init__(self, tenant: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskState, str]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., history_length: _Optional[int] = ..., timeline_length: _Optional[int] = ..., status_timestamp_after: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., include_artifacts: _Optional[bool] = ...) -> None: ...
 
 class ListTasksResponse(_message.Message):
     __slots__ = ("tasks", "next_page_token", "page_size", "total_size")
@@ -569,12 +633,14 @@ class DeleteTaskPushNotificationConfigRequest(_message.Message):
     def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
 class SubscribeToTaskRequest(_message.Message):
-    __slots__ = ("tenant", "id")
+    __slots__ = ("tenant", "id", "last_seen_generation")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
+    LAST_SEEN_GENERATION_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     id: str
-    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
+    last_seen_generation: int
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., last_seen_generation: _Optional[int] = ...) -> None: ...
 
 class ListTaskPushNotificationConfigsRequest(_message.Message):
     __slots__ = ("tenant", "task_id", "page_size", "page_token")
@@ -603,16 +669,34 @@ class SendMessageResponse(_message.Message):
     def __init__(self, task: _Optional[_Union[Task, _Mapping]] = ..., message: _Optional[_Union[Message, _Mapping]] = ...) -> None: ...
 
 class StreamResponse(_message.Message):
-    __slots__ = ("task", "message", "status_update", "artifact_update")
+    __slots__ = ("task", "message", "status_update", "artifact_update", "message_update", "error")
     TASK_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     STATUS_UPDATE_FIELD_NUMBER: _ClassVar[int]
     ARTIFACT_UPDATE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_UPDATE_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
     task: Task
     message: Message
     status_update: TaskStatusUpdateEvent
     artifact_update: TaskArtifactUpdateEvent
-    def __init__(self, task: _Optional[_Union[Task, _Mapping]] = ..., message: _Optional[_Union[Message, _Mapping]] = ..., status_update: _Optional[_Union[TaskStatusUpdateEvent, _Mapping]] = ..., artifact_update: _Optional[_Union[TaskArtifactUpdateEvent, _Mapping]] = ...) -> None: ...
+    message_update: TaskMessageUpdateEvent
+    error: StreamError
+    def __init__(self, task: _Optional[_Union[Task, _Mapping]] = ..., message: _Optional[_Union[Message, _Mapping]] = ..., status_update: _Optional[_Union[TaskStatusUpdateEvent, _Mapping]] = ..., artifact_update: _Optional[_Union[TaskArtifactUpdateEvent, _Mapping]] = ..., message_update: _Optional[_Union[TaskMessageUpdateEvent, _Mapping]] = ..., error: _Optional[_Union[StreamError, _Mapping]] = ...) -> None: ...
+
+class StreamError(_message.Message):
+    __slots__ = ("task_id", "code", "message", "reference_id", "metadata")
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    REFERENCE_ID_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    task_id: str
+    code: str
+    message: str
+    reference_id: str
+    metadata: _struct_pb2.Struct
+    def __init__(self, task_id: _Optional[str] = ..., code: _Optional[str] = ..., message: _Optional[str] = ..., reference_id: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class ListTaskPushNotificationConfigsResponse(_message.Message):
     __slots__ = ("configs", "next_page_token")

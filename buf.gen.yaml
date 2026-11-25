@@ -2,7 +2,8 @@
 version: v2
 inputs:
   - git_repo: https://github.com/a2aproject/A2A.git
-    ref: v1.0.0
+    # A2A 1.1 draft (dev-1.1); move to the v1.1.0 tag once it is released.
+    ref: 24bbb09886f51972584c3dfb0449c9a67b26c97d
     subdir: specification
 managed:
   enabled: true
@@ -24,8 +25,8 @@ plugins:
     out: src/a2a/types
   # Generate python service code.
   # Generates *_pb2_grpc.py
-  - remote: buf.build/grpc/python
+  - remote: buf.build/grpc/python:v1.74.0
     out: src/a2a/types
   # Generates *_pb2.pyi files.
-  - remote: buf.build/protocolbuffers/pyi
+  - remote: buf.build/protocolbuffers/pyi:v36.2
     out: src/a2a/types

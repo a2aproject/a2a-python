@@ -636,9 +636,17 @@ async def test_end_to_end_input_required(transport_setups):
 @pytest.mark.parametrize(
     'empty_request, expected_fields',
     [
-        (
+        pytest.param(
             SendMessageRequest(),
             {'message'},
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    'A2A 1.1 no longer marks message REQUIRED; validated '
+                    'with client-written artifacts, '
+                    'https://github.com/a2aproject/a2a-python/discussions/1449'
+                ),
+            ),
         ),
         (
             SendMessageRequest(message=Message()),
