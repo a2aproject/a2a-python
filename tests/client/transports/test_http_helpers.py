@@ -1,3 +1,5 @@
+import json
+
 from collections.abc import AsyncIterator
 
 import pytest
@@ -229,9 +231,9 @@ def test_sse_event_source_keeps_caller_accept_whatever_its_case(
             id='invalid-utf8',
         ),
         pytest.param(
-            b'[' * 10000 + b']' * 10000,
-            RecursionError,
-            id='deeply-nested',
+            b'{oops',
+            json.JSONDecodeError,
+            id='malformed-json',
         ),
     ],
 )
