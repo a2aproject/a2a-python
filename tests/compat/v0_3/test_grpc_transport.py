@@ -1,4 +1,5 @@
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -7,7 +8,7 @@ import pytest
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.optionals import Channel
-from a2a.compat.v0_3 import a2a_v0_3_pb2
+from a2a.compat.v0_3 import a2a_v0_3_pb2, a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
@@ -23,7 +24,12 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     TaskPushNotificationConfig,
 )
-from a2a.utils.errors import TaskNotFoundError, UnsupportedOperationError
+from a2a.utils.errors import (
+    A2A_ERROR_REASONS,
+    InvalidParamsError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
+)
 from google.protobuf import any_pb2, empty_pb2
 from google.rpc import error_details_pb2, status_pb2
 
@@ -278,3 +284,196 @@ async def test_compat_grpc_transport_passes_context_timeout(
 
     stub_mock.assert_called_once()
     assert stub_mock.call_args.kwargs['timeout'] == 12.5
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+@pytest.mark.parametrize('streaming', [False, True], ids=['unary', 'stream'])
+@pytest.mark.parametrize('reverse_details', [False, True])
+@pytest.mark.parametrize(
+    'case', ['metadata', 'validation', 'validation_only', 'foreign', 'empty']
+)
+async def test_compat_grpc_error_metadata(
+    streaming: bool, reverse_details: bool, case: str
+) -> None:
+    """ErrorInfo metadata and BadRequest violations are preserved in A2AError.data."""
+    error_cls = (
+        InvalidParamsError
+        if case in ('validation', 'validation_only')
+        else TaskNotFoundError
+    )
+    code = (
+        grpc.StatusCode.INVALID_ARGUMENT
+        if case in ('validation', 'validation_only')
+        else grpc.StatusCode.NOT_FOUND
+    )
+    metadata: dict[str, str] = (
+        {} if case in ('empty', 'validation_only') else {'taskId': 'job-1'}
+    )
+    expected: dict[str, Any] | None = dict(metadata) or None
+    error_info = error_details_pb2.ErrorInfo(
+        reason=A2A_ERROR_REASONS[error_cls],
+        domain='a2a-protocol.org',
+        metadata=metadata,
+    )
+    details = [any_pb2.Any()]
+    details[0].Pack(error_info)
+
+    if case == 'validation':
+        error_info.metadata['errors'] = 'must-not-replace-field-violations'
+        details[0].Pack(error_info)
+        bad_request = error_details_pb2.BadRequest()
+        bad_request.field_violations.add(field='id', description='invalid id')
+        detail = any_pb2.Any()
+        detail.Pack(bad_request)
+        details.append(detail)
+        expected = {
+            **metadata,
+            'errors': [{'field': 'id', 'message': 'invalid id'}],
+        }
+    elif case == 'validation_only':
+        bad_request = error_details_pb2.BadRequest()
+        bad_request.field_violations.add(field='id', description='invalid id')
+        detail = any_pb2.Any()
+        detail.Pack(bad_request)
+        details.append(detail)
+        expected = {'errors': [{'field': 'id', 'message': 'invalid id'}]}
+    elif case == 'foreign':
+        detail = any_pb2.Any()
+        detail.Pack(
+            error_details_pb2.ErrorInfo(
+                reason=A2A_ERROR_REASONS[error_cls],
+                domain='provider.example',
+                metadata={'provider': 'not-A2A-data'},
+            )
+        )
+        details.append(detail)
+
+    if reverse_details:
+        details.reverse()
+
+    message = 'Cannot access task'
+    status = status_pb2.Status(
+        code=code.value[0], message=message, details=details
+    )
+    trailing = (('grpc-status-details-bin', status.SerializeToString()),)
+
+    class RejectingV03Agent(a2a_v0_3_pb2_grpc.A2AServiceServicer):
+        async def GetTask(
+            self,
+            request: a2a_v0_3_pb2.GetTaskRequest,
+            context: grpc.aio.ServicerContext,
+        ) -> a2a_v0_3_pb2.Task:
+            context.set_trailing_metadata(trailing)
+            await context.abort(code, message)
+            return a2a_v0_3_pb2.Task()
+
+        async def TaskSubscription(
+            self,
+            request: a2a_v0_3_pb2.TaskSubscriptionRequest,
+            context: grpc.aio.ServicerContext,
+        ) -> AsyncIterator[a2a_v0_3_pb2.StreamResponse]:
+            context.set_trailing_metadata(trailing)
+            await context.abort(code, message)
+            yield a2a_v0_3_pb2.StreamResponse()
+
+    server = grpc.aio.server()
+    a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(
+        RejectingV03Agent(), server
+    )
+    port = server.add_insecure_port('127.0.0.1:0')
+    assert port > 0
+    await server.start()
+    try:
+        async with grpc.aio.insecure_channel(
+            f'127.0.0.1:{port}', options=[('grpc.enable_http_proxy', 0)]
+        ) as channel:
+            transport = CompatGrpcTransport(channel, None)
+            with pytest.raises(error_cls) as exc:
+                if streaming:
+                    _ = [
+                        event
+                        async for event in transport.subscribe(
+                            SubscribeToTaskRequest(id='job-1')
+                        )
+                    ]
+                else:
+                    await transport.get_task(GetTaskRequest(id='job-1'))
+            assert str(exc.value) == message
+            assert exc.value.data == expected
+    finally:
+        await server.stop(None)
+
+
+@pytest.mark.asyncio
+async def test_compat_grpc_error_bad_request_without_error_info_stays_client_error() -> (
+    None
+):
+    """A BadRequest detail without a matching A2A ErrorInfo keeps A2AClientError."""
+    bad_request = error_details_pb2.BadRequest()
+    bad_request.field_violations.add(field='id', description='invalid id')
+    detail = any_pb2.Any()
+    detail.Pack(bad_request)
+    status = status_pb2.Status(
+        code=grpc.StatusCode.INVALID_ARGUMENT.value[0],
+        message='bad argument',
+        details=[detail],
+    )
+    error = grpc.aio.AioRpcError(
+        code=grpc.StatusCode.INVALID_ARGUMENT,
+        initial_metadata=grpc.aio.Metadata(),
+        trailing_metadata=grpc.aio.Metadata(
+            ('grpc-status-details-bin', status.SerializeToString()),
+        ),
+        details='bad argument',
+    )
+    transport = _transport_raising(error)
+
+    with pytest.raises(A2AClientError) as exc_info:
+        await transport.get_task(GetTaskRequest(id='t1'))
+
+    assert type(exc_info.value) is A2AClientError
+
+
+@pytest.mark.asyncio
+async def test_compat_grpc_error_unknown_a2a_reason_does_not_overwrite_known_error() -> (
+    None
+):
+    """A trailing unknown A2A ErrorInfo reason does not drop an earlier mapped error."""
+    known = any_pb2.Any()
+    known.Pack(
+        error_details_pb2.ErrorInfo(
+            reason='TASK_NOT_FOUND',
+            domain='a2a-protocol.org',
+            metadata={'taskId': 'job-1'},
+        )
+    )
+    unknown = any_pb2.Any()
+    unknown.Pack(
+        error_details_pb2.ErrorInfo(
+            reason='UNKNOWN_FUTURE_REASON',
+            domain='a2a-protocol.org',
+        )
+    )
+    debug_info = any_pb2.Any()
+    debug_info.Pack(error_details_pb2.DebugInfo(detail='extra context'))
+    status = status_pb2.Status(
+        code=grpc.StatusCode.NOT_FOUND.value[0],
+        message='task missing',
+        details=[known, unknown, debug_info],
+    )
+    error = grpc.aio.AioRpcError(
+        code=grpc.StatusCode.NOT_FOUND,
+        initial_metadata=grpc.aio.Metadata(),
+        trailing_metadata=grpc.aio.Metadata(
+            ('grpc-status-details-bin', status.SerializeToString()),
+        ),
+        details='task missing',
+    )
+    transport = _transport_raising(error)
+
+    with pytest.raises(TaskNotFoundError) as exc_info:
+        await transport.get_task(GetTaskRequest(id='job-1'))
+
+    assert str(exc_info.value) == 'task missing'
+    assert exc_info.value.data == {'taskId': 'job-1'}
