@@ -161,7 +161,7 @@ def test_plugin_turns_legacy_tracing_off(
     assert otel_plugin.legacy_telemetry.otel_enabled is (
         legacy and not turned_off
     )
-    assert ('turning it off' in caplog.text) is turned_off
+    assert ('Turning it off' in caplog.text) is turned_off
 
 
 def test_missing_opentelemetry_raises_with_an_install_hint(monkeypatch):

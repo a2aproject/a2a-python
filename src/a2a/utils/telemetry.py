@@ -159,10 +159,7 @@ __all__ = ['SpanKind']
 
 
 def disable_tracing() -> None:
-    """Turns legacy tracing off for the rest of the process.
-
-    The decorators are applied at import time, so they check this on each call.
-    """
+    """Turns legacy tracing off for the rest of the process."""
     global otel_enabled  # noqa: PLW0603
     otel_enabled = False
 

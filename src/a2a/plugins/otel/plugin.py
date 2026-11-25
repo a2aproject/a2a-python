@@ -103,7 +103,7 @@ class _CallState:
     """A call's span and the attributes the conventions omit when ambiguous."""
 
     span: Span
-    owned: bool = True
+    is_owned: bool = True
     task_id: _UniqueValue = field(default_factory=_UniqueValue)
     context_id: _UniqueValue = field(default_factory=_UniqueValue)
     task_state: _UniqueValue = field(default_factory=_UniqueValue)
@@ -114,11 +114,7 @@ class _CallState:
             self.span.set_attribute(key, value)
 
     def end(self) -> None:
-        """Sets the attributes left with a single value, then ends the span.
-
-        A span the plugin doesn't own belongs to the transport
-        instrumentation, which ends it.
-        """
+        """Sets the attributes left with a single value, then ends the span."""
         for key, tracked in (
             (_semconv.A2A_TASK_ID, self.task_id),
             (_semconv.GEN_AI_CONVERSATION_ID, self.context_id),
@@ -126,7 +122,7 @@ class _CallState:
         ):
             if (value := tracked.get()) is not None:
                 self.set(key, value)
-        if self.owned:
+        if self.is_owned:  ## Can't close the span that server doesn't own
             self.span.end()
 
 
@@ -242,7 +238,7 @@ class OpenTelemetryPlugin(CompletePlugin):
         if current.is_recording() and getattr(current, 'kind', None) is (
             SpanKind.SERVER
         ):
-            state = _CallState(current, owned=False)
+            state = _CallState(current, is_owned=False)
             if 'grpc_context' not in request.context.state:
                 current.update_name(method)
         else:
@@ -263,7 +259,7 @@ class OpenTelemetryPlugin(CompletePlugin):
     ) -> Any:
         """Runs the handler with the plugin's own span current."""
         state = request.context.state.get(_SPAN_KEY)
-        if state is None or not state.owned:
+        if state is None or not state.is_owned:
             return await call()
         with _current(state.span):
             return await call()
