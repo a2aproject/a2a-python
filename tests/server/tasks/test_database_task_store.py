@@ -505,6 +505,15 @@ async def test_list_tasks_filters_mixed_protocol_states(
             ),
             'Invalid page token: dGFzay0xMDA=',
         ),
+        (
+            ListTasksRequest(
+                page_size=2,
+                page_token=urlsafe_b64encode(
+                    b'[' * 2000 + b'0' + b']' * 2000
+                ).decode('ascii'),
+            ),
+            'Invalid page token:',
+        ),
     ],
 )
 async def test_list_tasks_fails(
