@@ -48,6 +48,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.task import validate_task_state_filter
 from a2a.utils.telemetry import SpanKind, trace_class
 from a2a.utils.version_validator import validate_version
 
@@ -97,6 +98,17 @@ else:
         JSONResponse = Any
         Response = Any
         HTTP_413_CONTENT_TOO_LARGE = Any
+
+
+def _list_tasks_status_error(params: Any) -> InvalidParamsError | None:
+    """Returns the error for an invalid raw ListTasks status, if any."""
+    if not isinstance(params, dict) or params.get('status') is None:
+        return None
+    try:
+        validate_task_state_filter(params['status'])
+    except InvalidParamsError as e:
+        return e
+    return None
 
 
 @trace_class(kind=SpanKind.SERVER)
@@ -314,6 +326,13 @@ class JsonRpcDispatcher:
                     request_id,
                     InvalidParamsError(data={'parseError': str(e)}),
                 )
+
+            # Parsing turns an unknown status into TASK_STATE_UNSPECIFIED,
+            # which means "no filter", so check the raw value as well.
+            if method == 'ListTasks' and (
+                status_error := _list_tasks_status_error(params)
+            ):
+                return self._generate_error_response(request_id, status_error)
 
             # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)

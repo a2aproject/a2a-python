@@ -22,6 +22,7 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskPushNotificationConfig,
+    TaskState,
 )
 from a2a.utils._httpx_compat import httpx_lib
 from a2a.utils.errors import (
@@ -374,6 +375,63 @@ class TestRestDispatcherEndpoints:
         if value.strip():
             assert value not in response.json()['error']['message']
         mock_handler.on_list_tasks.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        'value',
+        [
+            'completed',
+            'TASK_STATE_RUNNING',
+            'TASK_STATE_UNSPECIFIED',
+            '99',
+            '',
+            'private-query-value',
+        ],
+    )
+    async def test_list_tasks_rejects_unknown_status_filter(
+        self, mock_handler: AsyncMock, value: str
+    ) -> None:
+        app = Starlette(routes=create_rest_routes(mock_handler))
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url='http://test',
+            trust_env=False,
+        ) as client:
+            response = await client.get(
+                '/tasks',
+                params={'status': value},
+                headers={'a2a-version': '1.0'},
+            )
+
+        assert response.status_code == 400
+        error = response.json()['error']
+        assert error['status'] == 'INVALID_ARGUMENT'
+        assert 'status' in error['message']
+        assert 'TASK_STATE_COMPLETED' in error['message']
+        if value:
+            assert value not in error['message']
+        violations = [
+            v for d in error['details'] for v in d.get('fieldViolations', [])
+        ]
+        assert [v['field'] for v in violations] == ['status']
+        mock_handler.on_list_tasks.assert_not_awaited()
+
+    async def test_list_tasks_passes_known_status_filter(
+        self, mock_handler: AsyncMock
+    ) -> None:
+        app = Starlette(routes=create_rest_routes(mock_handler))
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url='http://test',
+            trust_env=False,
+        ) as client:
+            response = await client.get(
+                '/tasks?status=completed&status=TASK_STATE_COMPLETED',
+                headers={'a2a-version': '1.0'},
+            )
+
+        assert response.status_code == 200
+        params = mock_handler.on_list_tasks.call_args[0][0]
+        assert params.status == TaskState.TASK_STATE_COMPLETED
 
     async def test_get_push_notification(
         self, rest_dispatcher_instance, mock_handler

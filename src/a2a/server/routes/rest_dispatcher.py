@@ -29,6 +29,7 @@ from a2a.utils.errors import (
     InvalidRequestError,
     TaskNotFoundError,
 )
+from a2a.utils.task import validate_task_state_filter
 from a2a.utils.telemetry import SpanKind, trace_class
 from a2a.utils.version_validator import validate_version
 
@@ -353,6 +354,12 @@ class RestDispatcher:
         async def _handler(
             context: ServerCallContext,
         ) -> a2a_pb2.ListTasksResponse:
+            # Parsing turns an unknown status into TASK_STATE_UNSPECIFIED,
+            # which means "no filter", so check the raw value first.
+            if 'status' in request.query_params:
+                validate_task_state_filter(
+                    request.query_params.getlist('status')[-1]
+                )
             proto_utils.parse_params(request.query_params, params)
             return await self.request_handler.on_list_tasks(params, context)
 

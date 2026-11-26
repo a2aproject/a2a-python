@@ -844,3 +844,63 @@ class TestJsonRpcDispatcherMethodRouting:
 
 if __name__ == '__main__':
     pytest.main([__file__])
+
+
+class TestListTasksStatusFilter:
+    """An unknown ListTasks status must not be turned into "no filter"."""
+
+    @pytest.mark.parametrize(
+        'status',
+        [
+            'completed',
+            'TASK_STATE_RUNNING',
+            'TASK_STATE_UNSPECIFIED',
+            '',
+            0,
+            99,
+        ],
+    )
+    def test_unknown_status_is_invalid_params(
+        self, client: TestClient, mock_handler: AsyncMock, status: Any
+    ) -> None:
+        response = client.post(
+            '/', json=_make_jsonrpc_request('ListTasks', {'status': status})
+        )
+
+        error = response.json()['error']
+        assert error['code'] == -32602
+        assert 'TASK_STATE_COMPLETED' in error['message']
+        violations = [
+            v for d in error['data'] for v in d.get('fieldViolations', [])
+        ]
+        assert [v['field'] for v in violations] == ['status']
+        mock_handler.on_list_tasks.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        'status', ['TASK_STATE_COMPLETED', TaskState.TASK_STATE_COMPLETED]
+    )
+    def test_known_status_reaches_the_handler(
+        self, client: TestClient, mock_handler: AsyncMock, status: Any
+    ) -> None:
+        mock_handler.on_list_tasks.return_value = ListTasksResponse()
+
+        response = client.post(
+            '/', json=_make_jsonrpc_request('ListTasks', {'status': status})
+        )
+
+        assert 'error' not in response.json()
+        params = mock_handler.on_list_tasks.call_args[0][0]
+        assert params.status == TaskState.TASK_STATE_COMPLETED
+
+    def test_null_status_means_no_filter(
+        self, client: TestClient, mock_handler: AsyncMock
+    ) -> None:
+        mock_handler.on_list_tasks.return_value = ListTasksResponse()
+
+        response = client.post(
+            '/', json=_make_jsonrpc_request('ListTasks', {'status': None})
+        )
+
+        assert 'error' not in response.json()
+        params = mock_handler.on_list_tasks.call_args[0][0]
+        assert params.status == TaskState.TASK_STATE_UNSPECIFIED
