@@ -300,14 +300,26 @@ async def test_transport_errors_reach_after_client_request():
 async def cancel_blocked_call(
     call: Coroutine[Any, Any, Any], blocked: asyncio.Event
 ) -> asyncio.CancelledError:
-    task = asyncio.create_task(call)
+    cancelled: asyncio.CancelledError | None = None
+
+    async def capture_cancellation() -> None:
+        # Awaiting a cancelled task can raise a new CancelledError instance.
+        nonlocal cancelled
+        try:
+            await call
+        except asyncio.CancelledError as error:
+            cancelled = error
+            raise
+
+    task = asyncio.create_task(capture_cancellation())
     try:
         await asyncio.wait_for(blocked.wait(), timeout=5)
     finally:
         task.cancel()
-        with pytest.raises(asyncio.CancelledError) as cancelled:
+        with pytest.raises(asyncio.CancelledError):
             await task
-    return cancelled.value
+    assert cancelled is not None
+    return cancelled
 
 
 @pytest.mark.asyncio
