@@ -235,11 +235,9 @@ class OpenTelemetryPlugin(CompletePlugin):
 
         method = _semconv.get_method_name(request.method)
         current = trace.get_current_span()
-        if current.is_recording() and getattr(current, 'kind', None) is (
-            SpanKind.SERVER
-        ):
+        if transport := _transport_kind(current):
             state = _CallState(current, is_owned=False)
-            if 'grpc_context' not in request.context.state:
+            if transport == 'http':
                 current.update_name(method)
         else:
             state = _CallState(
@@ -289,6 +287,23 @@ def _finish(state: _CallState, error: BaseException | None) -> None:
             state.span.set_status(StatusCode.ERROR, str(error))
         state.set(_semconv.ERROR_TYPE, _semconv.error_type(error))
     state.end()
+
+
+def _transport_kind(span: Span) -> str | None:
+    """Returns 'http' or 'grpc' for a transport server span, else None."""
+    if not span.is_recording() or getattr(span, 'kind', None) is not (
+        SpanKind.SERVER
+    ):
+        return None
+    attributes = getattr(span, 'attributes', None) or {}
+    if (
+        attributes.get('rpc.system.name', attributes.get('rpc.system'))
+        == 'grpc'
+    ):
+        return 'grpc'
+    if 'http.request.method' in attributes or 'http.method' in attributes:
+        return 'http'
+    return None
 
 
 def _parent_context(request: ServerRequest) -> Context | None:

@@ -926,7 +926,9 @@ async def test_server_enriches_the_transport_span(exporter, make_handler):
     transport_tracer.add_span_processor(SimpleSpanProcessor(exporter))
 
     with transport_tracer.get_tracer('starlette').start_as_current_span(
-        'POST /a2a', kind=SpanKind.SERVER
+        'POST /a2a',
+        kind=SpanKind.SERVER,
+        attributes={'http.request.method': 'POST'},
     ) as transport_span:
         await handler.on_message_send(send_request(), server_context())
         assert transport_span.is_recording()
@@ -1019,13 +1021,30 @@ async def test_server_keeps_the_grpc_span_name(exporter, make_handler):
     name = '/a2a.v1.A2AService/SendMessage'
 
     with transport_tracer.get_tracer('grpc').start_as_current_span(
-        name, kind=SpanKind.SERVER
+        name, kind=SpanKind.SERVER, attributes={'rpc.system': 'grpc'}
     ):
-        await handler.on_message_send(
-            send_request(),
-            ServerCallContext(state={'grpc_context': MagicMock()}),
-        )
+        await handler.on_message_send(send_request(), server_context())
 
     span = only_span(exporter)
     assert span.name == name
     assert span.attributes[_semconv.A2A_METHOD_NAME] == 'SendMessage'
+
+
+@pytest.mark.asyncio
+async def test_server_nests_its_span_under_a_non_transport_span(
+    exporter, make_handler
+):
+    """A server span without HTTP or gRPC attributes gets a child A2A span."""
+    handler = await make_handler()
+    transport_tracer = TracerProvider()
+    transport_tracer.add_span_processor(SimpleSpanProcessor(exporter))
+
+    with transport_tracer.get_tracer('ws').start_as_current_span(
+        'ws /agent', kind=SpanKind.SERVER
+    ) as outer:
+        await handler.on_message_send(send_request(), server_context())
+
+    child, parent = exporter.get_finished_spans()
+    assert parent.name == 'ws /agent'
+    assert child.name == 'SendMessage'
+    assert child.parent.span_id == outer.get_span_context().span_id
