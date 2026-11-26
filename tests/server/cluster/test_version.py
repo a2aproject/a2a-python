@@ -71,8 +71,9 @@ def test_is_after_missing_asymmetry() -> None:
 
 
 def test_is_after_both_missing_is_false() -> None:
-    # other.is_missing short-circuits to True per the contract.
-    assert TaskVersion.MISSING.is_after(TaskVersion.MISSING) is True
+    # Strict ordering: MISSING is not after itself (nor after any MISSING).
+    assert TaskVersion.MISSING.is_after(TaskVersion.MISSING) is False
+    assert TaskVersion(0).is_after(TaskVersion.MISSING) is False
 
 
 def test_is_after_string_versions() -> None:
