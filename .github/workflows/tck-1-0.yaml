@@ -151,14 +151,28 @@ jobs:
           echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
 
       # No continue-on-error: a refusal, a timeout or a missing report must fail here.
+      #
+      # Invoked as the pinned reader CLI rather than through probityai/probity/actions/observer.
+      # That action hands the reader `${{ github.action_path }}/../../packages/...`, and the
+      # reader rejects any path where absolute().resolve() != absolute() (`symlink_or_noncanonical_path`,
+      # native_reader.py:102) — a `..` segment fails that check by construction when the action is
+      # consumed from another repository. Same pinned commit, same arguments, canonical paths.
       - name: Recompute the packet with the pinned reader
-        uses: probityai/probity/actions/observer@eb1376ab4c5e0db2d761599bf85cb0f8debdb34b
-        with:
-          packet: ${{ github.workspace }}/native-run
-          selection: ${{ runner.temp }}/selection.json
-          selection-sha256: ${{ steps.selection.outputs.sha256 }}
-          output: ${{ runner.temp }}/consumer-receipt
-          timeout: '120'
+        env:
+          SELECTION_SHA: ${{ steps.selection.outputs.sha256 }}
+        run: |
+          SOURCE=$(realpath observer/packages/agent-evidence-observer)
+          PACKET=$(realpath "$PACKET_DIR")
+          SELECTION=$(realpath "$RUNNER_TEMP/selection.json")
+          OUTPUT="$RUNNER_TEMP/consumer-receipt"
+          test ! -e "$OUTPUT" || { echo "refusing to reuse an existing receipt directory"; exit 1; }
+          agent-evidence-read-native \
+            --source-checkout "$SOURCE" \
+            --packet "$PACKET" \
+            --selection "$SELECTION" \
+            --selection-sha256 "$SELECTION_SHA" \
+            --output "$OUTPUT" \
+            --timeout 120
 
       - name: Upload the packet, the selection and the full receipt
         if: always()
