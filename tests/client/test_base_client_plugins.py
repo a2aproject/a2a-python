@@ -1,4 +1,6 @@
-from collections.abc import Awaitable, Callable
+import asyncio
+
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -242,7 +244,9 @@ async def test_stream_stopped_early_gets_final_call():
     await anext(events)
     await events.aclose()
 
-    assert recorder.hooks('after_client_request')[-1].is_final
+    final = recorder.hooks('after_client_request')[-1]
+    assert final.is_final
+    assert final.error is None
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
@@ -291,6 +295,96 @@ async def test_transport_errors_reach_after_client_request():
         'wrap_exit',
         'after_client_request',
     ]
+
+
+async def cancel_blocked_call(
+    call: Coroutine[Any, Any, Any], blocked: asyncio.Event
+) -> asyncio.CancelledError:
+    task = asyncio.create_task(call)
+    try:
+        await asyncio.wait_for(blocked.wait(), timeout=5)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError) as cancelled:
+            await task
+    return cancelled.value
+
+
+@pytest.mark.asyncio
+async def test_unary_cancellation_reaches_after_client_request() -> None:
+    recorder = Recorder()
+    transport = AsyncMock(spec=ClientTransport)
+    blocked = asyncio.Event()
+
+    async def get_task(
+        request: GetTaskRequest, *, context: ClientCallContext | None = None
+    ) -> Task:
+        blocked.set()
+        return await asyncio.Future[Task]()
+
+    transport.get_task.side_effect = get_task
+    cancelled = await cancel_blocked_call(
+        client(recorder, transport).get_task(GetTaskRequest(id='t-1')),
+        blocked,
+    )
+
+    (request,) = recorder.hooks('before_client_request')
+    (response,) = recorder.hooks('after_client_request')
+    assert response.method == 'get_task'
+    assert response.is_final
+    assert response.payload is None
+    assert response.context is request.context
+    assert response.error is cancelled
+
+
+@pytest.mark.parametrize('method', ['send_message_streaming', 'subscribe'])
+@pytest.mark.asyncio
+async def test_stream_cancellation_reaches_after_client_request(
+    method: str,
+) -> None:
+    recorder = Recorder()
+    transport = AsyncMock(spec=ClientTransport)
+    blocked = asyncio.Event()
+    closed = asyncio.Event()
+    event = status_event(TaskState.TASK_STATE_WORKING)
+
+    async def stream(
+        request: SendMessageRequest | SubscribeToTaskRequest,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> AsyncIterator[StreamResponse]:
+        yield event
+        blocked.set()
+        try:
+            await asyncio.Future[None]()
+        finally:
+            closed.set()
+
+    setattr(transport, method, stream)
+    a2a_client = client(recorder, transport)
+    events = (
+        a2a_client.subscribe(SubscribeToTaskRequest(id='t-1'))
+        if method == 'subscribe'
+        else a2a_client.send_message(send_request())
+    )
+    assert await anext(events) is event
+
+    async def read_event() -> None:
+        await anext(events)
+
+    cancelled = await cancel_blocked_call(read_event(), blocked)
+
+    assert closed.is_set()
+    (request,) = recorder.hooks('before_client_request')
+    first, final = recorder.hooks('after_client_request')
+    assert first.payload is event
+    assert first.is_stream_event
+    assert not first.is_final
+    assert final.is_final
+    assert final.method == method
+    assert final.payload is None
+    assert final.context is request.context
+    assert final.error is cancelled
 
 
 @pytest.mark.asyncio
