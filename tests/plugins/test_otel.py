@@ -143,25 +143,15 @@ def test_plugin_is_enabled_by_default(monkeypatch):
     assert OpenTelemetryPlugin()._enabled
 
 
-@pytest.mark.parametrize(
-    ('legacy', 'plugin_enabled', 'turned_off'),
-    [(True, 'true', True), (False, 'true', False), (True, 'false', False)],
-    ids=['legacy-on', 'legacy-off', 'plugin-off'],
-)
-def test_plugin_turns_legacy_tracing_off(
-    monkeypatch, caplog, legacy, plugin_enabled, turned_off
-):
-    """An enabled plugin turns running legacy tracing off and says so."""
-    monkeypatch.setattr(otel_plugin.legacy_telemetry, 'otel_enabled', legacy)
+@pytest.mark.parametrize('plugin_enabled', ['true', 'false'])
+def test_plugin_turns_legacy_tracing_off(monkeypatch, plugin_enabled):
+    """Constructing the plugin turns legacy tracing off, even when disabled."""
+    monkeypatch.setattr(otel_plugin.legacy_telemetry, 'otel_enabled', True)
     monkeypatch.setenv(otel_plugin.ENABLED_ENV_VAR, plugin_enabled)
 
-    with caplog.at_level('WARNING', logger=otel_plugin.__name__):
-        OpenTelemetryPlugin()
+    OpenTelemetryPlugin()
 
-    assert otel_plugin.legacy_telemetry.otel_enabled is (
-        legacy and not turned_off
-    )
-    assert ('Turning it off' in caplog.text) is turned_off
+    assert not otel_plugin.legacy_telemetry.otel_enabled
 
 
 def test_missing_opentelemetry_raises_with_an_install_hint(monkeypatch):
@@ -693,10 +683,10 @@ async def test_trace_context_is_propagated(
 
     transport = AsyncMock(spec=ClientTransport)
     transport.get_task = get_task
+    context = ClientCallContext(service_parameters=service_parameters)
 
     await make_client(transport).get_task(
-        GetTaskRequest(id='t-1'),
-        context=ClientCallContext(service_parameters=service_parameters),
+        GetTaskRequest(id='t-1'), context=context
     )
 
     span_context = only_span(exporter).context
@@ -706,6 +696,8 @@ async def test_trace_context_is_propagated(
     if service_parameters:
         assert sent['x-api-key'] == 'k'
     assert nested_parent['id'].span_id == span_context.span_id
+    assert context.service_parameters == service_parameters
+    assert context.state == {}
 
 
 @pytest.mark.parametrize(

@@ -162,22 +162,22 @@ class OpenTelemetryPlugin(CompletePlugin):
                 'with: \'pip install "a2a-sdk[telemetry]"\''
             )
 
+        if legacy_telemetry.otel_enabled:
+            legacy_telemetry.disable_tracing()
+            logger.debug(
+                'Both legacy A2A tracing and OpenTelemetryPlugin are '
+                'configured. Legacy OTel tracing is switched off to avoid '
+                'duplicate traces.'
+            )
+
         self._enabled = _env_enabled()
         if not self._enabled:
-            logger.debug(
+            logger.warning(
                 'A2A OpenTelemetry plugin disabled via %s. No spans will '
                 'be reported.',
                 ENABLED_ENV_VAR,
             )
             return
-
-        if legacy_telemetry.otel_enabled:
-            legacy_telemetry.disable_tracing()
-            logger.warning(
-                'Legacy A2A tracing is active. Turning it off so calls are '
-                'not traced twice. Set %s=false to silence this.',
-                legacy_telemetry.ENABLED_ENV_VAR,
-            )
 
         provider: Any = tracer_provider if tracer_provider else trace
         self._tracer: Tracer = provider.get_tracer(
@@ -192,7 +192,6 @@ class OpenTelemetryPlugin(CompletePlugin):
         method = _semconv.get_method_name(request.method)
         span = self._tracer.start_span(method, kind=SpanKind.CLIENT)
         state = _CallState(span)
-        request.context.state[_SPAN_KEY] = state
 
         state.set(_semconv.A2A_METHOD_NAME, method)
         _set_client_request_attributes(state, request)
@@ -200,7 +199,13 @@ class OpenTelemetryPlugin(CompletePlugin):
         carrier = dict(request.context.service_parameters or {})
         with _current(span):
             inject(carrier)
-        request.context.service_parameters = carrier
+        # A copy, so concurrent calls sharing one context don't clash.
+        request.context = request.context.model_copy(
+            update={
+                'state': {**request.context.state, _SPAN_KEY: state},
+                'service_parameters': carrier,
+            }
+        )
 
     async def wrap_client_call(
         self, request: ClientRequest, call: Callable[[], Awaitable[Any]]
