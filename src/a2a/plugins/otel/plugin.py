@@ -235,11 +235,11 @@ class OpenTelemetryPlugin(CompletePlugin):
 
         method = _semconv.get_method_name(request.method)
         current = trace.get_current_span()
-        if transport := _transport_kind(current):
+        if transport := _transport_kind(current):  # Enriching existing span
             state = _CallState(current, is_owned=False)
             if transport == 'http':
                 current.update_name(method)
-        else:
+        else:  # Standalone (creating new span)
             state = _CallState(
                 self._tracer.start_span(
                     method,
