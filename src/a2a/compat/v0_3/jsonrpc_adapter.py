@@ -3,23 +3,26 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator
 from typing import TYPE_CHECKING, Any, get_args
 
-from sse_starlette.sse import EventSourceResponse
-from starlette.responses import JSONResponse
-
 
 if TYPE_CHECKING:
+    from sse_starlette.sse import EventSourceResponse
     from starlette.requests import Request
+    from starlette.responses import JSONResponse
 
     from a2a.server.request_handlers.request_handler import RequestHandler
 
     _package_starlette_installed = True
 else:
     try:
+        from sse_starlette.sse import EventSourceResponse
         from starlette.requests import Request
+        from starlette.responses import JSONResponse
 
         _package_starlette_installed = True
     except ImportError:
+        EventSourceResponse = Any
         Request = Any
+        JSONResponse = Any
 
         _package_starlette_installed = False
 
