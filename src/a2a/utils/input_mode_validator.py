@@ -23,7 +23,9 @@ def validate_input_modes(message: Message, agent_card: AgentCard) -> None:
 
     Media types are compared on type and subtype alone, ignoring case
     (RFC 2045 section 5.1) and parameters, so `Text/Plain; charset=utf-8`
-    matches a card that declares `text/plain`.
+    matches a card that declares `text/plain`. A declared media range
+    (RFC 9110 section 12.5.1) matches by type: `image/*` accepts `image/png`
+    but not `video/mp4`, and `*/*` accepts any media type.
     """
     modes = set(agent_card.default_input_modes)
     for skill in agent_card.skills:
@@ -33,13 +35,23 @@ def validate_input_modes(message: Message, agent_card: AgentCard) -> None:
         return
 
     for part in message.parts:
-        if part.media_type and _essence(part.media_type) not in declared:
+        if part.media_type and not _is_declared(
+            _essence(part.media_type), declared
+        ):
             raise ContentTypeNotSupportedError(
                 message=(
                     f'Media type {part.media_type} is not supported. '
                     f'Supported input modes: {", ".join(sorted(modes))}'
                 )
             )
+
+
+def _is_declared(essence: str, declared: set[str]) -> bool:
+    """Returns whether `essence` is declared exactly or by a media range."""
+    if essence in declared or '*/*' in declared:
+        return True
+    media_type = essence.split('/', 1)[0]
+    return f'{media_type}/*' in declared
 
 
 def _essence(media_type: str) -> str:
