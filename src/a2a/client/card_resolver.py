@@ -109,9 +109,13 @@ def _keep_single_legacy_oauth_flow(scheme: dict[str, Any]) -> None:
     flows = scheme.get('flows')
     if not isinstance(flows, dict):
         return
-    kept, *dropped = [
-        name for name in _LEGACY_OAUTH_FLOW_PRECEDENCE if name in flows
-    ] or [None]
+    # 0.3 serializers may write unused flows as null; ignore those.
+    present = [
+        name
+        for name in _LEGACY_OAUTH_FLOW_PRECEDENCE
+        if flows.get(name) is not None
+    ]
+    kept, *dropped = present or [None]
     if not dropped:
         return
     logger.warning(

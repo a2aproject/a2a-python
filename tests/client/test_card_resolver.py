@@ -727,6 +727,42 @@ class TestParseAgentCard:
             'http://token.example.com'
         )
 
+    def test_parse_030_agent_card_with_null_oauth_flows(self) -> None:
+        # 0.3 serializers write unused flows as null; they are not flows.
+        auth_code = {
+            'authorizationUrl': 'http://auth.example.com',
+            'tokenUrl': 'http://token.example.com',
+            'scopes': {'read': 'Read access'},
+        }
+        data = {
+            'name': 'OAuth Agent',
+            'description': 'One OAuth flow, others null',
+            'version': '1.0',
+            'url': 'http://agent.example.com/api',
+            'protocolVersion': '0.3.0',
+            'securitySchemes': {
+                'test_oauth': {
+                    'type': 'oauth2',
+                    'flows': {
+                        'authorizationCode': copy.deepcopy(auth_code),
+                        'clientCredentials': None,
+                        'implicit': None,
+                        'password': None,
+                    },
+                }
+            },
+        }
+
+        card = parse_agent_card(data)
+
+        parsed_flows = card.security_schemes[
+            'test_oauth'
+        ].oauth2_security_scheme.flows
+        assert parsed_flows.WhichOneof('flow') == 'authorization_code'
+        assert parsed_flows.authorization_code.token_url == (
+            'http://token.example.com'
+        )
+
     def test_parse_agent_card_security_scheme_without_in(self) -> None:
         data = {
             'name': 'API Key Agent',
