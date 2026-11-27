@@ -281,13 +281,13 @@ class OpenTelemetryPlugin(CompletePlugin):
             return
 
         del response.context.state[_SPAN_KEY]
-        error = response.error
-        _finish(state, None if isinstance(error, CancelledError) else error)
+        _finish(state, response.error)
 
 
 def _finish(state: _CallState, error: BaseException | None) -> None:
     """Records the error, if any, and ends the call's span."""
-    if error is not None:
+    # A cancelled call (f.e. a timeout) was stopped, it didn't fail.
+    if error is not None and not isinstance(error, CancelledError):
         if state.span.is_recording():
             state.span.set_status(StatusCode.ERROR, str(error))
         state.set(_semconv.ERROR_TYPE, _semconv.error_type(error))

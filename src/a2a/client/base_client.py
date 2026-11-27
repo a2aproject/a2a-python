@@ -1,3 +1,5 @@
+import asyncio
+
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from contextlib import aclosing
 from typing import Any
@@ -450,7 +452,7 @@ class BaseClient(Client):
                     request.payload, method, request.context, transport_call
                 ),
             )
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             error = e
             raise
         finally:
@@ -552,7 +554,7 @@ class BaseClient(Client):
                         )
                     )
                     yield event
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             error = e
             raise
         finally:
