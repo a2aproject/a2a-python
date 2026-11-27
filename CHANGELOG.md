@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.4.0](https://github.com/a2aproject/a2a-python/compare/v1.3.1...v1.4.0) (2026-11-27)
+
+
+### Features
+
+* add OpenTelemetry plugin ([#1536](https://github.com/a2aproject/a2a-python/issues/1536)) ([211d13a](https://github.com/a2aproject/a2a-python/commit/211d13a58ea24978e53c5a8842ed0bcaf401c8be))
+* Add plugin wrap call hooks to Client and Server plugins ([#1491](https://github.com/a2aproject/a2a-python/issues/1491)) ([12b7847](https://github.com/a2aproject/a2a-python/commit/12b7847fb8806ae4975bee11d425b4ea08066c20))
+* Add selected interface to client ([#1492](https://github.com/a2aproject/a2a-python/issues/1492)) ([c76e640](https://github.com/a2aproject/a2a-python/commit/c76e64047989d8b2eac2ce1bdde2b104c8ca5df5))
+* **server:** add opt-in rejection of requests missing a required extension ([#1482](https://github.com/a2aproject/a2a-python/issues/1482)) ([bdef0c3](https://github.com/a2aproject/a2a-python/commit/bdef0c3c036602cfdc7aedc7119fe81b77820f46))
+
+
+### Bug Fixes
+
+* **client:** decode SSE streams as UTF-8 ([#1489](https://github.com/a2aproject/a2a-python/issues/1489)) ([830049d](https://github.com/a2aproject/a2a-python/commit/830049d7cbb6c4518b4f59347266f4d8fef27c80))
+* **client:** map JSON-RPC error bodies sent with a non-2xx HTTP status ([#1476](https://github.com/a2aproject/a2a-python/issues/1476)) ([18244bb](https://github.com/a2aproject/a2a-python/commit/18244bb2a6d46864280b638c11d8b7faee465c11))
+* **client:** notify plugins when requests are cancelled ([#1532](https://github.com/a2aproject/a2a-python/issues/1532)) ([4702c54](https://github.com/a2aproject/a2a-python/commit/4702c54e52dff035b535cf8fecd484dc8e8072d0))
+* **client:** preserve rich gRPC error metadata ([#1503](https://github.com/a2aproject/a2a-python/issues/1503)) ([14db12a](https://github.com/a2aproject/a2a-python/commit/14db12aa4a1051973dd9dd59f9adfafc857dd07a))
+* **client:** skip incompatible transport bindings when selecting an interface ([#1510](https://github.com/a2aproject/a2a-python/issues/1510)) ([4a96796](https://github.com/a2aproject/a2a-python/commit/4a967967c3bf32593894456cbb0aa3c1f92fb03d))
+* **compat:** accept an empty body when deleting a v0.3 REST push config ([#1502](https://github.com/a2aproject/a2a-python/issues/1502)) ([f077eb0](https://github.com/a2aproject/a2a-python/commit/f077eb0286655cb3ea6a4c0ba55bccadd91d9cb9))
+* **compat:** honor ClientCallContext.timeout in the v0.3 gRPC client ([#1497](https://github.com/a2aproject/a2a-python/issues/1497)) ([06cd528](https://github.com/a2aproject/a2a-python/commit/06cd52892e456ce7e9f81f400f816a729a60dece))
+* **compat:** percent-encode ids in v0.3 REST push config delete path ([#1486](https://github.com/a2aproject/a2a-python/issues/1486)) ([270972d](https://github.com/a2aproject/a2a-python/commit/270972d01e590ec2f6d3feb9b6d8682394b39745))
+* **compat:** raise A2A errors for malformed v0.3 JSON-RPC responses ([#1435](https://github.com/a2aproject/a2a-python/issues/1435)) ([e7114a3](https://github.com/a2aproject/a2a-python/commit/e7114a3ea2c3aeaba7daec3f3e5625c28d42122a))
+* **compat:** return result: null for v0.3 pushNotificationConfig/delete ([#1481](https://github.com/a2aproject/a2a-python/issues/1481)) ([af9437f](https://github.com/a2aproject/a2a-python/commit/af9437fea8f32ac08bc7e659e4d483224d2dc561))
+* **compat:** take the task from the path in v0.3 REST push config set ([#1500](https://github.com/a2aproject/a2a-python/issues/1500)) ([d25c7f7](https://github.com/a2aproject/a2a-python/commit/d25c7f7ee273a64eae27e717d3f7b2c31e8395b0))
+* **rest:** serve HTTP+JSON error responses as application/a2a+json ([#1446](https://github.com/a2aproject/a2a-python/issues/1446)) ([0fc0d3a](https://github.com/a2aproject/a2a-python/commit/0fc0d3ae281e878690258fa08aeaee24847d1b35))
+* **server:** report asyncio.CancelledError to ExecutionPlugin.after_execution ([#1514](https://github.com/a2aproject/a2a-python/issues/1514)) ([b5597a2](https://github.com/a2aproject/a2a-python/commit/b5597a230d53d453137af9a260398b5629a05f4c))
+* **server:** serialize ListTasks tasks like GetTask ([#1477](https://github.com/a2aproject/a2a-python/issues/1477)) ([6025dfc](https://github.com/a2aproject/a2a-python/commit/6025dfc8ba96e73e72478f48df03fc0b5fb721a4))
+
 ## [1.3.1](https://github.com/a2aproject/a2a-python/compare/v1.3.0...v1.3.1) (2026-11-16)
 
 
