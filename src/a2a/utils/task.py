@@ -173,7 +173,7 @@ def decode_list_tasks_cursor(page_token: str) -> ListTasksCursor | None:
     padded = page_token + '=' * (-len(page_token) % 4)
     try:
         data = json.loads(urlsafe_b64decode(padded.encode(_ENCODING)))
-    except (binascii.Error, ValueError):
+    except (binascii.Error, ValueError, RecursionError):
         return None
     if not isinstance(data, dict) or data.keys() != {'ts', 'id'}:
         return None

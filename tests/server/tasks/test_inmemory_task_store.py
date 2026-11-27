@@ -431,9 +431,25 @@ async def test_list_tasks_pages_through_tasks_without_timestamps() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_tasks_rejects_malformed_cursor_token() -> None:
+@pytest.mark.parametrize(
+    'payload',
+    [
+        pytest.param(b'{"ts":"soon","id":"t1"}', id='invalid-timestamp'),
+        pytest.param(
+            b'[' * 2_000 + b'0' + b']' * 2_000,
+            id='deep-array',
+        ),
+        pytest.param(
+            b'{"ts":' + b'[' * 2_000 + b'0' + b']' * 2_000 + b',"id":"t1"}',
+            id='deep-object',
+        ),
+    ],
+)
+async def test_list_tasks_rejects_malformed_cursor_token(
+    payload: bytes,
+) -> None:
     store = await _store_with_five_tasks()
-    token = urlsafe_b64encode(b'{"ts":"soon","id":"t1"}').decode().rstrip('=')
+    token = urlsafe_b64encode(payload).decode().rstrip('=')
 
     with pytest.raises(InvalidParamsError):
         await store.list(
