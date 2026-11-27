@@ -1163,6 +1163,35 @@ async def test_list_tasks_pages_through_ties_and_missing_timestamps(
 
 
 @pytest.mark.asyncio
+async def test_list_tasks_within_one_second(
+    db_store_parameterized: DatabaseTaskStore,
+) -> None:
+    store = db_store_parameterized
+    for task_id, nanos in (
+        ('z-early', 123_456_000),
+        ('a-middle', 124_000_000),
+        ('latest', 800_000_000),
+    ):
+        task = _task(task_id, 1_700_000_000)
+        task.status.timestamp.nanos = nanos
+        await store.save(task, TEST_CONTEXT)
+
+    assert await _list_all(store, page_size=1) == [
+        'latest',
+        'a-middle',
+        'z-early',
+    ]
+    request = ListTasksRequest()
+    request.status_timestamp_after.FromSeconds(1_700_000_000)
+    request.status_timestamp_after.nanos = 124_000_000
+    page = await store.list(request, TEST_CONTEXT)
+    assert [task.id for task in page.tasks] == ['latest', 'a-middle']
+    assert page.total_size == 2
+    request.status_timestamp_after.nanos = 900_000_000
+    assert (await store.list(request, TEST_CONTEXT)).total_size == 0
+
+
+@pytest.mark.asyncio
 async def test_list_tasks_rejects_malformed_cursor_token(
     db_store_parameterized: DatabaseTaskStore,
 ) -> None:

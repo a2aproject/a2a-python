@@ -59,6 +59,7 @@ FastAPI
 fernet
 fetchrow
 fetchval
+fsp
 GBP
 genai
 getkwargs
@@ -72,6 +73,7 @@ ietf
 importlib
 initdb
 inmemory
+Inno
 INR
 isready
 itk
@@ -94,6 +96,7 @@ lifecycles
 linting
 Llm
 lstrips
+mariadb
 mcp
 middleware
 mikeas
