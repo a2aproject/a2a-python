@@ -16,6 +16,7 @@ from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
 from a2a.types.a2a_pb2 import (
+    AuthenticationInfo,
     StreamResponse,
     Task,
     TaskPushNotificationConfig,
@@ -137,6 +138,45 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
             task_id, MINIMAL_CALL_CONTEXT
         )
         self.assertEqual(retrieved, [stored])
+
+    async def test_set_info_and_reads_do_not_share_stored_config(
+        self,
+    ) -> None:
+        task_id = 'task_copy'
+        original_url = 'https://callback.example.test/original'
+        config = TaskPushNotificationConfig(
+            id='cfg-copy',
+            url=original_url,
+            authentication=AuthenticationInfo(
+                scheme='Bearer', credentials='fake-token'
+            ),
+        )
+        returned = await self.config_store.set_info(
+            task_id, config, MINIMAL_CALL_CONTEXT
+        )
+        expected = TaskPushNotificationConfig()
+        expected.CopyFrom(returned)
+
+        config.url = 'https://callback.example.test/input'
+        config.authentication.credentials = 'fake-input'
+        returned.url = 'https://callback.example.test/returned'
+        returned.authentication.credentials = 'fake-returned'
+        for item in await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        ):
+            item.url = 'https://callback.example.test/get-info'
+            item.authentication.credentials = 'fake-get-info'
+        for item in await self.config_store.get_info_for_dispatch(task_id):
+            item.url = 'https://callback.example.test/dispatch'
+            item.authentication.credentials = 'fake-dispatch'
+
+        assert expected.url == original_url
+        assert await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        ) == [expected]
+        assert await self.config_store.get_info_for_dispatch(task_id) == [
+            expected
+        ]
 
     async def test_set_info_appends_to_existing_config(self) -> None:
         task_id = 'task_update'

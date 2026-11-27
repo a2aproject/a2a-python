@@ -13,6 +13,14 @@ from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 logger = logging.getLogger(__name__)
 
 
+def _copy_config(
+    notification_config: TaskPushNotificationConfig,
+) -> TaskPushNotificationConfig:
+    stored = TaskPushNotificationConfig()
+    stored.CopyFrom(notification_config)
+    return stored
+
+
 class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
     """In-memory implementation of PushNotificationConfigStore interface.
 
@@ -67,9 +75,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
                 owner,
             )
 
-        result = TaskPushNotificationConfig()
-        result.CopyFrom(stored)
-        return result
+        return _copy_config(stored)
 
     async def get_info(
         self,
@@ -83,7 +89,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         owner = self.owner_resolver(context)
         with self.lock:
             owner_infos = self._get_owner_push_notification_infos(owner)
-            return list(owner_infos.get(task_id, []))
+            return [_copy_config(item) for item in owner_infos.get(task_id, [])]
 
     async def get_info_for_dispatch(
         self,
@@ -96,7 +102,9 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         with self.lock:
             results: list[TaskPushNotificationConfig] = []
             for all_configs in self._push_notification_infos.values():
-                results.extend(all_configs.get(task_id, []))
+                results.extend(
+                    _copy_config(item) for item in all_configs.get(task_id, [])
+                )
             return results
 
     async def delete_info(
