@@ -39,6 +39,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils._httpx_compat import AsyncClient, HTTPStatusError
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -103,8 +104,11 @@ class CompatJsonRpcTransport(ClientTransport):
 
         if kind == 'task':
             return SendMessageResponse(
-                task=conversions.to_core_task(
-                    types_v03.Task.model_validate(result_dict)
+                task=apply_history_length(
+                    conversions.to_core_task(
+                        types_v03.Task.model_validate(result_dict)
+                    ),
+                    request.configuration,
                 )
             )
         if kind == 'message':
@@ -138,6 +142,10 @@ class CompatJsonRpcTransport(ClientTransport):
             dict(rpc_request.data),
             context,
         ):
+            if event.HasField('task'):
+                event.task.CopyFrom(
+                    apply_history_length(event.task, request.configuration)
+                )
             yield event
 
     async def get_task(
@@ -160,7 +168,11 @@ class CompatJsonRpcTransport(ClientTransport):
             dict(rpc_request.data), context
         )
         result = response_data['result']
-        return conversions.to_core_task(types_v03.Task.model_validate(result))
+        # Apply v1.0 history limits after receiving the v0.3 result.
+        return apply_history_length(
+            conversions.to_core_task(types_v03.Task.model_validate(result)),
+            request,
+        )
 
     async def list_tasks(
         self,

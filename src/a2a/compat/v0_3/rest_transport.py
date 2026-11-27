@@ -58,6 +58,7 @@ from a2a.utils._httpx_compat import (
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, MethodNotFoundError
 from a2a.utils.proto_utils import warn_on_missing_required_fields
+from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -127,8 +128,11 @@ class CompatRestTransport(ClientTransport):
         which = resp_proto.WhichOneof('payload')
         if which == 'task':
             return SendMessageResponse(
-                task=conversions.to_core_task(
-                    proto_utils.FromProto.task(resp_proto.task)
+                task=apply_history_length(
+                    conversions.to_core_task(
+                        proto_utils.FromProto.task(resp_proto.task)
+                    ),
+                    request.configuration,
                 )
             )
         if which == 'msg':
@@ -163,6 +167,10 @@ class CompatRestTransport(ClientTransport):
             context=context,
             json=MessageToDict(req_proto),
         ):
+            if event.HasField('task'):
+                event.task.CopyFrom(
+                    apply_history_length(event.task, request.configuration)
+                )
             yield event
 
     async def get_task(
@@ -185,7 +193,12 @@ class CompatRestTransport(ClientTransport):
         resp_proto = ParseDict(
             response_data, a2a_v0_3_pb2.Task(), ignore_unknown_fields=True
         )
-        return conversions.to_core_task(proto_utils.FromProto.task(resp_proto))
+        # v0.3 has no way to ask for an empty history (0 means unlimited), so
+        # the v1.0 `history_length` semantics are applied to the result here.
+        return apply_history_length(
+            conversions.to_core_task(proto_utils.FromProto.task(resp_proto)),
+            request,
+        )
 
     async def list_tasks(
         self,
