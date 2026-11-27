@@ -195,7 +195,16 @@ class A2ACardResolver:
                 **(http_kwargs or {}),
             )
             response.raise_for_status()
-            agent_card_data = response.json()
+            try:
+                agent_card_data = response.json()
+            except (
+                json.JSONDecodeError,
+                UnicodeDecodeError,
+                RecursionError,
+            ) as e:
+                raise AgentCardResolutionError(
+                    f'Failed to parse JSON for agent card from {target_url}: {e}'
+                ) from e
             logger.info(
                 'Successfully fetched agent card data from %s: %s',
                 target_url,
@@ -208,10 +217,6 @@ class A2ACardResolver:
             raise AgentCardResolutionError(
                 f'Failed to fetch agent card from {target_url} (HTTP {e.response.status_code}): {e}',
                 status_code=e.response.status_code,
-            ) from e
-        except json.JSONDecodeError as e:
-            raise AgentCardResolutionError(
-                f'Failed to parse JSON for agent card from {target_url}: {e}'
             ) from e
         except REQUEST_ERROR as e:
             raise AgentCardResolutionError(
