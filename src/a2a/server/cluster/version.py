@@ -38,10 +38,10 @@ class TaskVersion:
 
     def is_after(self, other: 'TaskVersion') -> bool:
         """Whether `self` is a strictly later version than `other`."""
-        if other.is_missing:
-            return True
         if self.is_missing:
             return False
+        if other.is_missing:
+            return True
         if type(self._value) is not type(other._value):  # noqa: SLF001
             raise TypeError(
                 'Cannot compare TaskVersions with different value types: '
