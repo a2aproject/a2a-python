@@ -279,26 +279,10 @@ class TestGetAgentCard:
             await resolver.get_agent_card()
         assert 'Failed to parse JSON' in str(exc_info.value)
 
-    @pytest.mark.parametrize(
-        ('response_body', 'original_error'),
-        [
-            pytest.param(
-                '{"name": "Caf\u00e9"}'.encode('latin-1'),
-                UnicodeDecodeError,
-                id='latin-1',
-            ),
-            pytest.param(
-                b'{"name": ' + b'[' * 100_000 + b']' * 100_000 + b'}',
-                RecursionError,
-                id='deep-nesting',
-            ),
-        ],
-    )
     @pytest.mark.asyncio
-    async def test_get_agent_card_undecodable_body(
-        self, response_body: bytes, original_error: type[Exception]
-    ) -> None:
-        """Bodies json.loads rejects without a JSONDecodeError still resolve to the documented error."""
+    async def test_get_agent_card_undecodable_body(self) -> None:
+        """A body json.loads rejects with a UnicodeDecodeError resolves to the documented error."""
+        response_body = '{"name": "Caf\u00e9"}'.encode('latin-1')
         transport = httpx_lib.MockTransport(
             lambda _request: httpx_lib.Response(200, content=response_body)
         )
@@ -308,7 +292,25 @@ class TestGetAgentCard:
                 await resolver.get_agent_card()
 
         assert 'Failed to parse JSON' in str(exc_info.value)
-        assert isinstance(exc_info.value.__cause__, original_error)
+        assert isinstance(exc_info.value.__cause__, UnicodeDecodeError)
+
+    @pytest.mark.asyncio
+    async def test_get_agent_card_recursion_error(
+        self, resolver, mock_httpx_client, mock_response
+    ):
+        """A body nested past the decoder's depth limit resolves to the documented error.
+
+        The depth that triggers RecursionError depends on the interpreter
+        (Python 3.14 bounds C recursion by stack size), so it is raised directly.
+        """
+        mock_response.json.side_effect = RecursionError(
+            'maximum recursion depth exceeded while decoding a JSON array'
+        )
+        mock_httpx_client.get.return_value = mock_response
+        with pytest.raises(AgentCardResolutionError) as exc_info:
+            await resolver.get_agent_card()
+        assert 'Failed to parse JSON' in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, RecursionError)
 
     @pytest.mark.asyncio
     async def test_get_agent_card_signature_verifier_error_propagates(
