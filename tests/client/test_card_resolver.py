@@ -9,6 +9,8 @@ import pytest
 
 from a2a.client import A2ACardResolver, AgentCardResolutionError
 from a2a.client.card_resolver import parse_agent_card
+from a2a.compat.v0_3 import types as types_v03
+from a2a.compat.v0_3.conversions import to_core_oauth_flows
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types import AgentCard
 from a2a.types.a2a_pb2 import (
@@ -685,6 +687,45 @@ class TestParseAgentCard:
         # Re-parse from the serialized payload and verify identical to original parsing
         re_parsed_card = parse_agent_card(copy.deepcopy(serialized_data))
         assert re_parsed_card == card
+
+    def test_parse_030_agent_card_with_multiple_oauth_flows(self) -> None:
+        # A 0.3 OAuthFlows may list several flows; the 1.0 one is a oneof.
+        flows = {
+            'authorizationCode': {
+                'authorizationUrl': 'http://auth.example.com',
+                'tokenUrl': 'http://token.example.com',
+                'scopes': {'read': 'Read access'},
+            },
+            'clientCredentials': {
+                'tokenUrl': 'http://token.example.com',
+                'scopes': {'read': 'Read access'},
+            },
+        }
+        data = {
+            'name': 'OAuth Agent',
+            'description': 'Lists two OAuth flows',
+            'version': '1.0',
+            'url': 'http://agent.example.com/api',
+            'protocolVersion': '0.3.0',
+            'security': [{'test_oauth': ['read']}],
+            'securitySchemes': {
+                'test_oauth': {'type': 'oauth2', 'flows': copy.deepcopy(flows)}
+            },
+        }
+
+        card = parse_agent_card(data)
+
+        parsed_flows = card.security_schemes[
+            'test_oauth'
+        ].oauth2_security_scheme.flows
+        expected_flows = to_core_oauth_flows(
+            types_v03.OAuthFlows.model_validate(flows)
+        )
+        assert parsed_flows == expected_flows
+        assert parsed_flows.WhichOneof('flow') == 'client_credentials'
+        assert parsed_flows.client_credentials.token_url == (
+            'http://token.example.com'
+        )
 
     def test_parse_agent_card_security_scheme_without_in(self) -> None:
         data = {
