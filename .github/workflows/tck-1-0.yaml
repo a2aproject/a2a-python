@@ -39,8 +39,9 @@ jobs:
       SUT_JSONRPC_1_0: http://localhost:41241/a2a/jsonrpc
     # Non-blocking on purpose: this is the 1.0 TCK row against the SUT declared in
     # this repository, whose 1.0 support is tracked separately from the gate below.
-    # The run and its reports are retained either way.
-    continue-on-error: true
+    # The run and its reports are retained either way. The tolerance sits on the
+    # TCK step, not the job, so a failing row reads as a warning on a green job
+    # instead of a red check that looks like a conformance failure.
     steps:
       - name: Checkout a2a-python
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
@@ -78,8 +79,10 @@ jobs:
           done
 
       - name: Run TCK 1.0 (jsonrpc, must)
+        continue-on-error: true
+        working-directory: tck/a2a-tck-1-0
         run: |
-          uv run --python 3.15 --project tck/a2a-tck-1-0 run_tck.py \
+          uv run --python 3.15 run_tck.py \
             --sut-host http://localhost:41241 --transport jsonrpc --level must
 
       - name: Upload 1.0 TCK reports
