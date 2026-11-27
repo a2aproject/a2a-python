@@ -115,6 +115,12 @@ class EventConsumer:
         # Set when the producer failed, so a request that failed before any
         # task was created still leaves a FAILED task behind.
         self.producer_failed = False
+        self._current_event_acked = True
+
+    def _ack_event(self) -> None:
+        if not self._current_event_acked:
+            self._current_event_acked = True
+            self.active_task._event_queue_agent.task_done()
 
     async def run(self) -> None:
         """Consumes events from the agent and updates system state."""
@@ -128,13 +134,17 @@ class EventConsumer:
                 event = (
                     await self.active_task._event_queue_agent.dequeue_event()
                 )
+                self._current_event_acked = False
                 logger.debug(
                     'Consumer[%s]: Dequeued event %s',
                     self.active_task._task_id,
                     type(event).__name__,
                 )
 
-                await self._process_event(event)
+                try:
+                    await self._process_event(event)
+                finally:
+                    self._ack_event()
 
         except QueueShutDown:
             logger.debug(
@@ -275,7 +285,7 @@ class EventConsumer:
                         self.active_task._task_id,
                         type(event).__name__,
                     )
-                    self.active_task._event_queue_agent.task_done()
+                    self._ack_event()
                     return
             updated_task = await self._handle_task_event(event)
             handled_event = updated_task if isinstance(event, Task) else event
@@ -467,7 +477,7 @@ class EventConsumer:
             else:
                 await stream.publish(task_id, versioned_event)
 
-        self.active_task._event_queue_agent.task_done()
+        self._ack_event()
 
 
 class ActiveTask:
@@ -667,6 +677,7 @@ class ActiveTask:
         Runs as a detached asyncio.Task. Safe to cancel.
         """
         logger.debug('Producer[%s]: Started', self._task_id)
+        cancelled = False
         try:
             while True:
                 (
@@ -724,6 +735,7 @@ class ActiveTask:
                 finally:
                     self._request_queue.task_done()
         except asyncio.CancelledError:
+            cancelled = True
             logger.debug('Producer[%s]: Cancelled', self._task_id)
 
         except QueueShutDown:
@@ -740,8 +752,8 @@ class ActiveTask:
 
         finally:
             self._request_queue.shutdown(immediate=True)
-            await self._event_queue_agent.close(immediate=False)
-            await self._event_queue_subscribers.close(immediate=False)
+            await self._event_queue_agent.close(immediate=cancelled)
+            await self._event_queue_subscribers.close(immediate=cancelled)
             logger.debug('Producer[%s]: Completed', self._task_id)
 
     async def _run_consumer(self) -> None:

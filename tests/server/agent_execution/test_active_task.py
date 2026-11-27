@@ -1546,3 +1546,155 @@ async def test_active_task_start_setup_failure_closes_event_queues(
 
     assert active_task._event_queue_agent._dispatcher_task.done()
     assert active_task._event_queue_subscribers._dispatcher_task.done()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_active_task_cancel_producer_and_consumer_during_processing():
+    """Cancelling producer and consumer mid-event finishes cleanly."""
+    agent_executor = Mock()
+    task_manager = Mock()
+    in_process = asyncio.Event()
+    process_gate = asyncio.Event()
+    execute_gate = asyncio.Event()
+
+    async def execute_mock(req, q):
+        await q.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id='test-task-id',
+                context_id='test-context',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+        await execute_gate.wait()
+
+    async def slow_process(event):
+        in_process.set()
+        await process_gate.wait()
+        return event
+
+    agent_executor.execute = AsyncMock(side_effect=execute_mock)
+    agent_executor.cancel = AsyncMock()
+    working_task = Task(
+        id='test-task-id',
+        context_id='test-context',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+    task_manager.get_task = AsyncMock(return_value=working_task)
+    task_manager.ensure_task_id = AsyncMock(return_value=working_task)
+    task_manager.process = AsyncMock(side_effect=slow_process)
+    task_manager.save_task_event = AsyncMock()
+
+    push_sender = Mock(spec=PushNotificationSender)
+    push_sender.send_notification = AsyncMock()
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=push_sender,
+    )
+
+    request_context = Mock(spec=RequestContext)
+    request_context.call_context = ServerCallContext()
+    request_context.context_id = 'test-context'
+    request_context.message = None
+
+    await active_task.enqueue_request(request_context)
+    await active_task.start(
+        call_context=ServerCallContext(), create_task_if_missing=True
+    )
+
+    await asyncio.wait_for(in_process.wait(), timeout=2)
+
+    producer = active_task._producer_task
+    consumer = active_task._consumer_task
+    assert producer is not None
+    assert consumer is not None
+
+    # Reproduces asyncio.run() teardown when producer runs finally first.
+    producer.cancel()
+    await asyncio.sleep(0.05)
+    consumer.cancel()
+
+    _, pending = await asyncio.wait({producer, consumer}, timeout=2)
+    assert not pending
+    assert producer.done()
+    assert consumer.done()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_active_task_consumer_cancelled_after_producer_done():
+    """Cancelling consumer after producer finishes still unblocks join()."""
+    agent_executor = Mock()
+    task_manager = Mock()
+    in_process = asyncio.Event()
+    process_gate = asyncio.Event()
+
+    async def execute_mock(req, q):
+        await q.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id='test-task-id',
+                context_id='test-context',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+
+    async def slow_process(event):
+        in_process.set()
+        await process_gate.wait()
+        return event
+
+    agent_executor.execute = AsyncMock(side_effect=execute_mock)
+    agent_executor.cancel = AsyncMock()
+    working_task = Task(
+        id='test-task-id',
+        context_id='test-context',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+    task_manager.get_task = AsyncMock(return_value=working_task)
+    task_manager.ensure_task_id = AsyncMock(return_value=working_task)
+    task_manager.process = AsyncMock(side_effect=slow_process)
+    task_manager.save_task_event = AsyncMock()
+
+    push_sender = Mock(spec=PushNotificationSender)
+    push_sender.send_notification = AsyncMock()
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=push_sender,
+    )
+
+    request_context = Mock(spec=RequestContext)
+    request_context.call_context = ServerCallContext()
+    request_context.context_id = 'test-context'
+    request_context.message = None
+
+    await active_task.enqueue_request(request_context)
+    await active_task.start(
+        call_context=ServerCallContext(), create_task_if_missing=True
+    )
+
+    await asyncio.wait_for(in_process.wait(), timeout=2)
+
+    producer = active_task._producer_task
+    consumer = active_task._consumer_task
+    assert producer is not None
+    assert consumer is not None
+
+    # Shut down request queue without cancelling producer so producer enters
+    # close(immediate=False) -> _queue.join(), then cancel consumer mid-event.
+    active_task._request_queue.shutdown()
+    await asyncio.sleep(0.05)
+    assert not producer.done()
+    consumer.cancel()
+
+    await asyncio.wait_for(
+        asyncio.gather(producer, consumer, return_exceptions=True),
+        timeout=2,
+    )
+    assert producer.done()
+    assert consumer.done()

@@ -285,6 +285,12 @@ class EventQueueSource(EventQueue):
             # No more new events can be enqueued.
             self._incoming_queue.shutdown(immediate=immediate)
             sinks_to_close = list(self._sinks)
+            if (
+                immediate
+                and self._default_sink is not None
+                and self._default_sink not in sinks_to_close
+            ):
+                sinks_to_close.append(self._default_sink)
 
         if immediate:
             self._dispatcher_task_expected_to_cancel = True
