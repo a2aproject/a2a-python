@@ -19,14 +19,16 @@ Features:
 - Selective method tracing in classes using include/exclude lists.
 
 Configuration:
-- Environment Variable Control: OpenTelemetry instrumentation can be
-  disabled using the `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED` environment
-  variable.
+- Environment Variable Control: this legacy instrumentation is deprecated in
+  favor of `a2a.plugins.otel.OpenTelemetryPlugin`. It is controlled by the
+  `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED` environment variable.
 
-  - Default: `true` (tracing enabled when OpenTelemetry is installed)
+  - Default: `true` (tracing enabled when OpenTelemetry is installed), which
+    emits a `DeprecationWarning`
   - To disable: Set `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED=false`
   - Case insensitive: 'true', 'True', 'TRUE' all enable tracing
   - Any other value disables tracing and logs a debug message
+  - Constructing `OpenTelemetryPlugin` turns it off for the process
 
 Usage:
     For a single function:
@@ -68,6 +70,7 @@ import functools
 import inspect
 import logging
 import os
+import warnings
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -112,6 +115,15 @@ INSTRUMENTING_MODULE_VERSION = '1.0.0'
 env_value = os.getenv(ENABLED_ENV_VAR, 'true')
 otel_enabled = env_value.lower() == 'true'
 
+if otel_installed and otel_enabled:
+    warnings.warn(
+        'Legacy A2A tracing is deprecated and will be removed soon. Use '
+        'a2a.plugins.otel.OpenTelemetryPlugin, or set '
+        f'{ENABLED_ENV_VAR}=false.',
+        DeprecationWarning,
+        stacklevel=1,
+    )
+
 # Log when tracing is explicitly disabled via environment variable
 if otel_installed and not otel_enabled:
     logger.debug(
@@ -144,6 +156,12 @@ if not otel_installed or not otel_enabled:
 
 SpanKind = _SpanKind
 __all__ = ['SpanKind']
+
+
+def disable_tracing() -> None:
+    """Turns legacy tracing off for the rest of the process."""
+    global otel_enabled  # noqa: PLW0603
+    otel_enabled = False
 
 
 _NON_ERROR_EXCEPTIONS: tuple[type[BaseException], ...] = (
@@ -225,6 +243,8 @@ def trace_function(  # noqa: PLR0915
     @functools.wraps(func)
     async def async_wrapper(*args, **kwargs) -> Any:
         """Async Wrapper for the decorator."""
+        if not otel_enabled:
+            return await func(*args, **kwargs)
         logger.debug('Start async tracer')
         tracer = trace.get_tracer(
             INSTRUMENTING_MODULE_NAME, INSTRUMENTING_MODULE_VERSION
@@ -279,6 +299,8 @@ def trace_function(  # noqa: PLR0915
     @functools.wraps(func)
     def sync_wrapper(*args, **kwargs) -> Any:
         """Sync Wrapper for the decorator."""
+        if not otel_enabled:
+            return func(*args, **kwargs)
         tracer = trace.get_tracer(INSTRUMENTING_MODULE_NAME)
         # The wrapper records exceptions and sets the span status itself;
         # letting OTel do it too would record every exception twice.
