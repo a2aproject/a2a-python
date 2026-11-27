@@ -1,5 +1,6 @@
 import base64
 
+from datetime import datetime
 from typing import Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
@@ -182,9 +183,17 @@ def to_core_task_status(
     if compat_status.message:
         core_status.message.CopyFrom(to_core_message(compat_status.message))
     if compat_status.timestamp:
-        core_status.timestamp.FromJsonString(
-            str(compat_status.timestamp).replace('+00:00', 'Z')
-        )
+        timestamp = str(compat_status.timestamp)
+        try:
+            core_status.timestamp.FromJsonString(
+                timestamp.replace('+00:00', 'Z')
+            )
+        except ValueError:
+            # v0.3 only asks for an ISO 8601 string, which may have no UTC
+            # offset. Read such a timestamp as UTC, like TaskUpdater does.
+            core_status.timestamp.FromDatetime(
+                datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            )
     return core_status
 
 

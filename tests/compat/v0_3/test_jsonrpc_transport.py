@@ -162,6 +162,34 @@ async def test_compat_jsonrpc_transport_get_task(transport):
 
 
 @pytest.mark.asyncio
+async def test_compat_jsonrpc_transport_get_task_timestamp_without_offset(
+    transport,
+):
+    async def mock_send_request(*args, **kwargs):
+        return {
+            'result': {
+                'kind': 'task',
+                'id': 'task-123',
+                'contextId': 'ctx-456',
+                'status': {
+                    'state': 'completed',
+                    'timestamp': '2026-11-27T10:15:30.123456',
+                },
+            }
+        }
+
+    transport._send_request = mock_send_request
+
+    response = await transport.get_task(GetTaskRequest(id='task-123'))
+
+    assert response.status.state == TaskState.TASK_STATE_COMPLETED
+    assert (
+        response.status.timestamp.ToJsonString()
+        == '2026-11-27T10:15:30.123456Z'
+    )
+
+
+@pytest.mark.asyncio
 async def test_compat_jsonrpc_transport_cancel_task(transport):
     async def mock_send_request(*args, **kwargs):
         return {

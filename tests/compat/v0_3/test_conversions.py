@@ -253,6 +253,29 @@ def test_task_status_conversion():
     assert v03_restored == v03_status
 
 
+@pytest.mark.parametrize(
+    ('v03_timestamp', 'expected'),
+    [
+        # No UTC offset, as datetime.now().isoformat() produces. Read as UTC.
+        ('2026-11-27T10:15:30.123456', '2026-11-27T10:15:30.123456Z'),
+        ('2026-11-27T10:15:30', '2026-11-27T10:15:30Z'),
+        # Space separator, as str(datetime) produces.
+        ('2026-11-27 10:15:30+00:00', '2026-11-27T10:15:30Z'),
+        ('2026-11-27T15:45:30+05:30', '2026-11-27T10:15:30Z'),
+    ],
+)
+def test_task_status_conversion_accepts_iso_8601_timestamps(
+    v03_timestamp, expected
+):
+    v03_status = types_v03.TaskStatus(
+        state=types_v03.TaskState.completed, timestamp=v03_timestamp
+    )
+
+    v10_status = to_core_task_status(v03_status)
+
+    assert v10_status.timestamp.ToJsonString() == expected
+
+
 def test_task_status_conversion_special_states():
     # input-required
     s1 = types_v03.TaskStatus(state=types_v03.TaskState.input_required)
