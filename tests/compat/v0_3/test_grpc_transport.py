@@ -310,6 +310,47 @@ async def test_get_task_history_length(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'history_length, expected_ids',
+    [
+        (None, ['m0', 'm1', 'm2']),
+        (0, []),
+        (1, ['m2']),
+        (3, ['m0', 'm1', 'm2']),
+        (5, ['m0', 'm1', 'm2']),
+    ],
+)
+async def test_send_message_history_length(
+    history_length: int | None, expected_ids: list[str]
+) -> None:
+    transport = CompatGrpcTransport(
+        channel=AsyncMock(spec=Channel), agent_card=None
+    )
+    task = a2a_v0_3_pb2.Task(id='task-1', context_id='ctx-1')
+    task.status.state = a2a_v0_3_pb2.TaskState.TASK_STATE_WORKING
+    for i in range(3):
+        task.history.add(message_id=f'm{i}', role=a2a_v0_3_pb2.Role.ROLE_USER)
+    transport.stub = MagicMock(
+        SendMessage=AsyncMock(
+            return_value=a2a_v0_3_pb2.SendMessageResponse(task=task)
+        )
+    )
+    request = SendMessageRequest(
+        message=Message(message_id='request', role=Role.ROLE_USER)
+    )
+    if history_length is not None:
+        request.configuration.history_length = history_length
+
+    response = await transport.send_message(request)
+
+    assert response.HasField('task')
+    assert [
+        message.message_id for message in response.task.history
+    ] == expected_ids
+    assert len(task.history) == 3
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('history_length', [None, 0, 1, 3, 5])
 @pytest.mark.parametrize('history_size', [0, 3])
 async def test_streaming_task_history_length(
