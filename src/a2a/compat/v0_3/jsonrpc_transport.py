@@ -2,6 +2,7 @@ import json
 import logging
 
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any, NoReturn
 from uuid import uuid4
 
@@ -134,11 +135,14 @@ class CompatJsonRpcTransport(ClientTransport):
             ),
             _id=str(uuid4()),
         )
-        async for event in self._send_stream_request(
-            dict(rpc_request.data),
-            context,
-        ):
-            yield event
+        async with aclosing(
+            self._send_stream_request(
+                dict(rpc_request.data),
+                context,
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_task(
         self,
@@ -332,11 +336,14 @@ class CompatJsonRpcTransport(ClientTransport):
             ),
             _id=str(uuid4()),
         )
-        async for event in self._send_stream_request(
-            dict(rpc_request.data),
-            context,
-        ):
-            yield event
+        async with aclosing(
+            self._send_stream_request(
+                dict(rpc_request.data),
+                context,
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_extended_agent_card(
         self,
@@ -433,56 +440,59 @@ class CompatJsonRpcTransport(ClientTransport):
         http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
         add_legacy_extension_header(http_kwargs['headers'])
 
-        async for sse_data in send_http_stream_request(
-            self.httpx_client,
-            'POST',
-            self.url,
-            self._handle_http_error,
-            json=json_data,
-            **http_kwargs,
-        ):
-            data = json.loads(sse_data)
-            if 'error' in data:
-                raise self._create_jsonrpc_error(data['error'])
-
-            result_dict = data.get('result', {})
-            if not isinstance(result_dict, dict):
-                continue
-
-            kind = result_dict.get('kind')
-
-            if not kind:
-                if 'taskId' in result_dict and 'final' in result_dict:
-                    kind = 'status-update'
-                elif 'messageId' in result_dict:
-                    kind = 'message'
-                elif 'id' in result_dict:
-                    kind = 'task'
-
-            result: (
-                types_v03.Task
-                | types_v03.Message
-                | types_v03.TaskStatusUpdateEvent
-                | types_v03.TaskArtifactUpdateEvent
+        async with aclosing(
+            send_http_stream_request(
+                self.httpx_client,
+                'POST',
+                self.url,
+                self._handle_http_error,
+                json=json_data,
+                **http_kwargs,
             )
-            if kind == 'task':
-                result = types_v03.Task.model_validate(result_dict)
-            elif kind == 'message':
-                result = types_v03.Message.model_validate(result_dict)
-            elif kind == 'status-update':
-                result = types_v03.TaskStatusUpdateEvent.model_validate(
-                    result_dict
-                )
-            elif kind == 'artifact-update':
-                result = types_v03.TaskArtifactUpdateEvent.model_validate(
-                    result_dict
-                )
-            else:
-                continue
+        ) as events:
+            async for sse_data in events:
+                data = json.loads(sse_data)
+                if 'error' in data:
+                    raise self._create_jsonrpc_error(data['error'])
 
-            yield conversions.to_core_stream_response(
-                types_v03.SendStreamingMessageSuccessResponse(result=result)
-            )
+                result_dict = data.get('result', {})
+                if not isinstance(result_dict, dict):
+                    continue
+
+                kind = result_dict.get('kind')
+
+                if not kind:
+                    if 'taskId' in result_dict and 'final' in result_dict:
+                        kind = 'status-update'
+                    elif 'messageId' in result_dict:
+                        kind = 'message'
+                    elif 'id' in result_dict:
+                        kind = 'task'
+
+                result: (
+                    types_v03.Task
+                    | types_v03.Message
+                    | types_v03.TaskStatusUpdateEvent
+                    | types_v03.TaskArtifactUpdateEvent
+                )
+                if kind == 'task':
+                    result = types_v03.Task.model_validate(result_dict)
+                elif kind == 'message':
+                    result = types_v03.Message.model_validate(result_dict)
+                elif kind == 'status-update':
+                    result = types_v03.TaskStatusUpdateEvent.model_validate(
+                        result_dict
+                    )
+                elif kind == 'artifact-update':
+                    result = types_v03.TaskArtifactUpdateEvent.model_validate(
+                        result_dict
+                    )
+                else:
+                    continue
+
+                yield conversions.to_core_stream_response(
+                    types_v03.SendStreamingMessageSuccessResponse(result=result)
+                )
 
     async def _send_request(
         self,

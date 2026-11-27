@@ -152,20 +152,21 @@ class BaseClient(Client):
 
     async def _process_stream(
         self,
-        stream: AsyncIterator[StreamResponse],
+        stream: AsyncGenerator[StreamResponse],
         before_args: BeforeArgs,
     ) -> AsyncGenerator[StreamResponse, None]:
-        async for stream_response in stream:
-            after_args = AfterArgs(
-                result=stream_response,
-                method=before_args.method,
-                agent_card=self._card,
-                context=before_args.context,
-            )
-            await self._intercept_after(after_args)
-            yield after_args.result
-            if after_args.result.HasField('message'):
-                return
+        async with aclosing(stream) as responses:
+            async for stream_response in responses:
+                after_args = AfterArgs(
+                    result=stream_response,
+                    method=before_args.method,
+                    agent_card=self._card,
+                    context=before_args.context,
+                )
+                await self._intercept_after(after_args)
+                yield after_args.result
+                if after_args.result.HasField('message'):
+                    return
 
     async def get_task(
         self,
@@ -511,7 +512,7 @@ class BaseClient(Client):
         method: str,
         context: ClientCallContext | None,
         transport_call: Callable[
-            [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
+            [Any, ClientCallContext | None], AsyncGenerator[StreamResponse]
         ],
     ) -> AsyncGenerator[StreamResponse, None]:
         """Runs a streaming call through plugins, interceptors and the transport.
@@ -571,7 +572,7 @@ class BaseClient(Client):
         method: str,
         context: ClientCallContext | None,
         transport_call: Callable[
-            [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
+            [Any, ClientCallContext | None], AsyncGenerator[StreamResponse]
         ],
     ) -> AsyncGenerator[StreamResponse, None]:
         before_args = BeforeArgs(
@@ -596,8 +597,11 @@ class BaseClient(Client):
 
         stream = transport_call(before_args.input, before_args.context)
 
-        async for client_event in self._process_stream(stream, before_args):
-            yield client_event
+        async with aclosing(
+            self._process_stream(stream, before_args)
+        ) as events:
+            async for client_event in events:
+                yield client_event
 
     async def _intercept_before(
         self,
