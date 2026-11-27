@@ -279,6 +279,51 @@ class TestGetAgentCard:
             await resolver.get_agent_card()
         assert 'Failed to parse JSON' in str(exc_info.value)
 
+    @pytest.mark.parametrize(
+        ('response_body', 'original_error'),
+        [
+            pytest.param(
+                '{"name": "Caf\u00e9"}'.encode('latin-1'),
+                UnicodeDecodeError,
+                id='latin-1',
+            ),
+            pytest.param(
+                b'{"name": ' + b'[' * 100_000 + b']' * 100_000 + b'}',
+                RecursionError,
+                id='deep-nesting',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_get_agent_card_undecodable_body(
+        self, response_body: bytes, original_error: type[Exception]
+    ) -> None:
+        """Bodies json.loads rejects without a JSONDecodeError still resolve to the documented error."""
+        transport = httpx_lib.MockTransport(
+            lambda _request: httpx_lib.Response(200, content=response_body)
+        )
+        async with httpx_lib.AsyncClient(transport=transport) as client:
+            resolver = A2ACardResolver(client, 'https://example.com')
+            with pytest.raises(AgentCardResolutionError) as exc_info:
+                await resolver.get_agent_card()
+
+        assert 'Failed to parse JSON' in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, original_error)
+
+    @pytest.mark.asyncio
+    async def test_get_agent_card_signature_verifier_error_propagates(
+        self, resolver, mock_httpx_client, mock_response, valid_agent_card_data
+    ):
+        """An error raised by the caller's verifier is not relabelled as a JSON error."""
+        mock_response.json.return_value = valid_agent_card_data
+        mock_httpx_client.get.return_value = mock_response
+
+        def verifier(_card: AgentCard) -> None:
+            raise RecursionError('verifier bug')
+
+        with pytest.raises(RecursionError, match='verifier bug'):
+            await resolver.get_agent_card(signature_verifier=verifier)
+
     @pytest.mark.asyncio
     async def test_get_agent_card_request_error(
         self, resolver, mock_httpx_client
