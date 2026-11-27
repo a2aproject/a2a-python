@@ -159,7 +159,7 @@ class CompatRestTransport(ClientTransport):
 
         async for event in self._send_stream_request(
             'POST',
-            '/v1/message:stream',
+            '/v1/message:stream?alt=sse',
             context=context,
             json=MessageToDict(req_proto),
         ):
@@ -334,7 +334,7 @@ class CompatRestTransport(ClientTransport):
         try:
             async for event in self._send_stream_request(
                 subscribe_method,
-                f'/v1/tasks/{_quote_id(request.id)}:subscribe',
+                f'/v1/tasks/{_quote_id(request.id)}:subscribe?alt=sse',
                 context=context,
             ):
                 yield event
