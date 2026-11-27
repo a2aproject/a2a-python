@@ -5,7 +5,11 @@ from functools import wraps
 from typing import Any, NoReturn, cast
 
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
-from a2a.utils.errors import A2A_REASON_TO_ERROR, JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.errors import (
+    A2A_REASON_TO_ERROR,
+    JSON_RPC_ERROR_CODE_MAP,
+    A2AError,
+)
 
 
 try:
@@ -38,6 +42,7 @@ from a2a.compat.v0_3.extension_headers import add_legacy_extension_header
 from a2a.types import a2a_pb2
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.grpc_status import status_from_call
+from a2a.utils.proto_utils import bad_request_to_validation_errors
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -62,14 +67,28 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     # Other v0.3 servers (a2a-go) name the error in ErrorInfo.reason instead.
     status = status_from_call(cast('grpc.Call', e))
     if status is not None:
+        mapped_cls: type[A2AError] | None = None
+        metadata: dict[str, Any] = {}
+        data: dict[str, Any] | None = None
         for detail in status.details:
             # `.DESCRIPTOR` is typed as a py/C union; `.Is` wants a Descriptor.
             if detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):  # ty: ignore[invalid-argument-type]
                 error_info = error_details_pb2.ErrorInfo()
                 detail.Unpack(error_info)
-                exception_cls = A2A_REASON_TO_ERROR.get(error_info.reason)
-                if error_info.domain == 'a2a-protocol.org' and exception_cls:
-                    raise exception_cls(status.message) from e
+                if error_info.domain == 'a2a-protocol.org':
+                    candidate = A2A_REASON_TO_ERROR.get(error_info.reason)
+                    if candidate is not None:
+                        mapped_cls = candidate
+                    metadata.update(error_info.metadata)
+            elif detail.Is(error_details_pb2.BadRequest.DESCRIPTOR):  # ty: ignore[invalid-argument-type]
+                bad_request = error_details_pb2.BadRequest()
+                detail.Unpack(bad_request)
+                data = {'errors': bad_request_to_validation_errors(bad_request)}
+
+        if mapped_cls is not None:
+            if metadata:
+                data = {**metadata, **(data or {})}
+            raise mapped_cls(status.message, data=data) from e
     raise A2AClientError(f'gRPC Error {e.code().name}: {e.details()}') from e
 
 
