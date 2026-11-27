@@ -57,6 +57,7 @@ from a2a.types.a2a_pb2 import (
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -1343,6 +1344,8 @@ def create_required_extension_handler(*, validate_required_extensions: bool):
             version='1.0',
             capabilities=AgentCapabilities(
                 streaming=True,
+                push_notifications=True,
+                extended_agent_card=True,
                 extensions=[
                     AgentExtension(uri=REQUIRED_EXTENSION, required=True)
                 ],
@@ -1414,6 +1417,95 @@ async def test_on_message_send_stream_rejects_missing_required_extension():
             create_hello_request(), create_server_call_context()
         ):
             pass
+
+
+# Every other method, so a required extension guards the whole agent and not
+# only new messages (spec section 3.3.4).
+OTHER_METHOD_CALLS = [
+    ('on_get_task', GetTaskRequest(id='missing')),
+    ('on_list_tasks', ListTasksRequest()),
+    ('on_cancel_task', CancelTaskRequest(id='missing')),
+    (
+        'on_create_task_push_notification_config',
+        TaskPushNotificationConfig(task_id='missing', url='https://e.com/h'),
+    ),
+    (
+        'on_get_task_push_notification_config',
+        GetTaskPushNotificationConfigRequest(task_id='missing', id='c'),
+    ),
+    ('on_subscribe_to_task', SubscribeToTaskRequest(id='missing')),
+    (
+        'on_list_task_push_notification_configs',
+        ListTaskPushNotificationConfigsRequest(task_id='missing'),
+    ),
+    (
+        'on_delete_task_push_notification_config',
+        DeleteTaskPushNotificationConfigRequest(task_id='missing', id='c'),
+    ),
+    ('on_get_extended_agent_card', GetExtendedAgentCardRequest()),
+]
+
+
+async def is_rejected_for_extensions(handler, method, params, context):
+    """Calls one handler method and reports whether the extension check fired.
+
+    Any other outcome (a result, TaskNotFoundError, an unsupported push store)
+    is the method's own business and not what these tests look at.
+    """
+    try:
+        result = getattr(handler, method)(params, context)
+        if hasattr(result, '__aiter__'):
+            async for _ in result:
+                pass
+        else:
+            await result
+    except ExtensionSupportRequiredError:
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('method', 'params'), OTHER_METHOD_CALLS)
+async def test_other_methods_reject_missing_required_extension(method, params):
+    handler = create_required_extension_handler(
+        validate_required_extensions=True
+    )
+
+    assert await is_rejected_for_extensions(
+        handler, method, params, create_server_call_context()
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('method', 'params'), OTHER_METHOD_CALLS)
+async def test_other_methods_pass_requested_required_extension(method, params):
+    handler = create_required_extension_handler(
+        validate_required_extensions=True
+    )
+    context = ServerCallContext(
+        user=UnauthenticatedUser(),
+        requested_extensions={REQUIRED_EXTENSION},
+    )
+
+    assert not await is_rejected_for_extensions(
+        handler, method, params, context
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('method', 'params'), OTHER_METHOD_CALLS)
+async def test_other_methods_skip_required_extensions_by_default(
+    method, params
+):
+    handler = create_required_extension_handler(
+        validate_required_extensions=False
+    )
+
+    assert not await is_rejected_for_extensions(
+        handler, method, params, create_server_call_context()
+    )
 
 
 @pytest.mark.asyncio

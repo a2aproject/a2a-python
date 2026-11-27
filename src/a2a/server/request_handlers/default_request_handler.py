@@ -132,7 +132,7 @@ class LegacyRequestHandler(RequestHandler):
               because an agent whose declared modes do not spell the media
               types its clients really send would start refusing traffic it
               previously accepted.
-            validate_required_extensions: Reject a message whose request
+            validate_required_extensions: Reject any call whose request
               does not declare every extension the card marks ``required``
               with ``ExtensionSupportRequiredError``. Defaults to False,
               because a card that marks an extension required its clients
@@ -178,6 +178,18 @@ class LegacyRequestHandler(RequestHandler):
         if not await self._push_url_validator(url):
             raise InvalidParamsError(message='Invalid push notification URL')
 
+    def _check_required_extensions(self, context: ServerCallContext) -> None:
+        """Rejects a call that leaves out an extension the card requires.
+
+        Runs on every method when `validate_required_extensions` is set, the
+        way a2a-go checks in its handler, since spec section 3.3.4 applies to
+        the whole agent and not only to new messages.
+        """
+        if self._validate_required_extensions:
+            validate_required_extensions(
+                context.requested_extensions, self._agent_card
+            )
+
     @validate_request_params
     async def on_get_task(
         self,
@@ -185,6 +197,7 @@ class LegacyRequestHandler(RequestHandler):
         context: ServerCallContext,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
+        self._check_required_extensions(context)
         validate_history_length(params)
 
         task_id = params.id
@@ -201,6 +214,7 @@ class LegacyRequestHandler(RequestHandler):
         context: ServerCallContext,
     ) -> ListTasksResponse:
         """Default handler for 'tasks/list'."""
+        self._check_required_extensions(context)
         validate_history_length(params)
         if params.HasField('page_size'):
             validate_page_size(params.page_size)
@@ -226,6 +240,7 @@ class LegacyRequestHandler(RequestHandler):
 
         Attempts to cancel the task managed by the `AgentExecutor`.
         """
+        self._check_required_extensions(context)
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
@@ -304,10 +319,7 @@ class LegacyRequestHandler(RequestHandler):
         """
         if self._validate_input_modes:
             validate_input_modes(params.message, self._agent_card)
-        if self._validate_required_extensions:
-            validate_required_extensions(
-                context.requested_extensions, self._agent_card
-            )
+        self._check_required_extensions(context)
 
         # Create task manager and validate existing task
         # Proto empty strings should be treated as None
@@ -585,6 +597,7 @@ class LegacyRequestHandler(RequestHandler):
 
         Requires a `PushNotifier` to be configured.
         """
+        self._check_required_extensions(context)
         if not self._push_config_store:
             raise PushNotificationNotSupportedError
 
@@ -620,6 +633,7 @@ class LegacyRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
+        self._check_required_extensions(context)
         if not self._push_config_store:
             raise PushNotificationNotSupportedError
 
@@ -654,6 +668,7 @@ class LegacyRequestHandler(RequestHandler):
         Allows a client to re-attach to a running streaming task's event stream.
         Requires the task and its queue to still be active.
         """
+        self._check_required_extensions(context)
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
@@ -701,6 +716,7 @@ class LegacyRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
+        self._check_required_extensions(context)
         if not self._push_config_store:
             raise PushNotificationNotSupportedError
 
@@ -732,6 +748,7 @@ class LegacyRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
+        self._check_required_extensions(context)
         if not self._push_config_store:
             raise PushNotificationNotSupportedError
 
@@ -757,6 +774,7 @@ class LegacyRequestHandler(RequestHandler):
 
         Requires `capabilities.extended_agent_card` to be true.
         """
+        self._check_required_extensions(context)
         extended_card = self.extended_agent_card
         if not extended_card:
             raise ExtendedAgentCardNotConfiguredError

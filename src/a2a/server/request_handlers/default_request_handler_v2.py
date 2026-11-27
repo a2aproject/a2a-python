@@ -240,6 +240,18 @@ class DefaultRequestHandlerV2(RequestHandler):
         """
         await self._active_task_registry.aclose()
 
+    def _check_required_extensions(self, context: ServerCallContext) -> None:
+        """Rejects a call that leaves out an extension the card requires.
+
+        Runs on every method when `validate_required_extensions` is set, the
+        way a2a-go checks in its handler, since spec section 3.3.4 applies to
+        the whole agent and not only to new messages.
+        """
+        if self._validate_required_extensions:
+            validate_required_extensions(
+                context.requested_extensions, self._agent_card
+            )
+
     @server_plugin_hooks('get_task')
     @validate_request_params
     async def on_get_task(  # noqa: D102
@@ -247,6 +259,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: GetTaskRequest,
         context: ServerCallContext,
     ) -> Task | None:
+        self._check_required_extensions(context)
         validate_history_length(params)
 
         task_id = params.id
@@ -263,6 +276,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: ListTasksRequest,
         context: ServerCallContext,
     ) -> ListTasksResponse:
+        self._check_required_extensions(context)
         validate_history_length(params)
         if params.HasField('page_size'):
             validate_page_size(params.page_size)
@@ -285,6 +299,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: CancelTaskRequest,
         context: ServerCallContext,
     ) -> Task | None:
+        self._check_required_extensions(context)
         task_id = params.id
 
         # Owner-scoped read of the current state
@@ -411,10 +426,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         validate_history_length(params.configuration)
         if self._validate_input_modes:
             validate_input_modes(params.message, self._agent_card)
-        if self._validate_required_extensions:
-            validate_required_extensions(
-                call_context.requested_extensions, self._agent_card
-            )
+        self._check_required_extensions(call_context)
 
         original_task_id = params.message.task_id or None
         original_context_id = params.message.context_id or None
@@ -599,6 +611,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: TaskPushNotificationConfig,
         context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
+        self._check_required_extensions(context)
         if not self._push_config_store:
             raise PushNotificationNotSupportedError
 
@@ -630,6 +643,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: GetTaskPushNotificationConfigRequest,
         context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
+        self._check_required_extensions(context)
         if not self._push_config_store:
             raise PushNotificationNotSupportedError
 
@@ -659,6 +673,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: SubscribeToTaskRequest,
         context: ServerCallContext,
     ) -> AsyncGenerator[Event, None]:
+        self._check_required_extensions(context)
         task_id = params.id
 
         stored = await self._versioned_store.get(task_id, context)
@@ -744,6 +759,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: ListTaskPushNotificationConfigsRequest,
         context: ServerCallContext,
     ) -> ListTaskPushNotificationConfigsResponse:
+        self._check_required_extensions(context)
         if not self._push_config_store:
             raise PushNotificationNotSupportedError
 
@@ -771,6 +787,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: DeleteTaskPushNotificationConfigRequest,
         context: ServerCallContext,
     ) -> None:
+        self._check_required_extensions(context)
         if not self._push_config_store:
             raise PushNotificationNotSupportedError
 
@@ -796,6 +813,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         Requires `capabilities.extended_agent_card` to be true.
         """
+        self._check_required_extensions(context)
         extended_card = self.extended_agent_card
         if not extended_card:
             raise ExtendedAgentCardNotConfiguredError
