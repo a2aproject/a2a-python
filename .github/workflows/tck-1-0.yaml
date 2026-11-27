@@ -1,0 +1,189 @@
+name: TCK 1.0
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - 'tck/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/tck-1-0.yaml'
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # TCK 1.0 row and the native reader gate (a2aproject/a2a-python#666).
+  #
+  # Split agreed in the issue: the reader and every refusal condition belong to
+  # probityai and are pinned by commit below; this job owns packet production,
+  # input selection, invocation, retention and the publish/promotion gate. Nothing
+  # here may reinterpret or override a refusal — a refused read fails the job.
+  #
+  # Why a separate workflow instead of a job in run-tck.yaml: run-tck.yaml is
+  # `disabled_manually` in this repository (workflow id 225618664, last run
+  # 2026-04-20, last five runs all failures), so anything added there is never
+  # scheduled. This file is active by default. The 1.0 row also needs Python 3.15
+  # and the 1.0 runner's flags (--sut-host/--transport/--level) rather than
+  # run-tck.yaml's 0.3 TCK_VERSION + --sut-url/--category ones.
+  tck-1-0-jsonrpc:
+    name: TCK 1.0 row (jsonrpc, Python 3.15)
+    runs-on: ubuntu-latest
+    env:
+      TCK_1_0_REV: 104a7b4ae0d83f65c075e3793e322953a830eaba # a2a-tck 1.0.0 (requires-python >=3.15)
+      SUT_JSONRPC_1_0: http://localhost:41241/a2a/jsonrpc
+    # Non-blocking on purpose: this is the 1.0 TCK row against the SUT declared in
+    # this repository, whose 1.0 support is tracked separately from the gate below.
+    # The run and its reports are retained either way. The tolerance sits on the
+    # TCK step, not the job, so a failing row reads as a warning on a green job
+    # instead of a red check that looks like a conformance failure.
+    steps:
+      - name: Checkout a2a-python
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Checkout a2a-tck 1.0 at the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          repository: a2aproject/a2a-tck
+          path: tck/a2a-tck-1-0
+          ref: ${{ env.TCK_1_0_REV }}
+
+      - name: Install Dependencies
+        run: uv sync --locked --all-extras
+
+      - name: Start SUT
+        run: uv run tck/sut_agent.py &
+
+      - name: Wait for SUT to start
+        run: |
+          URL="http://localhost:41241/.well-known/agent-card.json"
+          START_TIME=$(date +%s)
+          while true; do
+            if [ $(( $(date +%s) - START_TIME )) -ge 120 ]; then
+              echo "❌ SUT did not answer within 120s"; exit 1
+            fi
+            CODE=$(curl --output /dev/null --silent --write-out "%{http_code}" "$URL") || true
+            [ "$CODE" = "200" ] && { echo "✅ SUT up after $(( $(date +%s) - START_TIME ))s"; break; }
+            echo "⏳ SUT status ${CODE}, retrying"; sleep 2
+          done
+
+      - name: Run TCK 1.0 (jsonrpc, must)
+        continue-on-error: true
+        working-directory: tck/a2a-tck-1-0
+        run: |
+          uv run --python 3.15 run_tck.py \
+            --sut-host http://localhost:41241 --transport jsonrpc --level must
+
+      - name: Upload 1.0 TCK reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tck-1-0-jsonrpc-reports
+          path: tck/a2a-tck-1-0/reports/
+          if-no-files-found: warn
+
+      - name: Stop SUT
+        if: always()
+        run: |
+          pkill -f sut_agent.py || true
+          sleep 2
+
+  # Native packet + reader gate. Runs second: the 1.0 row first, reader gate second.
+  # The reader is pinned to a reviewed probity commit; the action installs it and
+  # refuses inputs that do not match the selection.
+  native-consumer:
+    name: Native A2A packet + reader gate
+    runs-on: ubuntu-24.04
+    env:
+      OBSERVER_REV: eb1376ab4c5e0db2d761599bf85cb0f8debdb34b # probity, tag agent-evidence-observer-v0.2.0
+      PACKET_DIR: ${{ github.workspace }}/native-run
+    steps:
+      - name: Checkout a2a-python
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+
+      - name: Set up Python 3.12 for the reader
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Checkout the pinned reader and producer profile
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          repository: probityai/probity
+          ref: eb1376ab4c5e0db2d761599bf85cb0f8debdb34b
+          path: observer
+          sparse-checkout: |
+            packages/agent-evidence-observer
+          sparse-checkout-cone-mode: false
+
+      - name: Install the pinned reader and the A2A profile
+        run: |
+          python -m pip install --disable-pip-version-check "packages/agent-evidence-observer" 'packages/agent-evidence-observer/interop/a2a-native-2026-10-02'
+        working-directory: observer
+
+      - name: Produce the retained native packet (SDK 1.2.1, six attempts)
+        run: |
+          python interop/a2a-native-2026-10-02/a2a_demo.py "$PACKET_DIR"
+        working-directory: observer/packages/agent-evidence-observer
+
+      - name: Select inputs outside the packet and record the digest
+        id: selection
+        run: |
+          python .github/scripts/a2a-native-selection.py \
+            --packet "$PACKET_DIR" \
+            --checkout observer/packages/agent-evidence-observer \
+            --reader-revision "$OBSERVER_REV" \
+            --selection-id "a2a-python-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --out "$RUNNER_TEMP/selection.json" | tee "$RUNNER_TEMP/selection-build.json"
+          SHA=$(python - <<'EOF'
+          import json, os
+          print(json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "selection-build.json")))["sha256"])
+          EOF
+          )
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+
+      # No continue-on-error: a refusal, a timeout or a missing report must fail here.
+      #
+      # Invoked as the pinned reader CLI rather than through probityai/probity/actions/observer.
+      # That action hands the reader `${{ github.action_path }}/../../packages/...`, and the
+      # reader rejects any path where absolute().resolve() != absolute() (`symlink_or_noncanonical_path`,
+      # native_reader.py:102) — a `..` segment fails that check by construction when the action is
+      # consumed from another repository. Same pinned commit, same arguments, canonical paths.
+      - name: Recompute the packet with the pinned reader
+        env:
+          SELECTION_SHA: ${{ steps.selection.outputs.sha256 }}
+        run: |
+          SOURCE=$(realpath observer/packages/agent-evidence-observer)
+          PACKET=$(realpath "$PACKET_DIR")
+          SELECTION=$(realpath "$RUNNER_TEMP/selection.json")
+          OUTPUT="$RUNNER_TEMP/consumer-receipt"
+          test ! -e "$OUTPUT" || { echo "refusing to reuse an existing receipt directory"; exit 1; }
+          agent-evidence-read-native \
+            --source-checkout "$SOURCE" \
+            --packet "$PACKET" \
+            --selection "$SELECTION" \
+            --selection-sha256 "$SELECTION_SHA" \
+            --output "$OUTPUT" \
+            --timeout 120
+
+      - name: Upload the packet, the selection and the full receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-consumer-receipt
+          path: |
+            native-run/
+            ${{ runner.temp }}/selection.json
+            ${{ runner.temp }}/consumer-receipt/
+          if-no-files-found: error
