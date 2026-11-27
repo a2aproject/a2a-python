@@ -486,6 +486,54 @@ class TestGetAgentCard:
 
         mock_verifier.assert_called_once_with(agent_card)
 
+    @pytest.mark.parametrize(
+        ('response_body', 'expected_cause'),
+        [
+            pytest.param(
+                '{"name": "Café"}'.encode('latin-1'),
+                UnicodeDecodeError,
+                id='non_utf8_bytes',
+            ),
+            pytest.param(
+                b'{"name": ' + b'[' * 10_000 + b']' * 10_000 + b'}',
+                RecursionError,
+                id='deeply_nested_json',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_get_agent_card_invalid_body_decode_errors(
+        self, response_body: bytes, expected_cause: type[Exception]
+    ) -> None:
+        """Non-UTF-8 and deeply nested JSON bodies raise AgentCardResolutionError."""
+        transport = httpx_lib.MockTransport(
+            lambda _request: httpx_lib.Response(200, content=response_body)
+        )
+        async with httpx_lib.AsyncClient(transport=transport) as client:
+            resolver = A2ACardResolver(client, 'https://example.com')
+            with pytest.raises(AgentCardResolutionError) as exc_info:
+                await resolver.get_agent_card()
+
+        assert 'Failed to parse JSON' in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, expected_cause)
+
+    @pytest.mark.asyncio
+    async def test_get_agent_card_signature_verifier_value_error_not_swallowed(
+        self, valid_agent_card_data: dict
+    ) -> None:
+        """ValueError from a caller signature verifier propagates unmasked."""
+        transport = httpx_lib.MockTransport(
+            lambda _request: httpx_lib.Response(200, json=valid_agent_card_data)
+        )
+
+        def bad_verifier(_card: object) -> None:
+            raise ValueError('bad signature')
+
+        async with httpx_lib.AsyncClient(transport=transport) as client:
+            resolver = A2ACardResolver(client, 'https://example.com')
+            with pytest.raises(ValueError, match='bad signature'):
+                await resolver.get_agent_card(signature_verifier=bad_verifier)
+
 
 class TestParseAgentCard:
     """Tests for parse_agent_card function."""
