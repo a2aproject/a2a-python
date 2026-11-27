@@ -419,7 +419,30 @@ class CompatJsonRpcTransport(ClientTransport):
         return response_data
 
     def _handle_http_error(self, e: HTTPStatusError) -> NoReturn:
-        """Handles HTTP errors for standard requests."""
+        """Raises the A2A error carried by a non-2xx JSON-RPC response.
+
+        Some v0.3 servers send a JSON-RPC error object with a non-2xx status
+        (a2a-js uses 500 for internal errors). Only a JSON-RPC 2.0 error with a
+        known A2A code is mapped; any other body, such as a gateway's own
+        error, raises the generic HTTP error. Error bodies are mapped the same
+        way as in the 1.0 transport.
+        """
+        try:
+            body = e.response.json()
+        except ValueError:  # Not JSON, or not valid UTF-8.
+            body = None
+        error = (
+            body.get('error')
+            if isinstance(body, dict) and body.get('jsonrpc') == '2.0'
+            else None
+        )
+        if isinstance(error, dict):
+            code = error.get('code')
+            if (
+                isinstance(code, int)
+                and code in _JSON_RPC_ERROR_CODE_TO_A2A_ERROR
+            ):
+                raise self._create_jsonrpc_error(error) from e
         raise A2AClientError(f'HTTP Error: {e.response.status_code}') from e
 
     async def _send_stream_request(

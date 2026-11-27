@@ -26,7 +26,11 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils._httpx_compat import httpx_lib
-from a2a.utils.errors import InvalidParamsError, TaskNotFoundError
+from a2a.utils.errors import (
+    InternalError,
+    InvalidParamsError,
+    TaskNotFoundError,
+)
 
 
 pytestmark = pytest.mark.httpx2
@@ -671,3 +675,91 @@ async def test_compat_jsonrpc_transport_delete_push_config_null_result(
         task_id='task-123', id='push-123'
     )
     assert await transport.delete_task_push_notification_config(req) is None
+
+
+class TestJsonRpcErrorWithNonSuccessStatus:
+    """A v0.3 JSON-RPC error body maps to its A2A error whatever the status.
+
+    a2a-js sends internal errors with HTTP 500, and some servers send a
+    not-found error with 404. Bodies that are not JSON-RPC errors keep the
+    generic HTTP error. The 1.0 transport does the same since #1476.
+    """
+
+    @staticmethod
+    def _transport(
+        status_code: int, **response_kwargs
+    ) -> CompatJsonRpcTransport:
+        mock_transport = httpx_lib.MockTransport(
+            lambda request: httpx_lib.Response(status_code, **response_kwargs)
+        )
+        return CompatJsonRpcTransport(
+            httpx_client=httpx_lib.AsyncClient(transport=mock_transport),
+            agent_card=AgentCard(),
+            url='http://example.com',
+        )
+
+    @staticmethod
+    def _error_body(code: int) -> dict[str, object]:
+        return {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'error': {'code': code, 'message': 'server says why'},
+        }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('status_code', 'code', 'expected_error'),
+        [
+            pytest.param(404, -32001, TaskNotFoundError, id='404-not-found'),
+            pytest.param(500, -32603, InternalError, id='500-internal'),
+        ],
+    )
+    async def test_unary_maps_error_body(
+        self, status_code, code, expected_error
+    ):
+        transport = self._transport(status_code, json=self._error_body(code))
+
+        async with transport:
+            with pytest.raises(expected_error, match='server says why'):
+                await transport.get_task(GetTaskRequest(id='task-123'))
+
+    @pytest.mark.asyncio
+    async def test_streaming_maps_error_body(self):
+        transport = self._transport(500, json=self._error_body(-32603))
+
+        async with transport:
+            with pytest.raises(InternalError, match='server says why'):
+                async for _ in transport.send_message_streaming(
+                    SendMessageRequest(
+                        message=Message(message_id='msg-1', role=Role.ROLE_USER)
+                    )
+                ):
+                    pass
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'response_kwargs',
+        [
+            pytest.param({'text': '<html>Bad Gateway</html>'}, id='html'),
+            pytest.param({'json': {'error': 'gateway'}}, id='not-jsonrpc'),
+            pytest.param(
+                {'json': {'error': {'code': -32001, 'message': 'x'}}},
+                id='no-jsonrpc-version',
+            ),
+            pytest.param(
+                {
+                    'json': {
+                        'jsonrpc': '2.0',
+                        'error': {'code': -1, 'message': 'x'},
+                    }
+                },
+                id='unknown-code',
+            ),
+        ],
+    )
+    async def test_other_bodies_keep_the_http_error(self, response_kwargs):
+        transport = self._transport(502, **response_kwargs)
+
+        async with transport:
+            with pytest.raises(A2AClientError, match='HTTP Error: 502'):
+                await transport.get_task(GetTaskRequest(id='task-123'))
