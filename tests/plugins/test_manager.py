@@ -1,3 +1,7 @@
+import asyncio
+
+from collections.abc import Awaitable, Callable
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -367,3 +371,135 @@ async def test_wrap_defaults_run_the_call_unchanged(plugin, hook):
         return sentinel
 
     assert await getattr(plugin, hook)(None, call) is sentinel
+
+
+@pytest.mark.parametrize(
+    ('before', 'after', 'call'),
+    [
+        (
+            'before_handler_run',
+            'after_handler_run',
+            lambda m: m.before_handler_run(server_request()),
+        ),
+        (
+            'before_client_request',
+            'after_client_request',
+            lambda m: m.before_client_request(client_request()),
+        ),
+        (
+            'before_execution',
+            'after_execution',
+            lambda m: m.before_execution(MagicMock()),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_cancellation_unwinds_plugins_that_ran(
+    before: str,
+    after: str,
+    call: Callable[[SequentialPluginManager], Awaitable[None]],
+) -> None:
+    """Cancelling a before_* hook unwinds already-run plugins with CancelledError."""
+    log: list[str] = []
+    seen_errors: list[BaseException | None] = []
+    entered = asyncio.Event()
+    gate = asyncio.Event()
+
+    class Observer(CompletePlugin, ExecutionPlugin):
+        name = 'a'
+
+        async def before_handler_run(self, request: ServerRequest) -> None:
+            log.append('a.before_handler_run')
+
+        async def after_handler_run(self, response: ServerResponse) -> None:
+            log.append('a.after_handler_run')
+            seen_errors.append(response.error)
+
+        async def before_client_request(self, request: ClientRequest) -> None:
+            log.append('a.before_client_request')
+
+        async def after_client_request(self, response: ClientResponse) -> None:
+            log.append('a.after_client_request')
+            seen_errors.append(response.error)
+
+        async def before_execution(self, request_context: Any) -> None:
+            log.append('a.before_execution')
+
+        async def after_execution(
+            self, request_context: Any, error: BaseException | None
+        ) -> None:
+            log.append('a.after_execution')
+            seen_errors.append(error)
+
+    class Blocking(CompletePlugin, ExecutionPlugin):
+        name = 'b'
+
+        async def _block(self, hook: str) -> None:
+            log.append(f'b.{hook}')
+            if hook == before:
+                entered.set()
+                await gate.wait()
+
+        async def before_handler_run(self, request: ServerRequest) -> None:
+            await self._block('before_handler_run')
+
+        async def before_client_request(self, request: ClientRequest) -> None:
+            await self._block('before_client_request')
+
+        async def before_execution(self, request_context: Any) -> None:
+            await self._block('before_execution')
+
+    m = plugins.sequential(Observer(), Blocking(), Recorder('c', log))
+    task = asyncio.create_task(call(m))
+    await entered.wait()
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert task.cancelled()
+    assert log == [f'a.{before}', f'b.{before}', f'a.{after}']
+    assert len(seen_errors) == 1
+    assert isinstance(seen_errors[0], asyncio.CancelledError)
+
+
+@pytest.mark.asyncio
+async def test_nested_manager_cancellation_unwinds_all_ran_plugins() -> None:
+    """Cancellation inside a nested manager unwinds both inner and outer plugins."""
+    log: list[str] = []
+    seen_errors: list[tuple[str, BaseException | None]] = []
+
+    class TrackingServerPlugin(ServerPlugin):
+        def __init__(self, name: str, cancel: bool = False) -> None:
+            self.name = name
+            self._cancel = cancel
+
+        async def before_handler_run(self, request: ServerRequest) -> None:
+            log.append(f'{self.name}.before_handler_run')
+            if self._cancel:
+                raise asyncio.CancelledError
+
+        async def after_handler_run(self, response: ServerResponse) -> None:
+            log.append(f'{self.name}.after_handler_run')
+            seen_errors.append((self.name, response.error))
+
+    inner = plugins.sequential(
+        TrackingServerPlugin('b'),
+        TrackingServerPlugin('c', cancel=True),
+    )
+    outer = plugins.sequential(TrackingServerPlugin('a'), inner)
+
+    with pytest.raises(asyncio.CancelledError):
+        await outer.before_handler_run(server_request())
+
+    assert log == [
+        'a.before_handler_run',
+        'b.before_handler_run',
+        'c.before_handler_run',
+        'b.after_handler_run',
+        'a.after_handler_run',
+    ]
+    assert [name for name, _ in seen_errors] == ['b', 'a']
+    assert all(
+        isinstance(err, asyncio.CancelledError) for _, err in seen_errors
+    )

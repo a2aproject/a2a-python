@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import logging
 
@@ -178,7 +179,7 @@ class SequentialPluginManager(PluginManager):
         for plugin in self._server:
             try:
                 await plugin.before_handler_run(request)
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 response = ServerResponse(
                     request.method, None, request.context, error=e
                 )
@@ -213,7 +214,7 @@ class SequentialPluginManager(PluginManager):
         for plugin in self._client:
             try:
                 await plugin.before_client_request(request)
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 response = ClientResponse(
                     request.method, None, request.context, error=e
                 )
@@ -250,7 +251,7 @@ class SequentialPluginManager(PluginManager):
         for plugin in self._execution:
             try:
                 await plugin.before_execution(request_context)
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 for done in reversed(ran):
                     await _run_safely(
                         done,
