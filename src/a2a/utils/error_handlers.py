@@ -255,6 +255,8 @@ def rest_stream_error_handler(
                     except Exception as stream_error:
                         _log_error(stream_error)
                         raise stream_error
+                    finally:
+                        await original_iterator.aclose()
 
                 response.body_iterator = error_catching_iterator()
 
