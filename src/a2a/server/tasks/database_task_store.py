@@ -6,7 +6,7 @@ from typing import Any, cast
 
 
 try:
-    from sqlalchemy import Table, and_, case, delete, func, or_, select
+    from sqlalchemy import Table, and_, case, delete, func, inspect, or_, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -143,7 +143,9 @@ class DatabaseTaskStore(TaskStore):
     def _to_orm(self, task: Task, owner: str) -> TaskModel:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
         if self.core_to_model_conversion:
-            return self.core_to_model_conversion(task, owner)
+            return self._as_task_model(
+                self.core_to_model_conversion(task, owner)
+            )
 
         return self.task_model(
             id=task.id,
@@ -162,6 +164,26 @@ class DatabaseTaskStore(TaskStore):
                 MessageToDict(task.metadata) if task.metadata.fields else None
             ),
             protocol_version='1.0',
+        )
+
+    def _as_task_model(self, model: TaskModel) -> TaskModel:
+        """Returns `model` as an instance of this store's table model.
+
+        A conversion may return the default `TaskModel`, as
+        `core_to_compat_task_model` does. That model maps to the `tasks`
+        table, so with a custom `table_name` the row would be written to
+        `tasks` instead. Only the attributes the conversion set are copied,
+        so column defaults still apply to the rest.
+        """
+        if isinstance(model, self.task_model):
+            return model
+        values = inspect(model).dict
+        return self.task_model(
+            **{
+                attr.key: values[attr.key]
+                for attr in class_mapper(self.task_model).column_attrs
+                if attr.key in values
+            }
         )
 
     def _from_orm(self, task_model: TaskModel) -> Task:

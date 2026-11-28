@@ -7,7 +7,7 @@ from google.protobuf.json_format import MessageToJson, Parse
 
 
 try:
-    from sqlalchemy import ColumnElement, Table, and_, delete, select
+    from sqlalchemy import ColumnElement, Table, and_, delete, inspect, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -178,8 +178,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
         """
         if self.core_to_model_conversion:
-            return self.core_to_model_conversion(
-                task_id, config, owner, self._fernet
+            return self._as_config_model(
+                self.core_to_model_conversion(
+                    task_id, config, owner, self._fernet
+                )
             )
 
         json_payload = MessageToJson(config).encode('utf-8')
@@ -195,6 +197,28 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             owner=owner,
             config_data=data_to_store,
             protocol_version='1.0',
+        )
+
+    def _as_config_model(
+        self, model: PushNotificationConfigModel
+    ) -> PushNotificationConfigModel:
+        """Returns `model` as an instance of this store's table model.
+
+        A conversion may return the default `PushNotificationConfigModel`,
+        as `core_to_compat_push_notification_config_model` does. That model
+        maps to the `push_notification_configs` table, so with a custom
+        `table_name` the row would be written there instead. Only the
+        attributes the conversion set are copied.
+        """
+        if isinstance(model, self.config_model):
+            return model
+        values = inspect(model).dict
+        return self.config_model(
+            **{
+                attr.key: values[attr.key]
+                for attr in class_mapper(self.config_model).column_attrs
+                if attr.key in values
+            }
         )
 
     def _from_orm(
