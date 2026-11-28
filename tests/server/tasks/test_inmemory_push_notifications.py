@@ -294,7 +294,10 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             called_kwargs['headers'],
-            {'X-A2A-Notification-Token': 'unique_token'},
+            {
+                'Content-Type': 'application/a2a+json',
+                'X-A2A-Notification-Token': 'unique_token',
+            },
         )
         self.assertNotIn(
             'auth', called_kwargs
@@ -654,7 +657,10 @@ class TestPushNotificationDispatchAcrossOwners(
             json=MessageToDict(
                 StreamResponse(task=_create_sample_task(task_id='shared-task'))
             ),
-            headers={'X-A2A-Notification-Token': 'alice-token'},
+            headers={
+                'Content-Type': 'application/a2a+json',
+                'X-A2A-Notification-Token': 'alice-token',
+            },
         )
 
     async def test_cross_user_dispatch_alice_registers_bob_triggers(
@@ -686,7 +692,10 @@ class TestPushNotificationDispatchAcrossOwners(
             json=MessageToDict(
                 StreamResponse(task=_create_sample_task(task_id='collab-task'))
             ),
-            headers={'X-A2A-Notification-Token': 'alice-token'},
+            headers={
+                'Content-Type': 'application/a2a+json',
+                'X-A2A-Notification-Token': 'alice-token',
+            },
         )
 
 

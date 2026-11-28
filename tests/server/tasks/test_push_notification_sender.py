@@ -1,4 +1,5 @@
 import asyncio
+import json
 import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -24,6 +25,8 @@ from google.protobuf.json_format import MessageToDict
 
 
 pytestmark = pytest.mark.httpx2
+
+_CONTENT_TYPE = {'Content-Type': 'application/a2a+json'}
 
 
 def _create_sample_task(
@@ -81,7 +84,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers={},
+            headers=_CONTENT_TYPE,
         )
         mock_response.raise_for_status.assert_called_once()
 
@@ -107,9 +110,41 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers={'X-A2A-Notification-Token': 'unique_token'},
+            headers={
+                **_CONTENT_TYPE,
+                'X-A2A-Notification-Token': 'unique_token',
+            },
         )
         mock_response.raise_for_status.assert_called_once()
+
+    async def test_send_notification_uses_a2a_json_content_type(self) -> None:
+        """The webhook POST is sent as `application/a2a+json` (spec 4.3.3)."""
+        received: list[httpx_lib.Request] = []
+
+        def handler(request: httpx_lib.Request) -> httpx_lib.Response:
+            received.append(request)
+            return httpx_lib.Response(200)
+
+        task_data = _create_sample_task(task_id='task_content_type')
+        self.mock_config_store.get_info_for_dispatch.return_value = [
+            _create_sample_push_config(url='http://notify.me/here')
+        ]
+        async with httpx_lib.AsyncClient(
+            transport=httpx_lib.MockTransport(handler)
+        ) as client:
+            sender = BasePushNotificationSender(
+                httpx_client=client, config_store=self.mock_config_store
+            )
+            await sender.send_notification(task_data.id, task_data)
+
+        self.assertEqual(len(received), 1)
+        self.assertEqual(
+            received[0].headers['Content-Type'], 'application/a2a+json'
+        )
+        self.assertEqual(
+            json.loads(received[0].content),
+            MessageToDict(StreamResponse(task=task_data)),
+        )
 
     async def _post_headers_for(self, **config_kwargs) -> dict[str, str] | None:
         """Sends one notification and returns the headers it posted with."""
@@ -133,7 +168,10 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        assert headers == {'Authorization': 'Bearer test-token'}
+        assert headers == {
+            **_CONTENT_TYPE,
+            'Authorization': 'Bearer test-token',
+        }
 
     async def test_authentication_and_token_are_sent_together(self) -> None:
         headers = await self._post_headers_for(
@@ -144,6 +182,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         )
 
         assert headers == {
+            **_CONTENT_TYPE,
             'X-A2A-Notification-Token': 'notification-token',
             'Authorization': 'Bearer test-token',
         }
@@ -156,7 +195,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             authentication=AuthenticationInfo(scheme='Bearer')
         )
 
-        assert headers == {}
+        assert headers == _CONTENT_TYPE
 
     async def test_authentication_without_credentials_warns(self) -> None:
         """A scheme with no credentials is valid to send, so say why it was dropped."""
@@ -187,7 +226,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         headers = await self._post_headers_for()
 
-        assert headers == {}
+        assert headers == _CONTENT_TYPE
 
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
@@ -226,7 +265,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers={},
+            headers=_CONTENT_TYPE,
         )
         mock_logger.exception.assert_called_once()
 
@@ -259,13 +298,13 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_any_call(
             config1.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers={},
+            headers=_CONTENT_TYPE,
         )
         # Check calls for config2
         self.mock_httpx_client.post.assert_any_call(
             config2.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers={},
+            headers=_CONTENT_TYPE,
         )
         mock_response.raise_for_status.call_count = 2
 
@@ -290,7 +329,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(status_update=event)),
-            headers={},
+            headers=_CONTENT_TYPE,
         )
 
     async def test_send_notification_artifact_update_event(self) -> None:
@@ -314,7 +353,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(artifact_update=event)),
-            headers={},
+            headers=_CONTENT_TYPE,
         )
 
     @patch('a2a.server.tasks.base_push_notification_sender.logger')
