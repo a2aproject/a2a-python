@@ -18,6 +18,7 @@ from a2a.server.tasks.push_notification_sender import (
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils._httpx_compat import AsyncClient
+from a2a.utils.constants import A2A_JSON_MEDIA_TYPE
 from a2a.utils.proto_utils import to_stream_response
 
 
@@ -195,7 +196,9 @@ class BasePushNotificationSender(PushNotificationSender):
         self, push_info: TaskPushNotificationConfig, task_id: str
     ) -> dict[str, str]:
         """Builds the delivery headers from the push config."""
-        headers: dict[str, str] = {}
+        # The payload is a StreamResponse in the HTTP+JSON format, which the
+        # spec sends as application/a2a+json, not httpx's application/json.
+        headers: dict[str, str] = {'Content-Type': A2A_JSON_MEDIA_TYPE}
         if push_info.token:
             headers['X-A2A-Notification-Token'] = push_info.token
         auth = push_info.authentication
