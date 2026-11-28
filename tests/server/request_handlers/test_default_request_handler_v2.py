@@ -3806,3 +3806,84 @@ async def test_on_message_send_stream_raises_when_agent_produces_no_events():
             params, create_server_call_context()
         ):
             pass
+
+
+@pytest.mark.parametrize(
+    'interrupted_state',
+    [TaskState.TASK_STATE_INPUT_REQUIRED, TaskState.TASK_STATE_AUTH_REQUIRED],
+)
+@pytest.mark.asyncio
+async def test_on_message_send_continuation_ignores_replayed_interrupted_task(
+    interrupted_state: TaskState,
+):
+    """Blocking continuation must not return stale interrupted state when executor re-emits current_task."""
+
+    class PausingResumingExecutor(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ) -> None:
+            await event_queue.enqueue_event(
+                context.current_task
+                or Task(
+                    id=context.task_id or '',
+                    context_id=context.context_id or '',
+                    status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+                )
+            )
+            updater = TaskUpdater(
+                event_queue, context.task_id or '', context.context_id or ''
+            )
+            if context.current_task is None:
+                await updater.update_status(
+                    interrupted_state,
+                    message=updater.new_agent_message([Part(text='need info')]),
+                )
+                return
+            await updater.start_work()
+            await asyncio.sleep(0.02)
+            await updater.add_artifact(
+                [Part(text='final result')], name='result', last_chunk=True
+            )
+            await updater.complete()
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ) -> None:
+            pass
+
+    handler = DefaultRequestHandlerV2(
+        agent_executor=PausingResumingExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    ctx = create_server_call_context()
+
+    try:
+        first = await handler.on_message_send(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='msg-1',
+                    parts=[Part(text='start')],
+                )
+            ),
+            ctx,
+        )
+        assert first.status.state == interrupted_state
+
+        second = await handler.on_message_send(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='msg-2',
+                    task_id=first.id,
+                    context_id=first.context_id,
+                    parts=[Part(text='resume')],
+                )
+            ),
+            ctx,
+        )
+        assert second.status.state == TaskState.TASK_STATE_COMPLETED
+        assert len(second.artifacts) == 1
+    finally:
+        await handler.aclose()
