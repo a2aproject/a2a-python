@@ -949,3 +949,41 @@ async def test_core_to_0_3_model_conversion(
     # Reset conversion attributes
     store.core_to_model_conversion = None
     await store.delete_info(task_id, MINIMAL_CALL_CONTEXT)
+
+
+@pytest.mark.asyncio
+async def test_core_to_0_3_model_conversion_with_custom_table_name(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+) -> None:
+    """The v0.3 conversion writes to the store's table.
+
+    `core_to_compat_push_notification_config_model` returns the default
+    `PushNotificationConfigModel`, which maps to `push_notification_configs`.
+    """
+    engine = db_store_parameterized.engine
+    store = DatabasePushNotificationConfigStore(
+        engine=engine,
+        table_name='v03_custom_push_configs',
+        core_to_model_conversion=core_to_compat_push_notification_config_model,
+    )
+    task_id = 'v03-custom-table-task'
+    config = TaskPushNotificationConfig(id='c1', url='https://example.com/push')
+    try:
+        await store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
+
+        retrieved = await store.get_info(task_id, MINIMAL_CALL_CONTEXT)
+        assert [c.url for c in retrieved] == ['https://example.com/push']
+
+        async with store.async_session_maker() as session:
+            db_model = await session.get(store.config_model, (task_id, 'c1'))
+            assert db_model is not None
+            assert db_model.protocol_version == '0.3'
+            assert (
+                await session.get(PushNotificationConfigModel, (task_id, 'c1'))
+                is None
+            )
+    finally:
+        table = store.config_model.__table__  # type: ignore[attr-defined]
+        async with engine.begin() as conn:
+            await conn.run_sync(table.drop, checkfirst=True)
+        Base.metadata.remove(table)

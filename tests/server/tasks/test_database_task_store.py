@@ -1075,6 +1075,46 @@ async def test_core_to_0_3_model_conversion(
     await store.delete('v03-persistence-task', TEST_CONTEXT)
 
 
+@pytest.mark.asyncio
+async def test_core_to_0_3_model_conversion_with_custom_table_name(
+    db_store_parameterized: DatabaseTaskStore,
+) -> None:
+    """The v0.3 conversion writes to the store's table, not to `tasks`.
+
+    `core_to_compat_task_model` returns the default `TaskModel`, which maps
+    to the `tasks` table.
+    """
+    engine = db_store_parameterized.engine
+    store = DatabaseTaskStore(
+        engine=engine,
+        table_name='v03_custom_tasks',
+        core_to_model_conversion=core_to_compat_task_model,
+    )
+    task = Task(
+        id='v03-custom-table-task',
+        context_id='v03-context',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+    try:
+        await store.save(task, TEST_CONTEXT)
+
+        retrieved = await store.get(task.id, TEST_CONTEXT)
+        assert retrieved is not None
+        assert retrieved.status.state == TaskState.TASK_STATE_WORKING
+
+        async with store.async_session_maker() as session:
+            db_task = await session.get(store.task_model, task.id)
+            assert db_task is not None
+            assert db_task.protocol_version == '0.3'
+            assert db_task.kind == 'task'
+            assert await session.get(TaskModel, task.id) is None
+    finally:
+        table = store.task_model.__table__  # type: ignore[attr-defined]
+        async with engine.begin() as conn:
+            await conn.run_sync(table.drop, checkfirst=True)
+        Base.metadata.remove(table)
+
+
 def _task(task_id: str, seconds: int | None) -> Task:
     task = Task(
         id=task_id,
