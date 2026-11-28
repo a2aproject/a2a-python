@@ -1546,3 +1546,81 @@ async def test_active_task_start_setup_failure_closes_event_queues(
 
     assert active_task._event_queue_agent._dispatcher_task.done()
     assert active_task._event_queue_subscribers._dispatcher_task.done()
+
+
+@pytest.mark.asyncio
+async def test_active_task_cancel_both_while_consumer_in_process_event() -> None:
+    """Cancelling producer then consumer while consumer is inside _process_event must not hang."""
+    from a2a.server.tasks import InMemoryTaskStore
+
+    in_write = asyncio.Event()
+
+    class SlowStore(InMemoryTaskStore):
+        async def save(self, task, context=None):
+            if task.status.state == TaskState.TASK_STATE_WORKING:
+                in_write.set()
+                await asyncio.sleep(60)
+            return await super().save(task, context)
+
+    class SlowExecutor(AgentExecutor):
+        async def execute(self, context, event_queue):
+            await event_queue.enqueue_event(
+                Task(
+                    id=context.task_id,
+                    context_id=context.context_id,
+                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                )
+            )
+            await asyncio.sleep(60)
+
+        async def cancel(self, context, event_queue):
+            return None
+
+    store = SlowStore()
+    call_context = ServerCallContext()
+    task_manager = TaskManager(
+        task_id='test-task-id',
+        context_id='test-context-id',
+        task_store=store,
+        initial_message=None,
+        context=call_context,
+    )
+    push_sender = Mock(spec=PushNotificationSender)
+    push_sender.send_notification = AsyncMock()
+
+    active_task = ActiveTask(
+        agent_executor=SlowExecutor(),
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=push_sender,
+    )
+    req_ctx = Mock(spec=RequestContext)
+    req_ctx.message = None
+    req_ctx.task_id = 'test-task-id'
+    req_ctx.context_id = 'test-context-id'
+    await active_task.enqueue_request(req_ctx)
+    await active_task.start(
+        call_context=call_context, create_task_if_missing=True
+    )
+
+    await asyncio.wait_for(in_write.wait(), timeout=2.0)
+
+    producer = active_task._producer_task
+    consumer = active_task._consumer_task
+    assert producer is not None
+    assert consumer is not None
+
+    # Cancel producer first, let it reach finally -> close(immediate=False),
+    # then cancel consumer while it is still awaiting inside _process_event.
+    producer.cancel()
+    await asyncio.sleep(0.05)
+    consumer.cancel()
+
+    _, pending = await asyncio.wait({producer, consumer}, timeout=2.0)
+    try:
+        assert not pending, f'Tasks hung after cancellation: {pending}'
+    finally:
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
