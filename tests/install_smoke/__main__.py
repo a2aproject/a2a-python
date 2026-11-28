@@ -37,6 +37,7 @@ CORE_MODULES = [
     'a2a.utils.task',
     'a2a.helpers.agent_card',
     'a2a.helpers.proto_helpers',
+    'a2a.plugins',
 ]
 
 HTTP_SERVER_MODULES = [
@@ -62,6 +63,7 @@ GRPC_MODULES = [
 
 TELEMETRY_MODULES = [
     'a2a.utils.telemetry',
+    'a2a.plugins.otel',
 ]
 
 SQL_MODULES = [

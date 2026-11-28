@@ -32,14 +32,32 @@ from a2a.server.context import ServerCallContext
 def serialize_list_tasks_response(
     response: ListTasksResponse, include_artifacts: bool
 ) -> dict[str, Any]:
-    """Serializes a ListTasks response according to artifact semantics."""
-    result = MessageToDict(
-        response,
+    """Serializes a ListTasks response according to artifact semantics.
+
+    The pagination fields are always printed. Each task is serialized the
+    same way as ``GetTask``, so unset nested fields (such as an empty
+    ``history``) stay omitted; only ``artifacts`` follows ``include_artifacts``.
+    """
+    page = ListTasksResponse()
+    page.CopyFrom(response)
+    del page.tasks[:]
+    page_fields = MessageToDict(
+        page,
         preserving_proto_field_name=False,
         always_print_fields_with_no_presence=True,
     )
-    if not include_artifacts:
-        for task in result['tasks']:
+    page_fields.pop('tasks', None)
+    result = {
+        'tasks': [
+            MessageToDict(task, preserving_proto_field_name=False)
+            for task in response.tasks
+        ],
+        **page_fields,
+    }
+    for task in result['tasks']:
+        if include_artifacts:
+            task.setdefault('artifacts', [])
+        else:
             task.pop('artifacts', None)
     return result
 

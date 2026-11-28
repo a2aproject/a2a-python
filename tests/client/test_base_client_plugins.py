@@ -1,4 +1,6 @@
-from collections.abc import Awaitable, Callable
+import asyncio
+
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -242,7 +244,9 @@ async def test_stream_stopped_early_gets_final_call():
     await anext(events)
     await events.aclose()
 
-    assert recorder.hooks('after_client_request')[-1].is_final
+    final = recorder.hooks('after_client_request')[-1]
+    assert final.is_final
+    assert final.error is None
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
@@ -252,17 +256,29 @@ async def test_stream_stopped_early_gets_final_call():
     ]
 
 
+@pytest.mark.parametrize(
+    'error_type', [ConnectionError, asyncio.CancelledError]
+)
 @pytest.mark.asyncio
-async def test_transport_errors_reach_after_client_request():
+async def test_transport_errors_reach_after_client_request(
+    error_type: type[BaseException],
+) -> None:
     recorder = Recorder()
     transport = AsyncMock(spec=ClientTransport)
-    transport.get_task.side_effect = ConnectionError('down')
+    error = error_type('down')
+    transport.get_task.side_effect = error
 
-    with pytest.raises(ConnectionError):
+    with pytest.raises(error_type) as raised:
         await client(recorder, transport).get_task(GetTaskRequest(id='t-1'))
 
+    (request,) = recorder.hooks('before_client_request')
     (response,) = recorder.hooks('after_client_request')
-    assert isinstance(response.error, ConnectionError)
+    assert raised.value is error
+    assert response.error is error
+    assert response.method == 'get_task'
+    assert response.is_final
+    assert response.payload is None
+    assert response.context is request.context
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
@@ -270,18 +286,50 @@ async def test_transport_errors_reach_after_client_request():
         'after_client_request',
     ]
 
-    async def failing(request, *, context=None):
-        yield status_event(TaskState.TASK_STATE_WORKING)
-        raise ConnectionError('dropped')
 
-    transport.send_message_streaming = failing
-    recorder.calls.clear()
-    with pytest.raises(ConnectionError):
-        async for _ in client(recorder, transport).send_message(send_request()):
-            pass
-    assert isinstance(
-        recorder.hooks('after_client_request')[-1].error, ConnectionError
+@pytest.mark.parametrize(
+    'error_type', [ConnectionError, asyncio.CancelledError]
+)
+@pytest.mark.parametrize('method', ['send_message_streaming', 'subscribe'])
+@pytest.mark.asyncio
+async def test_stream_transport_errors_reach_after_client_request(
+    method: str, error_type: type[BaseException]
+) -> None:
+    recorder = Recorder()
+    transport = AsyncMock(spec=ClientTransport)
+    event = status_event(TaskState.TASK_STATE_WORKING)
+    error = error_type('dropped')
+
+    async def stream(
+        request: SendMessageRequest | SubscribeToTaskRequest,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> AsyncIterator[StreamResponse]:
+        yield event
+        raise error
+
+    setattr(transport, method, stream)
+    a2a_client = client(recorder, transport)
+    events = (
+        a2a_client.subscribe(SubscribeToTaskRequest(id='t-1'))
+        if method == 'subscribe'
+        else a2a_client.send_message(send_request())
     )
+    assert await anext(events) is event
+    with pytest.raises(error_type) as raised:
+        await anext(events)
+
+    (request,) = recorder.hooks('before_client_request')
+    first, final = recorder.hooks('after_client_request')
+    assert raised.value is error
+    assert first.payload is event
+    assert first.is_stream_event
+    assert not first.is_final
+    assert final.is_final
+    assert final.method == method
+    assert final.payload is None
+    assert final.context is request.context
+    assert final.error is error
     assert recorder.names() == [
         'before_client_request',
         'wrap_enter',
