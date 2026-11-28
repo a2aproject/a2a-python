@@ -407,7 +407,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         self,
         params: SendMessageRequest,
         call_context: ServerCallContext,
-    ) -> tuple[ActiveTask, RequestContext]:
+    ) -> tuple[ActiveTask, RequestContext, Task | None]:
         validate_history_length(params.configuration)
         if self._validate_input_modes:
             validate_input_modes(params.message, self._agent_card)
@@ -418,6 +418,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         original_task_id = params.message.task_id or None
         original_context_id = params.message.context_id or None
+        initial_task: Task | None = None
 
         if original_task_id:
             stored = await self._versioned_store.get(
@@ -426,6 +427,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             if stored is None:
                 raise TaskNotFoundError(f'Task {original_task_id} not found')
             task = stored.task
+            initial_task = task
             # Agents must reject a message whose contextId differs from that
             # of the task it names.
             if original_context_id and task.context_id != original_context_id:
@@ -472,7 +474,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             initial_message=request_context.message,
         )
 
-        return active_task, request_context
+        return active_task, request_context, initial_task
 
     @server_plugin_hooks('send_message')
     @validate_request_params
@@ -481,12 +483,19 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: SendMessageRequest,
         context: ServerCallContext,
     ) -> Message | Task:
-        active_task, request_context = await self._setup_active_task(
-            params, context
+        active_task, request_context, existing_task = (
+            await self._setup_active_task(params, context)
         )
         task_id = cast('str', request_context.task_id)
 
         result: Message | Task | None = None
+        # When continuing an interrupted task, an executor may re-emit
+        # context.current_task as an initial snapshot before advancing state.
+        # Do not let that replayed snapshot satisfy the blocking wait.
+        ignoring_replayed_interrupted = (
+            existing_task is not None
+            and existing_task.status.state in INTERRUPTED_TASK_STATES
+        )
 
         async for raw_event in active_task.subscribe(
             request=request_context,
@@ -507,6 +516,14 @@ class DefaultRequestHandlerV2(RequestHandler):
             ):
                 self._validate_task_id_match(task_id, event.id)
                 result = event
+                if (
+                    not params.configuration.return_immediately
+                    and ignoring_replayed_interrupted
+                    and event.status.state in INTERRUPTED_TASK_STATES
+                ):
+                    ignoring_replayed_interrupted = False
+                    continue
+                ignoring_replayed_interrupted = False
                 # A FAILED task may be followed by a producer exception. Keep
                 # the task as the fallback result, but let the subscription
                 # surface that exception or finish the current request.
@@ -517,6 +534,8 @@ class DefaultRequestHandlerV2(RequestHandler):
                     # AgentExecutor will continue to run in the background
                     # when return_immediately is set.
                     break
+            elif isinstance(event, Task):
+                ignoring_replayed_interrupted = False
 
             if isinstance(event, Message):
                 result = event
@@ -556,7 +575,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: SendMessageRequest,
         context: ServerCallContext,
     ) -> AsyncGenerator[Event, None]:
-        active_task, request_context = await self._setup_active_task(
+        active_task, request_context, _ = await self._setup_active_task(
             params, context
         )
 
