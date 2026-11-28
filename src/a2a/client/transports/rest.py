@@ -7,7 +7,8 @@ from urllib.parse import quote
 
 import httpx
 
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, ParseDict, ParseError
+from google.rpc import error_details_pb2
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
@@ -38,7 +39,10 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils._httpx_compat import AsyncClient, HTTPStatusError, Request
 from a2a.utils.errors import A2A_REASON_TO_ERROR, MethodNotFoundError
-from a2a.utils.proto_utils import parse_lenient
+from a2a.utils.proto_utils import (
+    bad_request_to_validation_errors,
+    parse_lenient,
+)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -70,6 +74,24 @@ def _parse_rest_error(
     if not isinstance(details, list):
         return None
 
+    validation_errors = None
+    for detail in details:
+        if (
+            not isinstance(detail, dict)
+            or detail.get('@type')
+            != 'type.googleapis.com/google.rpc.BadRequest'
+        ):
+            continue
+        try:
+            bad_request = ParseDict(
+                {'fieldViolations': detail.get('fieldViolations', [])},
+                error_details_pb2.BadRequest(),
+                ignore_unknown_fields=True,
+            )
+        except ParseError:
+            continue
+        validation_errors = bad_request_to_validation_errors(bad_request)
+
     # The `details` array can contain multiple different error objects.
     # We extract the first `ErrorInfo` object because it contains the
     # specific `reason` code needed to map this back to a Python A2AError.
@@ -86,6 +108,11 @@ def _parse_rest_error(
                     exc = exception_cls(message)
                     if metadata:
                         exc.data = metadata
+                    if validation_errors is not None:
+                        exc.data = {
+                            **(exc.data if isinstance(exc.data, dict) else {}),
+                            'errors': validation_errors,
+                        }
                     return exc
             break
 
