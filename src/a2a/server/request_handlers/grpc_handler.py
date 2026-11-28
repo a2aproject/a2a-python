@@ -95,6 +95,7 @@ _ERROR_CODE_MAP: dict[type[A2AError], grpc.StatusCode] = {
     types.ExtendedAgentCardNotConfiguredError: grpc.StatusCode.FAILED_PRECONDITION,
     types.ExtensionSupportRequiredError: grpc.StatusCode.FAILED_PRECONDITION,
     types.VersionNotSupportedError: grpc.StatusCode.FAILED_PRECONDITION,
+    types.PermissionDeniedError: grpc.StatusCode.PERMISSION_DENIED,
 }
 
 

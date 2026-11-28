@@ -120,6 +120,12 @@ class VersionNotSupportedError(A2AError):
     message = 'Version not supported'
 
 
+class PermissionDeniedError(A2AError):
+    """Exception raised when the caller lacks permission for an action."""
+
+    message = 'Permission denied'
+
+
 __all__ = [
     'A2A_ERROR_MAPPING',
     'A2A_ERROR_REASONS',
@@ -134,6 +140,7 @@ __all__ = [
     'InvalidRequestError',
     'JSONParseError',
     'MethodNotFoundError',
+    'PermissionDeniedError',
     'PushNotificationNotSupportedError',
     'TaskNotCancelableError',
     'TaskNotFoundError',
@@ -152,6 +159,7 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     ExtendedAgentCardNotConfiguredError: -32007,
     ExtensionSupportRequiredError: -32008,
     VersionNotSupportedError: -32009,
+    PermissionDeniedError: -32010,
     InvalidParamsError: -32602,
     InvalidRequestError: -32600,
     MethodNotFoundError: -32601,
@@ -193,6 +201,9 @@ A2A_ERROR_MAPPING: dict[type[A2AError], ErrorMapping] = {
     ),
     VersionNotSupportedError: ErrorMapping(
         400, 'FAILED_PRECONDITION', 'VERSION_NOT_SUPPORTED'
+    ),
+    PermissionDeniedError: ErrorMapping(
+        403, 'PERMISSION_DENIED', 'PERMISSION_DENIED'
     ),
     InvalidParamsError: ErrorMapping(400, 'INVALID_ARGUMENT', 'INVALID_PARAMS'),
     InvalidRequestError: ErrorMapping(
